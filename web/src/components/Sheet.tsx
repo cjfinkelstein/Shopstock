@@ -24,7 +24,7 @@ export default function Sheet({ title, subtitle, onClose, children }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex flex-col justify-end bg-slate-950/45 backdrop-blur-[2px] animate-fade-in"
+      className="fixed inset-0 z-[1100] flex flex-col justify-end bg-slate-950/45 backdrop-blur-[2px] animate-fade-in"
       onClick={onClose}
     >
       <div
