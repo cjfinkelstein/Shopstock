@@ -180,15 +180,7 @@ def shift_route(event_id: int, db: Session = Depends(get_db), _: User = Depends(
     )
 
 
-@router.post("/{event_id}/approve", response_model=MyShiftOut)
-def approve_shift(event_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    ev = db.get(ClockEvent, event_id)
-    if not ev:
-        raise HTTPException(status_code=404, detail="Shift not found")
-    ev.approval_status = "approved"
-    ev.approved_by_id = admin.id
-    ev.approved_at = utcnow()
-    db.commit()
+def _shift_out(ev: ClockEvent) -> MyShiftOut:
     now = utcnow()
     return MyShiftOut(
         id=ev.id,
@@ -200,3 +192,28 @@ def approve_shift(event_id: int, db: Session = Depends(get_db), admin: User = De
         job_name=ev.job.name if ev.job else None,
         approval_status=ev.approval_status,
     )
+
+
+@router.post("/{event_id}/approve", response_model=MyShiftOut)
+def approve_shift(event_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    ev = db.get(ClockEvent, event_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    ev.approval_status = "approved"
+    ev.approved_by_id = admin.id
+    ev.approved_at = utcnow()
+    db.commit()
+    return _shift_out(ev)
+
+
+@router.post("/{event_id}/unapprove", response_model=MyShiftOut)
+def unapprove_shift(event_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Reverts an approval -- for undoing a mistaken click."""
+    ev = db.get(ClockEvent, event_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    ev.approval_status = "pending"
+    ev.approved_by_id = None
+    ev.approved_at = None
+    db.commit()
+    return _shift_out(ev)

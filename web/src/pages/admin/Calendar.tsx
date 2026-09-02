@@ -180,10 +180,11 @@ export default function Calendar() {
     }
   };
 
-  const approveShift = async (userId: number | null, shiftId: number) => {
+  const setShiftApproval = async (userId: number | null, shiftId: number, approve: boolean) => {
     setApproving(shiftId);
+    const nextStatus = approve ? "approved" : "pending";
     try {
-      await api(`/time/${shiftId}/approve`, { method: "POST" });
+      await api(`/time/${shiftId}/${approve ? "approve" : "unapprove"}`, { method: "POST" });
       if (userId != null) {
         setTimesheets((prev) => {
           const sheet = prev[userId];
@@ -192,7 +193,7 @@ export default function Calendar() {
             ...prev,
             [userId]: {
               ...sheet,
-              shifts: sheet.shifts.map((s) => (s.id === shiftId ? { ...s, approval_status: "approved" } : s)),
+              shifts: sheet.shifts.map((s) => (s.id === shiftId ? { ...s, approval_status: nextStatus } : s)),
             },
           };
         });
@@ -203,14 +204,14 @@ export default function Calendar() {
         for (const [k, v] of Object.entries(prev)) {
           next[k] = {
             ...v,
-            shifts: v.shifts.map((s) => (s.id === shiftId ? { ...s, approval_status: "approved" } : s)),
+            shifts: v.shifts.map((s) => (s.id === shiftId ? { ...s, approval_status: nextStatus } : s)),
           };
         }
         return next;
       });
-      toast("success", "Shift approved");
+      toast("success", approve ? "Shift approved" : "Approval undone");
     } catch (e) {
-      toast("error", e instanceof Error ? e.message : "Couldn't approve shift");
+      toast("error", e instanceof Error ? e.message : "Couldn't update this shift");
     } finally {
       setApproving(null);
     }
@@ -568,20 +569,22 @@ export default function Calendar() {
                               </div>
                               <div className="flex shrink-0 items-center gap-2.5">
                                 <span className="text-[12.5px] font-bold tabular-nums">{hoursLabel(s.hours)}</span>
-                                {s.approval_status === "pending" && (
-                                  <button
-                                    type="button"
-                                    disabled={approving === s.id}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      approveShift(tech.id, s.id);
-                                    }}
-                                    className="btn-secondary !min-h-0 px-2.5 py-1.5 text-[12px]"
-                                  >
-                                    {approving === s.id ? <Spinner /> : <Icon name="check" size={13} />}
-                                    Approve
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  disabled={approving === s.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShiftApproval(tech.id, s.id, s.approval_status === "pending");
+                                  }}
+                                  className="btn-secondary !min-h-0 px-2.5 py-1.5 text-[12px]"
+                                >
+                                  {approving === s.id ? (
+                                    <Spinner />
+                                  ) : (
+                                    <Icon name={s.approval_status === "pending" ? "check" : "x"} size={13} />
+                                  )}
+                                  {s.approval_status === "pending" ? "Approve" : "Unapprove"}
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -653,20 +656,22 @@ export default function Calendar() {
                       </div>
                       <div className="flex shrink-0 items-center gap-2.5">
                         <span className="text-[13.5px] font-bold tabular-nums">{hoursLabel(s.hours)}</span>
-                        {s.approval_status === "pending" && (
-                          <button
-                            type="button"
-                            disabled={approving === s.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              approveShift(null, s.id);
-                            }}
-                            className="btn-secondary !min-h-0 px-2.5 py-1.5 text-[12px]"
-                          >
-                            {approving === s.id ? <Spinner /> : <Icon name="check" size={13} />}
-                            Approve
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          disabled={approving === s.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShiftApproval(null, s.id, s.approval_status === "pending");
+                          }}
+                          className="btn-secondary !min-h-0 px-2.5 py-1.5 text-[12px]"
+                        >
+                          {approving === s.id ? (
+                            <Spinner />
+                          ) : (
+                            <Icon name={s.approval_status === "pending" ? "check" : "x"} size={13} />
+                          )}
+                          {s.approval_status === "pending" ? "Approve" : "Unapprove"}
+                        </button>
                       </div>
                     </div>
                   ))}
