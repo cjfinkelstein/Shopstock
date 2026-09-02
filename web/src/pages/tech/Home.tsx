@@ -6,10 +6,12 @@ import { useAuth } from "../../auth";
 import { useCart } from "../../cart";
 import { useClock } from "../../clock";
 import Icon from "../../components/Icon";
+import JobPicker from "../../components/JobPicker";
+import Sheet from "../../components/Sheet";
 import TxnList from "../../components/TxnList";
 import { Empty, ItemThumb, ListSkeleton, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { Item, StockRow, TechDashboard } from "../../types";
+import type { Item, Job, StockRow, TechDashboard } from "../../types";
 
 const IN_STOCK_PREVIEW = 8;
 
@@ -23,6 +25,8 @@ export default function Home() {
   const {
     clockedIn,
     clockInAt,
+    jobNumber,
+    jobName,
     loading: clockLoading,
     clockIn,
     clockOut,
@@ -35,6 +39,7 @@ export default function Home() {
   const [truckStock, setTruckStock] = useState<StockRow[] | null>(null);
   const [clockBusy, setClockBusy] = useState(false);
   const [elapsed, setElapsed] = useState("0:00:00");
+  const [jobPickerOpen, setJobPickerOpen] = useState(false);
 
   // Big ticking clock -- recomputed every second from clockInAt while on shift.
   useEffect(() => {
@@ -51,21 +56,29 @@ export default function Home() {
     return () => clearInterval(t);
   }, [clockedIn, clockInAt]);
 
-  const handleClockToggle = async () => {
+  const handleClockOut = async () => {
     setClockBusy(true);
     try {
-      if (clockedIn) {
-        await clockOut();
-        toast("success", "Clocked out");
-      } else {
-        // Tapping Clock In is the agreement itself -- recorded once,
-        // permanently, the first time; harmless to send again after that.
-        await giveGpsConsent();
-        await clockIn();
-        toast("success", "Clocked in");
-      }
+      await clockOut();
+      toast("success", "Clocked out");
     } catch (e) {
-      toast("error", e instanceof Error ? e.message : "Couldn't update clock status");
+      toast("error", e instanceof Error ? e.message : "Couldn't clock out");
+    } finally {
+      setClockBusy(false);
+    }
+  };
+
+  const handlePickJobAndClockIn = async (job: Job) => {
+    setJobPickerOpen(false);
+    setClockBusy(true);
+    try {
+      // Tapping Clock In is the agreement itself -- recorded once,
+      // permanently, the first time; harmless to send again after that.
+      await giveGpsConsent();
+      await clockIn(job.id);
+      toast("success", `Clocked in to ${job.job_number}`);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't clock in");
     } finally {
       setClockBusy(false);
     }
@@ -109,6 +122,12 @@ export default function Home() {
                 <p className="text-[13.5px] font-semibold text-emerald-700 dark:text-emerald-400">
                   Clocked in
                 </p>
+                {jobNumber && (
+                  <p className="truncate text-[13px] font-medium">
+                    {jobNumber}
+                    {jobName ? ` — ${jobName}` : ""}
+                  </p>
+                )}
                 <p className="text-[12px] text-slate-500 dark:text-slate-400">
                   Since{" "}
                   {clockInAt &&
@@ -124,7 +143,7 @@ export default function Home() {
               <button
                 type="button"
                 disabled={clockBusy}
-                onClick={handleClockToggle}
+                onClick={handleClockOut}
                 className="btn-secondary w-full"
               >
                 {clockBusy ? <Spinner /> : <Icon name="logout" size={16} />}
@@ -149,7 +168,7 @@ export default function Home() {
               <button
                 type="button"
                 disabled={clockBusy}
-                onClick={handleClockToggle}
+                onClick={() => setJobPickerOpen(true)}
                 className="btn-primary w-full"
               >
                 {clockBusy ? <Spinner /> : <Icon name="clock" size={16} />}
@@ -161,6 +180,12 @@ export default function Home() {
             </div>
           )}
         </div>
+      )}
+
+      {jobPickerOpen && (
+        <Sheet title="Clock in to…" onClose={() => setJobPickerOpen(false)}>
+          <JobPicker onPick={handlePickJobAndClockIn} />
+        </Sheet>
       )}
 
       {/* THE hero — Find is the app's front door */}

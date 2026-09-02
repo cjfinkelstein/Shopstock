@@ -79,6 +79,7 @@ class ClockEvent(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"))
     clock_in_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     clock_in_lat: Mapped[float | None] = mapped_column(Float)
     clock_in_lng: Mapped[float | None] = mapped_column(Float)
@@ -87,6 +88,7 @@ class ClockEvent(TimestampMixin, Base):
     clock_out_lng: Mapped[float | None] = mapped_column(Float)
 
     user: Mapped["User"] = relationship()
+    job: Mapped["Job | None"] = relationship()
     pings: Mapped[list["LocationPing"]] = relationship(
         back_populates="clock_event", order_by="LocationPing.recorded_at"
     )

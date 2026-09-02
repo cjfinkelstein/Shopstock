@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user, require_admin
 from app.database import get_db
-from app.models import ClockEvent, LocationPing, User, utcnow
+from app.models import ClockEvent, Job, LocationPing, User, utcnow
 from app.schemas import ClockInIn, ClockOutIn, ClockStatusOut, LocationPingIn, MyShiftOut, WorkerLiveOut
 
 router = APIRouter(prefix="/time", tags=["time"])
@@ -18,15 +18,24 @@ def _open_event(db: Session, user_id: int) -> ClockEvent | None:
     )
 
 
-@router.get("/status", response_model=ClockStatusOut)
-def status(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    ev = _open_event(db, user.id)
-    consented = user.gps_consent_at is not None
+def _status_for(ev: ClockEvent | None, *, consented: bool) -> ClockStatusOut:
     if not ev:
         return ClockStatusOut(clocked_in=False, gps_consent_given=consented)
     return ClockStatusOut(
-        clocked_in=True, clock_event_id=ev.id, clock_in_at=ev.clock_in_at, gps_consent_given=consented
+        clocked_in=True,
+        clock_event_id=ev.id,
+        clock_in_at=ev.clock_in_at,
+        job_id=ev.job_id,
+        job_number=ev.job.job_number if ev.job else None,
+        job_name=ev.job.name if ev.job else None,
+        gps_consent_given=consented,
     )
+
+
+@router.get("/status", response_model=ClockStatusOut)
+def status(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ev = _open_event(db, user.id)
+    return _status_for(ev, consented=user.gps_consent_at is not None)
 
 
 @router.post("/gps-consent", response_model=ClockStatusOut)
@@ -39,9 +48,7 @@ def gps_consent(db: Session = Depends(get_db), user: User = Depends(get_current_
         user.gps_consent_at = utcnow()
         db.commit()
     ev = _open_event(db, user.id)
-    if not ev:
-        return ClockStatusOut(clocked_in=False, gps_consent_given=True)
-    return ClockStatusOut(clocked_in=True, clock_event_id=ev.id, clock_in_at=ev.clock_in_at, gps_consent_given=True)
+    return _status_for(ev, consented=True)
 
 
 @router.post("/clock-in", response_model=ClockStatusOut)
@@ -52,10 +59,13 @@ def clock_in(body: ClockInIn, db: Session = Depends(get_db), user: User = Depend
         raise HTTPException(status_code=403, detail="You must agree to GPS tracking before clocking in")
     if _open_event(db, user.id):
         raise HTTPException(status_code=400, detail="Already clocked in")
-    ev = ClockEvent(user_id=user.id, clock_in_lat=body.lat, clock_in_lng=body.lng)
+    job = db.get(Job, body.job_id)
+    if not job or job.status != "active":
+        raise HTTPException(status_code=400, detail="Pick a job to clock into")
+    ev = ClockEvent(user_id=user.id, job_id=job.id, clock_in_lat=body.lat, clock_in_lng=body.lng)
     db.add(ev)
     db.commit()
-    return ClockStatusOut(clocked_in=True, clock_event_id=ev.id, clock_in_at=ev.clock_in_at, gps_consent_given=True)
+    return _status_for(ev, consented=True)
 
 
 @router.post("/clock-out", response_model=ClockStatusOut)
@@ -84,6 +94,7 @@ def my_shifts(db: Session = Depends(get_db), user: User = Depends(get_current_us
     """A tech's own clock-in/out history -- never another tech's."""
     events = (
         db.query(ClockEvent)
+        .options(joinedload(ClockEvent.job))
         .filter(ClockEvent.user_id == user.id)
         .order_by(ClockEvent.clock_in_at.desc())
         .limit(200)
@@ -97,6 +108,8 @@ def my_shifts(db: Session = Depends(get_db), user: User = Depends(get_current_us
             clock_out_at=e.clock_out_at,
             still_clocked_in=e.clock_out_at is None,
             hours=round(((e.clock_out_at or now) - e.clock_in_at).total_seconds() / 3600, 2),
+            job_number=e.job.job_number if e.job else None,
+            job_name=e.job.name if e.job else None,
         )
         for e in events
     ]
@@ -117,6 +130,8 @@ def live(db: Session = Depends(get_db), _: User = Depends(require_admin)):
             WorkerLiveOut(
                 user_id=ev.user_id,
                 user_name=ev.user.name,
+                job_number=ev.job.job_number if ev.job else None,
+                job_name=ev.job.name if ev.job else None,
                 clock_in_at=ev.clock_in_at,
                 lat=last_ping.lat if last_ping else ev.clock_in_lat,
                 lng=last_ping.lng if last_ping else ev.clock_in_lng,

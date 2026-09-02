@@ -85,6 +85,7 @@ class TechTapOut(ApiModel):
 # ---------- Time clock ----------
 
 class ClockInIn(BaseModel):
+    job_id: int
     lat: float | None = None
     lng: float | None = None
 
@@ -113,6 +114,9 @@ class ClockStatusOut(BaseModel):
     clocked_in: bool
     clock_event_id: int | None = None
     clock_in_at: datetime | None = None
+    job_id: int | None = None
+    job_number: str | None = None
+    job_name: str | None = None
     gps_consent_given: bool = False
 
     @field_serializer("clock_in_at")
@@ -123,6 +127,8 @@ class ClockStatusOut(BaseModel):
 class WorkerLiveOut(BaseModel):
     user_id: int
     user_name: str
+    job_number: str | None = None
+    job_name: str | None = None
     clock_in_at: datetime
     lat: float | None = None
     lng: float | None = None
@@ -139,6 +145,8 @@ class MyShiftOut(BaseModel):
     clock_out_at: datetime | None = None
     still_clocked_in: bool
     hours: float
+    job_number: str | None = None
+    job_name: str | None = None
 
     @field_serializer("clock_in_at", "clock_out_at")
     def _ser_dt(self, v: datetime | None, _info):

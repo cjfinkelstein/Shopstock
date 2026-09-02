@@ -7,9 +7,11 @@ import type { ClockStatus } from "./types";
 interface ClockState {
   clockedIn: boolean;
   clockInAt: string | null;
+  jobNumber: string | null;
+  jobName: string | null;
   gpsConsentGiven: boolean;
   loading: boolean;
-  clockIn: () => Promise<void>;
+  clockIn: (jobId: number) => Promise<void>;
   clockOut: () => Promise<void>;
   giveGpsConsent: () => Promise<void>;
 }
@@ -37,6 +39,8 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInAt, setClockInAt] = useState<string | null>(null);
+  const [jobNumber, setJobNumber] = useState<string | null>(null);
+  const [jobName, setJobName] = useState<string | null>(null);
   const [gpsConsentGiven, setGpsConsentGiven] = useState(false);
   const [loading, setLoading] = useState(true);
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -44,6 +48,8 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
   const applyStatus = (s: ClockStatus) => {
     setClockedIn(s.clocked_in);
     setClockInAt(s.clock_in_at ?? null);
+    setJobNumber(s.job_number ?? null);
+    setJobName(s.job_name ?? null);
     setGpsConsentGiven(s.gps_consent_given);
   };
 
@@ -57,6 +63,8 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {
         setClockedIn(false);
         setClockInAt(null);
+        setJobNumber(null);
+        setJobName(null);
         setGpsConsentGiven(false);
       })
       .finally(() => setLoading(false));
@@ -92,11 +100,11 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     applyStatus(s);
   };
 
-  const clockIn = async () => {
+  const clockIn = async (jobId: number) => {
     const pos = await getPosition();
     const s = await api<ClockStatus>("/time/clock-in", {
       method: "POST",
-      body: { lat: pos?.coords.latitude, lng: pos?.coords.longitude },
+      body: { job_id: jobId, lat: pos?.coords.latitude, lng: pos?.coords.longitude },
     });
     applyStatus(s);
   };
@@ -109,11 +117,23 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     });
     setClockedIn(false);
     setClockInAt(null);
+    setJobNumber(null);
+    setJobName(null);
   };
 
   return (
     <ClockContext.Provider
-      value={{ clockedIn, clockInAt, gpsConsentGiven, loading, clockIn, clockOut, giveGpsConsent }}
+      value={{
+        clockedIn,
+        clockInAt,
+        jobNumber,
+        jobName,
+        gpsConsentGiven,
+        loading,
+        clockIn,
+        clockOut,
+        giveGpsConsent,
+      }}
     >
       {children}
     </ClockContext.Provider>

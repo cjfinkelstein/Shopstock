@@ -303,6 +303,7 @@ export default function Reports() {
                 <table className="w-full text-[13.5px]">
                   <thead>
                     <tr className={THEAD_ROW}>
+                      <th className="px-3 py-2">Job</th>
                       <th className="px-3 py-2">Clock In</th>
                       <th className="px-3 py-2">Clock Out</th>
                       <th className="px-3 py-2 text-right">Hours</th>
@@ -311,6 +312,7 @@ export default function Reports() {
                   <tbody>
                     {t.shifts.map((s: any) => (
                       <tr key={s.id} className={BODY_ROW}>
+                        <td className="px-3 py-2">{s.job_number ?? "—"}</td>
                         <td className="px-3 py-2">{fmtWhen(s.clock_in_at)}</td>
                         <td className="px-3 py-2">
                           {s.still_clocked_in ? (

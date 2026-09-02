@@ -300,7 +300,7 @@ def adjustments(date_from: str = "", date_to: str = "", format: str = "",
 @router.get("/timesheet")
 def timesheet(date_from: str = "", date_to: str = "", format: str = "",
               db: Session = Depends(get_db)):
-    q = db.query(ClockEvent).options(joinedload(ClockEvent.user))
+    q = db.query(ClockEvent).options(joinedload(ClockEvent.user), joinedload(ClockEvent.job))
     if date_from:
         q = q.filter(ClockEvent.clock_in_at >= day_start_utc(date_from))
     if date_to:
@@ -316,6 +316,8 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "",
             "id": e.id,
             "user_id": e.user_id,
             "user_name": e.user.name if e.user else "?",
+            "job_number": e.job.job_number if e.job else None,
+            "job_name": e.job.name if e.job else None,
             "clock_in_at": e.clock_in_at,
             "clock_out_at": e.clock_out_at,
             "still_clocked_in": e.clock_out_at is None,
@@ -324,8 +326,9 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "",
 
     if format == "csv":
         return _csv_response("timesheet.csv",
-            ["Tech", "Clock In", "Clock Out", "Hours"],
-            [[r["user_name"], to_local(r["clock_in_at"]).strftime("%Y-%m-%d %H:%M"),
+            ["Tech", "Job", "Clock In", "Clock Out", "Hours"],
+            [[r["user_name"], r["job_number"] or "",
+              to_local(r["clock_in_at"]).strftime("%Y-%m-%d %H:%M"),
               to_local(r["clock_out_at"]).strftime("%Y-%m-%d %H:%M") if r["clock_out_at"] else "still clocked in",
               r["hours"]] for r in rows])
 
@@ -336,6 +339,8 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "",
         })
         t["shifts"].append({
             "id": r["id"],
+            "job_number": r["job_number"],
+            "job_name": r["job_name"],
             "clock_in_at": _utc_iso(r["clock_in_at"]),
             "clock_out_at": _utc_iso(r["clock_out_at"]),
             "still_clocked_in": r["still_clocked_in"],

@@ -70,6 +70,13 @@ export default function WorkerMap() {
                 <Marker key={w.user_id} position={[w.lat!, w.lng!]} icon={pin}>
                   <Popup>
                     <span className="font-semibold">{w.user_name}</span>
+                    {w.job_number && (
+                      <>
+                        <br />
+                        {w.job_number}
+                        {w.job_name ? ` — ${w.job_name}` : ""}
+                      </>
+                    )}
                     <br />
                     Clocked in {new Date(w.clock_in_at).toLocaleTimeString(undefined, {
                       hour: "numeric",
@@ -88,6 +95,12 @@ export default function WorkerMap() {
               <div key={w.user_id} className="card flex items-center justify-between gap-3 p-3.5">
                 <div className="min-w-0">
                   <p className="text-[13.5px] font-semibold">{w.user_name}</p>
+                  {w.job_number && (
+                    <p className="truncate text-[12px] font-medium text-brand-600 dark:text-brand-400">
+                      {w.job_number}
+                      {w.job_name ? ` — ${w.job_name}` : ""}
+                    </p>
+                  )}
                   <p className="text-[12px] text-slate-500 dark:text-slate-400">
                     Since{" "}
                     {new Date(w.clock_in_at).toLocaleTimeString(undefined, {

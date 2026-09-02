@@ -12,6 +12,8 @@ interface Shift {
   clock_out_at: string | null;
   still_clocked_in: boolean;
   hours: number;
+  job_number: string | null;
+  job_name: string | null;
 }
 
 export default function MyHours() {
@@ -59,6 +61,12 @@ export default function MyHours() {
               <div key={s.id} className="card flex items-center justify-between gap-3 p-3.5">
                 <div className="min-w-0">
                   <p className="text-[13.5px] font-semibold">{fmtWhen(s.clock_in_at)}</p>
+                  {s.job_number && (
+                    <p className="truncate text-[12px] font-medium text-brand-600 dark:text-brand-400">
+                      {s.job_number}
+                      {s.job_name ? ` — ${s.job_name}` : ""}
+                    </p>
+                  )}
                   <p className="text-[12px] text-slate-500 dark:text-slate-400">
                     {s.still_clocked_in ? (
                       <span className="font-semibold text-emerald-600 dark:text-emerald-400">

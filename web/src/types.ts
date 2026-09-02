@@ -145,12 +145,17 @@ export interface ClockStatus {
   clocked_in: boolean;
   clock_event_id?: number | null;
   clock_in_at?: string | null;
+  job_id?: number | null;
+  job_number?: string | null;
+  job_name?: string | null;
   gps_consent_given: boolean;
 }
 
 export interface WorkerLive {
   user_id: number;
   user_name: string;
+  job_number: string | null;
+  job_name: string | null;
   clock_in_at: string;
   lat: number | null;
   lng: number | null;
