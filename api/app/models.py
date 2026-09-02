@@ -258,6 +258,15 @@ class Estimate(TimestampMixin, Base):
     profit_pct: Mapped[Decimal] = mapped_column(Num(6, 2), default=Decimal("0"), nullable=False)
     discount_pct: Mapped[Decimal] = mapped_column(Num(6, 2), default=Decimal("0"), nullable=False)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    customer_email: Mapped[str | None] = mapped_column(String(200))
+    # Generated at first send, not at creation -- a draft shouldn't carry a
+    # live shareable credential before staff actually decide to send it.
+    # Re-sending reuses the same token so an old emailed link keeps working.
+    share_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Set exactly once, only by the customer's public approve/decline click --
+    # never reused from updated_at, which any later internal edit would touch.
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     sections: Mapped[list["EstimateSection"]] = relationship(
         back_populates="estimate", cascade="all, delete-orphan", order_by="EstimateSection.sort_order")

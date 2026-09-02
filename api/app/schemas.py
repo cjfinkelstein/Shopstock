@@ -550,6 +550,7 @@ class EstimateCreate(BaseModel):
     job_id: int | None = None
     customer: str | None = None
     address: str | None = None
+    customer_email: str | None = None
     scope_of_work: str = ""
     profit_pct: Decimal = Decimal("0")
     discount_pct: Decimal = Decimal("0")
@@ -560,6 +561,7 @@ class EstimateUpdate(BaseModel):
     clear_job: bool = False
     customer: str | None = None
     address: str | None = None
+    customer_email: str | None = None
     scope_of_work: str | None = None
     exclusions: str | None = None
     status: str | None = Field(default=None, pattern="^(draft|sent|approved|declined)$")
@@ -597,6 +599,7 @@ class EstimateOut(TimestampedOut):
     job_number: str | None = None
     customer: str | None
     address: str | None
+    customer_email: str | None = None
     scope_of_work: str
     exclusions: str | None
     status: str
@@ -610,6 +613,13 @@ class EstimateOut(TimestampedOut):
     total: Decimal
     created_by_name: str | None = None
     sections: list[EstimateSectionOut] = []
+    share_token: str | None = None
+    sent_at: datetime | None = None
+    responded_at: datetime | None = None
+
+    @field_serializer("sent_at", "responded_at")
+    def _ser_send_dt(self, v: datetime | None, _info):
+        return _utc_iso(v)
 
 
 class EstimateSummaryOut(TimestampedOut):
@@ -620,6 +630,41 @@ class EstimateSummaryOut(TimestampedOut):
     customer: str | None
     status: str
     total: Decimal
+
+
+# ---------- Public (customer-facing) estimate view ----------
+
+class PublicEstimateLine(BaseModel):
+    description: str
+    qty: Decimal
+    unit: str
+
+
+class PublicEstimateSection(BaseModel):
+    name: str
+    lines: list[PublicEstimateLine]
+
+
+class PublicEstimateOut(BaseModel):
+    """Customer-safe view -- deliberately excludes cost basis and margin
+    (material/labor unit costs, profit_pct, discount_pct, per-line totals,
+    internal id). A customer only ever sees scope + one bottom-line total."""
+    estimate_number: str
+    customer: str | None
+    address: str | None
+    sections: list[PublicEstimateSection]
+    exclusions: str | None
+    total: Decimal
+    status: str
+    sent_at: datetime | None = None
+
+    @field_serializer("sent_at")
+    def _ser_sent_at(self, v: datetime | None, _info):
+        return _utc_iso(v)
+
+
+class RespondIn(BaseModel):
+    decision: str = Field(pattern="^(approved|declined)$")
 
 
 class ChecklistItemIn(BaseModel):

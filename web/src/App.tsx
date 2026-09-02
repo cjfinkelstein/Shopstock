@@ -9,6 +9,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import EstimateDetail from "./pages/admin/EstimateDetail";
 import AdminEstimates from "./pages/admin/Estimates";
 import AdminExpenses from "./pages/admin/Expenses";
+import PublicEstimate from "./pages/PublicEstimate";
 import AdminItems from "./pages/admin/Items";
 import AdminJobs from "./pages/admin/Jobs";
 import JobDetail from "./pages/admin/JobDetail";
@@ -29,6 +30,17 @@ import Trucks from "./pages/tech/Trucks";
 
 export default function App() {
   const { user, loading } = useAuth();
+
+  // Public, unauthenticated estimate-view link -- must work regardless of
+  // login state or session-loading status, since the customer clicking an
+  // emailed link has no ShopStock account and no token in this browser.
+  if (window.location.pathname.startsWith("/estimate/")) {
+    return (
+      <Routes>
+        <Route path="/estimate/:token" element={<PublicEstimate />} />
+      </Routes>
+    );
+  }
 
   if (loading) {
     return (

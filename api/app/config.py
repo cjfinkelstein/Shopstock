@@ -17,6 +17,20 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     anthropic_api_key: str = ""
 
+    # Outbound email (estimate-sending) -- blank host means "not configured
+    # yet", handled as a clear error rather than a silent no-op.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_use_tls: bool = True
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_address: str = ""
+    smtp_from_name: str = "APEX Electrical Group"
+    # Public origin used to build customer-facing links (e.g. estimate share
+    # links) -- the API has no other way to know its own public URL. Overridden
+    # to the real production domain via docker-compose.yml/.env in prod.
+    public_base_url: str = "http://localhost:5173"
+
 
 @lru_cache
 def get_settings() -> Settings:

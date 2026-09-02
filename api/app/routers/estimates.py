@@ -1,6 +1,7 @@
 import base64
 import io
 import re
+import secrets
 from pathlib import Path
 from decimal import ROUND_CEILING, Decimal
 
@@ -11,12 +12,14 @@ from openpyxl.styles import Alignment, Font
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import require_admin
+from app.config import settings
 from app.database import get_db
-from app.models import Estimate, EstimateChecklistItem, EstimateLine, EstimateSection, Item, Job, User
+from app.models import Estimate, EstimateChecklistItem, EstimateLine, EstimateSection, Item, Job, User, utcnow
 from app.schemas import (
     ChecklistItemIn, ChecklistItemOut, EstimateCreate, EstimateLineOut, EstimateOut, EstimateSectionOut,
     EstimateSummaryOut, EstimateUpdate, PlanAnalyzeIn, PlanAnalyzeOut,
 )
+from app.services.mailer import send_estimate_email
 from app.services.plan_analysis import analyze_plan_sheet, decode_pdf_data_url
 
 router = APIRouter(prefix="/estimates", tags=["estimates"], dependencies=[Depends(require_admin)])
@@ -333,12 +336,14 @@ def _serialize(estimate: Estimate) -> EstimateOut:
         id=estimate.id, estimate_number=estimate.estimate_number,
         job_id=estimate.job_id, job_number=estimate.job.job_number if estimate.job else None,
         customer=estimate.customer,
-        address=estimate.address, scope_of_work=estimate.scope_of_work, exclusions=estimate.exclusions,
+        address=estimate.address, customer_email=estimate.customer_email,
+        scope_of_work=estimate.scope_of_work, exclusions=estimate.exclusions,
         status=estimate.status, profit_pct=estimate.profit_pct, discount_pct=estimate.discount_pct,
         material_total=material_total, labor_total=labor_total, subtotal=subtotal,
         profit_amount=profit_amount, discount_amount=discount_amount, total=total,
         created_by_name=estimate.creator.name if estimate.creator else None,
         created_at=estimate.created_at, updated_at=estimate.updated_at, sections=section_outs,
+        share_token=estimate.share_token, sent_at=estimate.sent_at, responded_at=estimate.responded_at,
     )
 
 
@@ -444,6 +449,42 @@ def update_estimate(estimate_id: int, body: EstimateUpdate, db: Session = Depend
                     description=line_in.description, qty=line_in.qty, unit=line_in.unit,
                     material_unit_cost=line_in.material_unit_cost, labor_unit_cost=line_in.labor_unit_cost,
                 ))
+    db.commit()
+    return _serialize(_get_or_404(db, estimate.id))
+
+
+@router.post("/{estimate_id}/send", response_model=EstimateOut)
+def send_estimate(estimate_id: int, db: Session = Depends(get_db)):
+    """Emails the customer a link to the online estimate page. Sendable from
+    draft or sent (re-sending reuses the same link); blocked once a customer
+    has approved/declined so a re-send can't silently overwrite a decision
+    they already made -- reset status via the manual dropdown first if a
+    revised estimate genuinely needs to go out again."""
+    estimate = _get_or_404(db, estimate_id)
+    if not estimate.customer_email:
+        raise HTTPException(status_code=400, detail="Add a customer email before sending.")
+    if not any(section.lines for section in estimate.sections):
+        raise HTTPException(status_code=400, detail="This estimate has no line items yet.")
+    if estimate.status in ("approved", "declined"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"This estimate has already been {estimate.status} by the customer -- "
+                   "reset its status first if you need to send a revised version.",
+        )
+
+    if not estimate.share_token:
+        estimate.share_token = secrets.token_urlsafe(32)
+        db.commit()
+
+    out = _serialize(estimate)
+    view_url = f"{settings.public_base_url}/estimate/{estimate.share_token}"
+    try:
+        send_estimate_email(estimate.customer_email, estimate, view_url, str(out.total))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=f"Couldn't send the email: {e}")
+
+    estimate.status = "sent"
+    estimate.sent_at = utcnow()
     db.commit()
     return _serialize(_get_or_404(db, estimate.id))
 

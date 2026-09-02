@@ -69,6 +69,31 @@ export async function api<T>(
   return res.json() as Promise<T>;
 }
 
+/** Calls a public (no-auth) endpoint — never attaches the stored session
+ * token, so a customer using a shared/staff browser never has a stray
+ * logged-in tech/admin token leak into the request headers. */
+export async function publicApi<T>(
+  path: string,
+  opts: { method?: string; body?: unknown } = {},
+): Promise<T> {
+  const res = await fetch(API + path, {
+    method: opts.method ?? "GET",
+    headers: { "Content-Type": "application/json" },
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const data = await res.json();
+      if (typeof data.detail === "string") detail = data.detail;
+    } catch {
+      /* not json */
+    }
+    throw new ApiError(detail, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
 /** Fetch a protected endpoint and hand back a Blob (labels page, CSV downloads). */
 export async function apiBlob(
   path: string,

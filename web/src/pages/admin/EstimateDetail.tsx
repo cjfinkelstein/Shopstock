@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { api, downloadCsv, fmtMoney } from "../../api";
+import { api, downloadCsv, fmtMoney, fmtWhen } from "../../api";
 import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import { ItemThumb, PageLoader, Spinner } from "../../components/ui";
@@ -50,6 +50,7 @@ export default function EstimateDetail() {
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [customer, setCustomer] = useState("");
   const [address, setAddress] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [status, setStatus] = useState<string>("draft");
   const [scope, setScope] = useState("");
   const [exclusions, setExclusions] = useState("");
@@ -61,6 +62,8 @@ export default function EstimateDetail() {
   const [picking, setPicking] = useState<number | null>(null); // section key being added to
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Item[]>([]);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const load = useCallback(() => {
     api<Estimate>(`/estimates/${id}`)
@@ -68,6 +71,7 @@ export default function EstimateDetail() {
         setEstimate(e);
         setCustomer(e.customer ?? "");
         setAddress(e.address ?? "");
+        setCustomerEmail(e.customer_email ?? "");
         setStatus(e.status);
         setScope(e.scope_of_work);
         setExclusions(e.exclusions ?? "");
@@ -168,7 +172,7 @@ export default function EstimateDetail() {
       await api(`/estimates/${id}`, {
         method: "PATCH",
         body: {
-          customer, address, scope_of_work: scope, exclusions, status,
+          customer, address, customer_email: customerEmail || null, scope_of_work: scope, exclusions, status,
           profit_pct: profitPct, discount_pct: discountPct,
           sections: sections.map((s) => ({
             name: s.name,
@@ -200,6 +204,47 @@ export default function EstimateDetail() {
       toast("error", err instanceof Error ? err.message : "Could not regenerate");
     } finally {
       setRedrafting(false);
+    }
+  };
+
+  const sendEstimate = async () => {
+    setSending(true);
+    try {
+      // Persist whatever's on screen first so the emailed estimate matches
+      // exactly what the admin sees, then trigger the actual send.
+      await api(`/estimates/${id}`, {
+        method: "PATCH",
+        body: {
+          customer, address, customer_email: customerEmail || null, scope_of_work: scope, exclusions,
+          profit_pct: profitPct, discount_pct: discountPct,
+          sections: sections.map((s) => ({
+            name: s.name,
+            lines: s.lines.map((l) => ({
+              item_id: l.item_id, description: l.description, qty: l.qty, unit: l.unit,
+              material_unit_cost: l.material_unit_cost, labor_unit_cost: l.labor_unit_cost,
+            })),
+          })),
+        },
+      });
+      await api(`/estimates/${id}/send`, { method: "POST" });
+      toast("success", "Estimate emailed");
+      setSendOpen(false);
+      load();
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't send the estimate");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const copyLink = async () => {
+    if (!estimate?.share_token) return;
+    const url = `${window.location.origin}/estimate/${estimate.share_token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("success", "Link copied");
+    } catch {
+      toast("error", "Couldn't copy link");
     }
   };
 
@@ -244,8 +289,40 @@ export default function EstimateDetail() {
             <Icon name="trash" size={18} />
             Delete
           </button>
+          <button
+            className="btn-primary"
+            disabled={!customerEmail.trim()}
+            title={customerEmail.trim() ? undefined : "Add a customer email first"}
+            onClick={() => setSendOpen(true)}
+          >
+            <Icon name="mail" size={18} />
+            Send to customer
+          </button>
         </div>
       </div>
+
+      {(estimate.sent_at || estimate.responded_at) && (
+        <div className="card flex flex-wrap items-center gap-x-5 gap-y-1.5 p-3.5 text-[13px] text-slate-500 dark:text-slate-400">
+          {estimate.sent_at && (
+            <span className="flex items-center gap-1.5">
+              <Icon name="mail" size={14} />
+              Sent {fmtWhen(estimate.sent_at)}
+            </span>
+          )}
+          {estimate.responded_at && (
+            <span className="flex items-center gap-1.5">
+              <Icon name={estimate.status === "approved" ? "check" : "x"} size={14} />
+              Customer {estimate.status} {fmtWhen(estimate.responded_at)}
+            </span>
+          )}
+          {estimate.share_token && (
+            <button className="btn-ghost !min-h-0 px-2 py-1 text-[13px]" onClick={copyLink}>
+              <Icon name="clipboard-list" size={13} />
+              Copy link
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="card grid grid-cols-1 gap-3.5 p-4 sm:grid-cols-2">
         <label className="block">
@@ -255,6 +332,16 @@ export default function EstimateDetail() {
         <label className="block">
           <span className="label">Address</span>
           <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} />
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="label">Customer email</span>
+          <input
+            className="input"
+            type="email"
+            placeholder="customer@example.com"
+            value={customerEmail}
+            onChange={(e) => setCustomerEmail(e.target.value)}
+          />
         </label>
       </div>
 
@@ -474,6 +561,22 @@ export default function EstimateDetail() {
         {saving ? <Spinner /> : <Icon name="check" size={18} />}
         Save changes
       </button>
+
+      {sendOpen && (
+        <Sheet title="Send estimate" subtitle={estimate.estimate_number} onClose={() => setSendOpen(false)}>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              We'll email <span className="font-semibold text-slate-700 dark:text-slate-200">{customerEmail}</span>{" "}
+              a link to view this estimate online. They'll be able to approve or decline it, and this page will
+              update automatically.
+            </p>
+            <button className="btn-primary w-full" disabled={sending} onClick={sendEstimate}>
+              {sending ? <Spinner /> : <Icon name="mail" size={18} />}
+              Send now
+            </button>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }

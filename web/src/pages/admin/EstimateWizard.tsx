@@ -723,6 +723,7 @@ export default function EstimateWizard({
   const activeSteps = jobType === "commercial" ? COMMERCIAL_STEPS : WIZARD_STEPS;
   const [customer, setCustomer] = useState(initialCustomer ?? "");
   const [address, setAddress] = useState(initialAddress ?? "");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [profitPct, setProfitPct] = useState("20");
   const [discountPct, setDiscountPct] = useState("0");
   const [selections, setSelections] = useState<Selections>({});
@@ -1043,7 +1044,10 @@ export default function EstimateWizard({
     try {
       const est = await api<Estimate>("/estimates", {
         method: "POST",
-        body: { job_id: jobId, customer, address, scope_of_work: buildScopeOfWork(), profit_pct: profitPct, discount_pct: discountPct },
+        body: {
+          job_id: jobId, customer, address, customer_email: customerEmail || undefined,
+          scope_of_work: buildScopeOfWork(), profit_pct: profitPct, discount_pct: discountPct,
+        },
       });
       const full = await api<Estimate>(`/estimates/${est.id}`, {
         method: "PATCH",
@@ -1156,6 +1160,16 @@ export default function EstimateWizard({
             <label className="block">
               <span className="label">Address</span>
               <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="label">Customer email (optional)</span>
+              <input
+                className="input"
+                type="email"
+                placeholder="Needed later to send the estimate"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+              />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">

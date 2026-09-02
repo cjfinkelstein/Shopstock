@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import (
-    auth_routes, dashboard, estimates, expenses, items, jobs, labels, reports, stock, time_clock, transactions,
-    trucks, users, vendors,
+    auth_routes, dashboard, estimates, expenses, items, jobs, labels, public_estimates, reports, stock, time_clock,
+    transactions, trucks, users, vendors,
 )
 
 app = FastAPI(
@@ -31,7 +31,7 @@ def health():
 
 for r in (auth_routes.router, users.router, trucks.router, vendors.router, items.router,
           labels.router, jobs.router, transactions.router, stock.router, reports.router,
-          dashboard.router, estimates.router, time_clock.router, expenses.router):
+          dashboard.router, estimates.router, time_clock.router, expenses.router, public_estimates.router):
     api.include_router(r)
 
 app.include_router(api)

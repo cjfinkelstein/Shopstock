@@ -271,6 +271,7 @@ export interface Estimate {
   job_number: string | null;
   customer: string | null;
   address: string | null;
+  customer_email: string | null;
   scope_of_work: string;
   exclusions: string | null;
   status: "draft" | "sent" | "approved" | "declined";
@@ -286,6 +287,31 @@ export interface Estimate {
   created_at: string;
   updated_at: string;
   sections: EstimateSection[];
+  share_token: string | null;
+  sent_at: string | null;
+  responded_at: string | null;
+}
+
+export interface PublicEstimateLine {
+  description: string;
+  qty: string;
+  unit: string;
+}
+
+export interface PublicEstimateSection {
+  name: string;
+  lines: PublicEstimateLine[];
+}
+
+export interface PublicEstimate {
+  estimate_number: string;
+  customer: string | null;
+  address: string | null;
+  sections: PublicEstimateSection[];
+  exclusions: string | null;
+  total: string;
+  status: "draft" | "sent" | "approved" | "declined";
+  sent_at: string | null;
 }
 
 export interface JobFile {
