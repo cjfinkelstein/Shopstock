@@ -37,12 +37,13 @@ def _range_filter(q, date_from: str, date_to: str):
 
 @router.get("/calendar")
 def calendar(date_from: str, date_to: str, db: Session = Depends(get_db)):
-    """Per-day log of logins (tap-in / admin login) and material signed out,
-    both shown in the shop's local display timezone."""
+    """Per-day log of logins (tap-in / admin login), clock-in shifts (with
+    hours worked), and material signed out, all shown in the shop's local
+    display timezone."""
     days: dict[str, dict[str, list]] = {}
 
     def bucket(day: str) -> dict[str, list]:
-        return days.setdefault(day, {"logins": [], "sign_outs": []})
+        return days.setdefault(day, {"logins": [], "shifts": [], "sign_outs": []})
 
     def fmt_time(dt) -> str:
         # portable "8:03 AM" (no platform-specific %-I / %#I strftime flag)
@@ -60,6 +61,27 @@ def calendar(date_from: str, date_to: str, db: Session = Depends(get_db)):
             "time": fmt_time(local),
             "user_name": ev.user.name if ev.user else "?",
             "role": ev.role,
+        })
+
+    shifts = (
+        db.query(ClockEvent)
+        .options(joinedload(ClockEvent.user), joinedload(ClockEvent.job))
+        .filter(ClockEvent.clock_in_at >= day_start_utc(date_from), ClockEvent.clock_in_at < day_end_utc(date_to))
+        .all()
+    )
+    now = datetime.utcnow()
+    for e in shifts:
+        local = to_local(e.clock_in_at)
+        bucket(local.strftime("%Y-%m-%d"))["shifts"].append({
+            "id": e.id,
+            "time": fmt_time(local),
+            "user_name": e.user.name if e.user else "?",
+            "job_number": e.job.job_number if e.job else None,
+            "job_name": e.job.name if e.job else None,
+            "clock_out_time": fmt_time(to_local(e.clock_out_at)) if e.clock_out_at else None,
+            "still_clocked_in": e.clock_out_at is None,
+            "hours": round(((e.clock_out_at or now) - e.clock_in_at).total_seconds() / 3600, 2),
+            "approval_status": e.approval_status,
         })
 
     signouts = (
@@ -85,6 +107,7 @@ def calendar(date_from: str, date_to: str, db: Session = Depends(get_db)):
 
     for d in days.values():
         d["logins"].sort(key=lambda x: x["time"])
+        d["shifts"].sort(key=lambda x: x["time"])
         d["sign_outs"].sort(key=lambda x: x["time"])
 
     return {"days": days}

@@ -16,7 +16,6 @@ import AdminReports from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminStock from "./pages/admin/Stock";
 import AdminTrucks from "./pages/admin/Trucks";
-import AdminWorkerMap from "./pages/admin/WorkerMap";
 import AdminLogin from "./pages/AdminLogin";
 import TapIn from "./pages/TapIn";
 import Activity from "./pages/tech/Activity";
@@ -73,7 +72,7 @@ export default function App() {
           <Route path="estimates" element={<AdminEstimates />} />
           <Route path="estimates/:id" element={<EstimateDetail />} />
           <Route path="trucks" element={<AdminTrucks />} />
-          <Route path="worker-map" element={<AdminWorkerMap />} />
+          <Route path="worker-map" element={<Navigate to="/admin/calendar" replace />} />
           <Route path="calendar" element={<AdminCalendar />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="settings" element={<AdminSettings />} />
