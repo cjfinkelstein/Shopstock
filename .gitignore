@@ -1,0 +1,21 @@
+# python
+api/.venv/
+__pycache__/
+*.pyc
+api/shopstock.db
+api/.pytest_cache/
+
+# node
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+
+# env & secrets
+.env
+
+# editor/os
+.DS_Store
+
+# leftover local test artifacts
+size_test_body.json
+size_test_resp.json

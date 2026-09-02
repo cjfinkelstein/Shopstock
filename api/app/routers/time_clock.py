@@ -1,0 +1,103 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.auth import get_current_user, require_admin
+from app.database import get_db
+from app.models import ClockEvent, LocationPing, User, utcnow
+from app.schemas import ClockInIn, ClockOutIn, ClockStatusOut, LocationPingIn, WorkerLiveOut
+
+router = APIRouter(prefix="/time", tags=["time"])
+
+
+def _open_event(db: Session, user_id: int) -> ClockEvent | None:
+    return (
+        db.query(ClockEvent)
+        .filter(ClockEvent.user_id == user_id, ClockEvent.clock_out_at.is_(None))
+        .order_by(ClockEvent.clock_in_at.desc())
+        .first()
+    )
+
+
+@router.get("/status", response_model=ClockStatusOut)
+def status(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ev = _open_event(db, user.id)
+    consented = user.gps_consent_at is not None
+    if not ev:
+        return ClockStatusOut(clocked_in=False, gps_consent_given=consented)
+    return ClockStatusOut(
+        clocked_in=True, clock_event_id=ev.id, clock_in_at=ev.clock_in_at, gps_consent_given=consented
+    )
+
+
+@router.post("/gps-consent", response_model=ClockStatusOut)
+def gps_consent(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """One-time, permanent record that this tech was shown and agreed to the
+    GPS-while-clocked-in notice. Never cleared once set."""
+    if user.role != "tech":
+        raise HTTPException(status_code=400, detail="Only field techs need to agree to this")
+    if user.gps_consent_at is None:
+        user.gps_consent_at = utcnow()
+        db.commit()
+    ev = _open_event(db, user.id)
+    if not ev:
+        return ClockStatusOut(clocked_in=False, gps_consent_given=True)
+    return ClockStatusOut(clocked_in=True, clock_event_id=ev.id, clock_in_at=ev.clock_in_at, gps_consent_given=True)
+
+
+@router.post("/clock-in", response_model=ClockStatusOut)
+def clock_in(body: ClockInIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role != "tech":
+        raise HTTPException(status_code=400, detail="Only field techs clock in")
+    if user.gps_consent_at is None:
+        raise HTTPException(status_code=403, detail="You must agree to GPS tracking before clocking in")
+    if _open_event(db, user.id):
+        raise HTTPException(status_code=400, detail="Already clocked in")
+    ev = ClockEvent(user_id=user.id, clock_in_lat=body.lat, clock_in_lng=body.lng)
+    db.add(ev)
+    db.commit()
+    return ClockStatusOut(clocked_in=True, clock_event_id=ev.id, clock_in_at=ev.clock_in_at, gps_consent_given=True)
+
+
+@router.post("/clock-out", response_model=ClockStatusOut)
+def clock_out(body: ClockOutIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ev = _open_event(db, user.id)
+    if not ev:
+        raise HTTPException(status_code=400, detail="Not clocked in")
+    ev.clock_out_at = utcnow()
+    ev.clock_out_lat = body.lat
+    ev.clock_out_lng = body.lng
+    db.commit()
+    return ClockStatusOut(clocked_in=False)
+
+
+@router.post("/ping", status_code=204)
+def ping(body: LocationPingIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ev = _open_event(db, user.id)
+    if not ev:
+        raise HTTPException(status_code=400, detail="Not clocked in")
+    db.add(LocationPing(clock_event_id=ev.id, user_id=user.id, lat=body.lat, lng=body.lng))
+    db.commit()
+
+
+@router.get("/live", response_model=list[WorkerLiveOut])
+def live(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    events = db.query(ClockEvent).filter(ClockEvent.clock_out_at.is_(None)).all()
+    out = []
+    for ev in events:
+        last_ping = (
+            db.query(LocationPing)
+            .filter(LocationPing.clock_event_id == ev.id)
+            .order_by(LocationPing.recorded_at.desc())
+            .first()
+        )
+        out.append(
+            WorkerLiveOut(
+                user_id=ev.user_id,
+                user_name=ev.user.name,
+                clock_in_at=ev.clock_in_at,
+                lat=last_ping.lat if last_ping else ev.clock_in_lat,
+                lng=last_ping.lng if last_ping else ev.clock_in_lng,
+                last_ping_at=last_ping.recorded_at if last_ping else None,
+            )
+        )
+    return out

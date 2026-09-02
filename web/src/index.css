@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  /* App shell owns scrolling via its own .overflow-y-auto regions -- if the
+     outer document can ALSO scroll, iOS Safari (especially as an installed
+     home-screen PWA) sometimes hands touch-drag to the wrong scroll
+     container and a long page (e.g. an estimate with many sections) reads
+     as "stuck"/cut off at the top with no way to scroll down. */
+  overflow: hidden;
+}
+
+body {
+  @apply bg-white text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  overscroll-behavior-y: none;
+}
+
+/* Smooth momentum scrolling for nested scroll regions on iOS, and a
+   defensive min-height reset -- a flex child's default min-height is
+   "auto", which can stop overflow-y-auto from ever kicking in when its
+   content is unusually tall. */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+}
+
+::selection {
+  @apply bg-brand-500/25;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight;
+  }
+  input,
+  select,
+  textarea,
+  button {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950;
+  }
+}
+
+@layer components {
+  /* ---------- buttons ---------- */
+  .btn-primary {
+    @apply flex min-h-[50px] select-none items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-brand-500 to-brand-600 px-5 font-semibold text-white shadow-fab transition-all duration-150 active:scale-[0.97] active:brightness-95 disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none;
+  }
+  .btn-secondary {
+    @apply flex min-h-[50px] select-none items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 font-semibold text-slate-700 shadow-card transition-all duration-150 active:scale-[0.97] active:bg-slate-50 dark:border-slate-700/60 dark:bg-slate-800/80 dark:text-slate-100 dark:active:bg-slate-800;
+  }
+  .btn-ghost {
+    @apply flex min-h-[44px] select-none items-center justify-center gap-2 rounded-xl px-4 font-medium text-slate-500 transition-colors active:bg-slate-200/60 dark:text-slate-400 dark:active:bg-slate-800/60;
+  }
+  .btn-danger {
+    @apply flex min-h-[50px] select-none items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-40;
+  }
+  .icon-btn {
+    @apply flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-full text-slate-500 transition-colors active:bg-slate-200/70 dark:text-slate-400 dark:active:bg-slate-800;
+  }
+
+  /* ---------- surfaces ---------- */
+  .card {
+    @apply rounded-2xl border border-slate-200/70 bg-white p-4 shadow-card dark:border-slate-800 dark:bg-slate-900;
+  }
+  .card-interactive {
+    @apply card cursor-pointer text-left transition-all duration-150 hover:shadow-card-hover active:scale-[0.99] dark:hover:border-slate-700;
+  }
+  .glass {
+    @apply border-slate-200/60 bg-white/75 backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/75;
+  }
+
+  /* ---------- forms ---------- */
+  .input {
+    @apply min-h-[50px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-[15px] text-slate-900 shadow-card placeholder:text-slate-400 focus:border-brand-400 dark:border-slate-700/60 dark:bg-slate-800/80 dark:text-slate-100 dark:placeholder:text-slate-500;
+  }
+  .label {
+    @apply mb-1.5 block text-[13px] font-semibold text-slate-600 dark:text-slate-300;
+  }
+
+  /* ---------- chips / badges ---------- */
+  .chip {
+    @apply inline-flex min-h-[42px] select-none items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 shadow-card transition-all duration-150 active:scale-[0.96] dark:border-slate-700/60 dark:bg-slate-800/80 dark:text-slate-300;
+  }
+  .chip-active {
+    @apply border-transparent bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-fab;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide;
+  }
+
+  /* ---------- misc ---------- */
+  .skeleton {
+    @apply rounded-xl bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%] animate-shimmer dark:from-slate-800 dark:via-slate-700/60 dark:to-slate-800;
+  }
+  .divide-list > * + * {
+    @apply border-t border-slate-100 dark:border-slate-800;
+  }
+  .page-title {
+    @apply font-display text-[26px] font-extrabold tracking-tight;
+  }
+  .page-eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500;
+  }
+  .stat-number {
+    @apply font-display font-extrabold tabular-nums tracking-tight;
+  }
+
+  /* ---------- vivid stat tiles (reference-style color blocks) ---------- */
+  .tile-vivid {
+    @apply relative overflow-hidden rounded-[22px] p-4 pb-5 text-white;
+  }
+  .tile-vivid::before {
+    content: "";
+    @apply pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10;
+  }
+  .tile-blue {
+    @apply tile-vivid bg-gradient-to-br from-[#4f63f0] to-brand-700 shadow-[0_10px_24px_-8px_rgb(41_70_226/0.45)];
+  }
+  .tile-purple {
+    @apply tile-vivid bg-gradient-to-br from-accent-400 to-accent-700 shadow-[0_10px_24px_-8px_rgb(124_47_232/0.45)];
+  }
+  .tile-indigo {
+    @apply tile-vivid bg-gradient-to-br from-indigo-400 to-indigo-700 shadow-[0_10px_24px_-8px_rgb(79_70_229/0.45)];
+  }
+  .tile-caption {
+    @apply text-[11px] font-semibold uppercase tracking-wide text-white/70;
+  }
+  .tile-fab {
+    @apply absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white transition-transform duration-150;
+  }
+
+  /* circular icon disc (friendlier than the square tile — list items) */
+  .icon-disc {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-full;
+  }
+
+  /* attention card: big colored disc + text + trailing chevron disc */
+  .alert-card {
+    @apply flex w-full items-center gap-3.5 rounded-2xl border border-red-100 bg-red-50/70 p-3.5 text-left dark:border-red-500/20 dark:bg-red-500/10;
+  }
+
+  /* rich gradient hero surface with a soft radial glow */
+  .hero-card {
+    @apply relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 via-brand-600 to-indigo-700 text-white shadow-fab;
+  }
+  .hero-card::before {
+    content: "";
+    @apply pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/15 blur-2xl;
+  }
+  .hero-card::after {
+    content: "";
+    @apply pointer-events-none absolute -bottom-20 -left-8 h-44 w-44 rounded-full bg-indigo-300/20 blur-2xl;
+  }
+
+  /* segmented control */
+  .seg {
+    @apply flex rounded-2xl bg-slate-200/70 p-1 dark:bg-slate-800;
+  }
+  .seg-item {
+    @apply flex min-h-[42px] flex-1 select-none items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-slate-500 transition-all dark:text-slate-400;
+  }
+  .seg-item-active {
+    @apply bg-white text-slate-900 shadow-card dark:bg-slate-700 dark:text-white;
+  }
+
+  /* decorative page glow (login/tap-in backdrops) */
+  .glow-backdrop {
+    @apply pointer-events-none absolute inset-0 overflow-hidden;
+  }
+  .glow-backdrop::before {
+    content: "";
+    @apply absolute -top-32 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-brand-500/20 blur-3xl;
+  }
+  .glow-backdrop::after {
+    content: "";
+    @apply absolute -bottom-24 -right-16 h-64 w-64 rounded-full bg-indigo-500/15 blur-3xl;
+  }
+  .section-title {
+    @apply mb-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500;
+  }
+  .icon-tile {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl;
+  }
+}
+
+/* number columns always align */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* hide scrollbars on horizontal chip rows */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
