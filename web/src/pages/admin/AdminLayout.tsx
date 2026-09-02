@@ -13,7 +13,7 @@ const links = [
   { to: "/admin/jobs", label: "Jobs", icon: "briefcase" },
   { to: "/admin/estimates", label: "Estimates", icon: "clipboard-list" },
   { to: "/admin/trucks", label: "Trucks", icon: "truck" },
-  { to: "/admin/worker-map", label: "Worker Map", icon: "map-pin" },
+  { to: "/admin/worker-map", label: "Login Hours", icon: "map-pin" },
   { to: "/admin/calendar", label: "Calendar", icon: "calendar" },
   { to: "/admin/reports", label: "Reports", icon: "file-text" },
   { to: "/admin/settings", label: "Settings", icon: "settings" },
