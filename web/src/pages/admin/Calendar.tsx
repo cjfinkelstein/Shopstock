@@ -288,6 +288,145 @@ export default function Calendar() {
         </p>
       </div>
 
+      {/* Calendar */}
+      <div>
+        <div className="mb-2.5 flex flex-wrap items-end justify-between gap-3">
+          <p className="section-title flex items-center gap-1.5">
+            <Icon name="calendar" size={14} />
+            Calendar
+          </p>
+          <div className="flex items-center gap-2">
+            <button className="icon-btn" aria-label="Previous month" onClick={() => shiftMonth(-1)}>
+              <Icon name="arrow-left" size={18} />
+            </button>
+            <span className="min-w-[150px] text-center text-[15px] font-bold">{monthLabel}</span>
+            <button className="icon-btn" aria-label="Next month" onClick={() => shiftMonth(1)}>
+              <Icon name="arrow-right" size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-4 text-[13px] text-slate-500 dark:text-slate-400">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            Shifts
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />
+            Logins
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+            Signed out
+          </span>
+        </div>
+
+        {!days ? (
+          <ListSkeleton rows={5} height={90} />
+        ) : (
+          <div className="card overflow-hidden p-0">
+            <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
+              {WEEKDAYS.map((w) => (
+                <div
+                  key={w}
+                  className="px-2 py-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500"
+                >
+                  {w}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {cells.map((day, i) => {
+                if (day === null)
+                  return (
+                    <div
+                      key={i}
+                      className="min-h-[92px] border-b border-r border-slate-100 last:border-r-0 dark:border-slate-800"
+                    />
+                  );
+                const iso = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const d = days[iso];
+                const hasData = d && (d.logins.length > 0 || d.shifts.length > 0 || d.sign_outs.length > 0);
+                const isToday = iso === today;
+                const summaryLines = hasData
+                  ? [
+                      ...d.shifts.map((s, si) => ({
+                        key: `sh${si}-${s.time}${s.user_name}`,
+                        dot: "bg-emerald-500",
+                        text: `${s.user_name} · ${hoursLabel(s.hours)}`,
+                      })),
+                      ...d.logins.map((l, li) => ({
+                        key: `l${li}-${l.time}${l.user_name}`,
+                        dot: "bg-brand-500",
+                        text: `${l.user_name} logged in`,
+                      })),
+                      ...d.sign_outs.map((s, si) => ({
+                        key: `s${si}-${s.time}${s.item_name}`,
+                        dot: "bg-amber-500",
+                        text: `${fmtQty(s.qty, s.unit)} ${s.item_name}`,
+                      })),
+                    ]
+                  : [];
+                const shown = summaryLines.slice(0, 3);
+                const hiddenCount = summaryLines.length - shown.length;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => hasData && setSelected(iso)}
+                    disabled={!hasData}
+                    className={`flex min-h-[92px] flex-col items-start gap-1 border-b border-r p-2 text-left transition-colors last:border-r-0 dark:border-slate-800 md:min-h-[132px] lg:min-h-[150px] ${
+                      hasData ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40" : "cursor-default"
+                    } ${(i + 1) % 7 === 0 ? "border-r-0" : "border-slate-100"}`}
+                  >
+                    <span className="flex w-full items-center justify-between">
+                      <span
+                        className={`flex h-6 w-6 items-center justify-center rounded-full text-[13px] font-semibold ${
+                          isToday ? "bg-brand-600 text-white" : "text-slate-600 dark:text-slate-300"
+                        }`}
+                      >
+                        {day}
+                      </span>
+                      {hasData && (
+                        <span className="flex gap-1 md:hidden">
+                          {d.shifts.length > 0 && (
+                            <span className="badge bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                              {d.shifts.length}
+                            </span>
+                          )}
+                          {d.sign_outs.length > 0 && (
+                            <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                              {d.sign_outs.length}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </span>
+                    {shown.length > 0 && (
+                      <span className="hidden w-full min-w-0 flex-col gap-0.5 md:flex">
+                        {shown.map((line) => (
+                          <span
+                            key={line.key}
+                            className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400"
+                          >
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${line.dot}`} />
+                            <span className="truncate">{line.text}</span>
+                          </span>
+                        ))}
+                        {hiddenCount > 0 && (
+                          <span className="pl-3 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                            +{hiddenCount} more
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       {liveLoading ? (
         <ListSkeleton rows={3} />
       ) : (
@@ -461,146 +600,6 @@ export default function Calendar() {
           </div>
         </>
       )}
-
-      {/* Calendar */}
-      <div>
-        <div className="mb-2.5 flex flex-wrap items-end justify-between gap-3">
-          <p className="section-title flex items-center gap-1.5">
-            <Icon name="calendar" size={14} />
-            Calendar
-          </p>
-          <div className="flex items-center gap-2">
-            <button className="icon-btn" aria-label="Previous month" onClick={() => shiftMonth(-1)}>
-              <Icon name="arrow-left" size={18} />
-            </button>
-            <span className="min-w-[150px] text-center text-[15px] font-bold">{monthLabel}</span>
-            <button className="icon-btn" aria-label="Next month" onClick={() => shiftMonth(1)}>
-              <Icon name="arrow-right" size={18} />
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-3 flex flex-wrap items-center gap-4 text-[13px] text-slate-500 dark:text-slate-400">
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            Shifts
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />
-            Logins
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-            Signed out
-          </span>
-        </div>
-
-        {!days ? (
-          <ListSkeleton rows={5} height={90} />
-        ) : (
-          <div className="card overflow-hidden p-0">
-            <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
-              {WEEKDAYS.map((w) => (
-                <div
-                  key={w}
-                  className="px-2 py-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500"
-                >
-                  {w}
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7">
-              {cells.map((day, i) => {
-                if (day === null)
-                  return (
-                    <div
-                      key={i}
-                      className="min-h-[92px] border-b border-r border-slate-100 last:border-r-0 dark:border-slate-800"
-                    />
-                  );
-                const iso = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                const d = days[iso];
-                const hasData = d && (d.logins.length > 0 || d.shifts.length > 0 || d.sign_outs.length > 0);
-                const isToday = iso === today;
-                const summaryLines = hasData
-                  ? [
-                      ...d.shifts.map((s, si) => ({
-                        key: `sh${si}-${s.time}${s.user_name}`,
-                        dot: "bg-emerald-500",
-                        text: `${s.user_name} · ${hoursLabel(s.hours)}`,
-                      })),
-                      ...d.logins.map((l, li) => ({
-                        key: `l${li}-${l.time}${l.user_name}`,
-                        dot: "bg-brand-500",
-                        text: `${l.user_name} logged in`,
-                      })),
-                      ...d.sign_outs.map((s, si) => ({
-                        key: `s${si}-${s.time}${s.item_name}`,
-                        dot: "bg-amber-500",
-                        text: `${fmtQty(s.qty, s.unit)} ${s.item_name}`,
-                      })),
-                    ]
-                  : [];
-                const shown = summaryLines.slice(0, 3);
-                const hiddenCount = summaryLines.length - shown.length;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => hasData && setSelected(iso)}
-                    disabled={!hasData}
-                    className={`flex min-h-[92px] flex-col items-start gap-1 border-b border-r p-2 text-left transition-colors last:border-r-0 dark:border-slate-800 md:min-h-[132px] lg:min-h-[150px] ${
-                      hasData ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40" : "cursor-default"
-                    } ${(i + 1) % 7 === 0 ? "border-r-0" : "border-slate-100"}`}
-                  >
-                    <span className="flex w-full items-center justify-between">
-                      <span
-                        className={`flex h-6 w-6 items-center justify-center rounded-full text-[13px] font-semibold ${
-                          isToday ? "bg-brand-600 text-white" : "text-slate-600 dark:text-slate-300"
-                        }`}
-                      >
-                        {day}
-                      </span>
-                      {hasData && (
-                        <span className="flex gap-1 md:hidden">
-                          {d.shifts.length > 0 && (
-                            <span className="badge bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                              {d.shifts.length}
-                            </span>
-                          )}
-                          {d.sign_outs.length > 0 && (
-                            <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                              {d.sign_outs.length}
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </span>
-                    {shown.length > 0 && (
-                      <span className="hidden w-full min-w-0 flex-col gap-0.5 md:flex">
-                        {shown.map((line) => (
-                          <span
-                            key={line.key}
-                            className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400"
-                          >
-                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${line.dot}`} />
-                            <span className="truncate">{line.text}</span>
-                          </span>
-                        ))}
-                        {hiddenCount > 0 && (
-                          <span className="pl-3 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
-                            +{hiddenCount} more
-                          </span>
-                        )}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
       {selected && (
         <Sheet
           title={new Date(selected + "T00:00:00").toLocaleDateString("en-US", {
