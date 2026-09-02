@@ -29,6 +29,7 @@ function Tab({
     <NavLink
       to={to}
       aria-label={label}
+      title={label}
       className={({ isActive }) =>
         `relative flex min-h-[60px] flex-1 flex-col items-center justify-center transition-colors ${
           isActive ? "text-brand-600 dark:text-brand-400" : "text-slate-400 dark:text-slate-500"
@@ -115,6 +116,7 @@ export default function TechLayout() {
             <button
               onClick={() => navigate("/search")}
               aria-label="Find material"
+              title="Find material"
               className={`absolute -top-7 flex h-[58px] w-[58px] items-center justify-center rounded-full text-white shadow-fab transition-all duration-200 active:scale-90 ${
                 onFind
                   ? "bg-gradient-to-b from-brand-600 to-brand-700 ring-4 ring-brand-500/25"
@@ -125,6 +127,7 @@ export default function TechLayout() {
             </button>
           </div>
           <Tab to="/cart" label="Cart" icon="cart" badge={lines.length} />
+          <Tab to="/my-hours" label="Timesheet" icon="clock" />
           <Tab to="/activity" label="Activity" icon="history" />
         </div>
       </nav>
