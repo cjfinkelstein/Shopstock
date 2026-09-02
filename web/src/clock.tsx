@@ -56,11 +56,7 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     setGpsConsentGiven(s.gps_consent_given);
   };
 
-  useEffect(() => {
-    if (user?.role !== "tech") {
-      setLoading(false);
-      return;
-    }
+  const refreshStatus = () =>
     api<ClockStatus>("/time/status")
       .then(applyStatus)
       .catch(() => {
@@ -70,8 +66,14 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
         setJobName(null);
         setApprovalStatus(null);
         setGpsConsentGiven(false);
-      })
-      .finally(() => setLoading(false));
+      });
+
+  useEffect(() => {
+    if (user?.role !== "tech") {
+      setLoading(false);
+      return;
+    }
+    refreshStatus().finally(() => setLoading(false));
   }, [user?.id, user?.role]);
 
   // Ping loop lives here (not on any one page) so it keeps running no
@@ -106,24 +108,44 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
 
   const clockIn = async (jobId: number) => {
     const pos = await getPosition();
-    const s = await api<ClockStatus>("/time/clock-in", {
-      method: "POST",
-      body: { job_id: jobId, lat: pos?.coords.latitude, lng: pos?.coords.longitude },
-    });
-    applyStatus(s);
+    try {
+      const s = await api<ClockStatus>("/time/clock-in", {
+        method: "POST",
+        body: { job_id: jobId, lat: pos?.coords.latitude, lng: pos?.coords.longitude },
+      });
+      applyStatus(s);
+    } catch (e) {
+      // The request may have actually succeeded server-side even though this
+      // client never saw the response (dropped connection, deploy blip,
+      // etc.) -- resync with the server's real state so the UI can't get
+      // stuck showing "not clocked in" while a retry keeps failing because
+      // we're secretly already clocked in.
+      await refreshStatus();
+      throw e;
+    }
   };
 
   const clockOut = async () => {
     const pos = await getPosition();
-    await api("/time/clock-out", {
-      method: "POST",
-      body: { lat: pos?.coords.latitude, lng: pos?.coords.longitude },
-    });
-    setClockedIn(false);
-    setClockInAt(null);
-    setJobNumber(null);
-    setJobName(null);
-    setApprovalStatus(null);
+    try {
+      await api("/time/clock-out", {
+        method: "POST",
+        body: { lat: pos?.coords.latitude, lng: pos?.coords.longitude },
+      });
+      setClockedIn(false);
+      setClockInAt(null);
+      setJobNumber(null);
+      setJobName(null);
+      setApprovalStatus(null);
+    } catch (e) {
+      // Same resync as clockIn -- if we're actually already clocked out
+      // server-side (e.g. an earlier tap succeeded but its response never
+      // reached this device), this clears the stale "still clocked in" UI
+      // instead of leaving the tech stuck retapping a button that will
+      // always fail.
+      await refreshStatus();
+      throw e;
+    }
   };
 
   return (
