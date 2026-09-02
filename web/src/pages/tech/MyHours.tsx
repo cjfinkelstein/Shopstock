@@ -63,9 +63,13 @@ export default function MyHours() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-[13.5px] font-semibold">{fmtWhen(s.clock_in_at)}</p>
-                    {s.approval_status === "pending" && (
+                    {s.approval_status === "pending" ? (
                       <span className="badge shrink-0 bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
                         Pending
+                      </span>
+                    ) : (
+                      <span className="badge shrink-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                        Approved
                       </span>
                     )}
                   </div>

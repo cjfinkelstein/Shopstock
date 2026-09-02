@@ -124,9 +124,13 @@ export default function Home() {
                   <p className="text-[13.5px] font-semibold text-emerald-700 dark:text-emerald-400">
                     Clocked in
                   </p>
-                  {approvalStatus === "pending" && (
+                  {approvalStatus === "pending" ? (
                     <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
                       Pending approval
+                    </span>
+                  ) : (
+                    <span className="badge bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                      Approved
                     </span>
                   )}
                 </div>
