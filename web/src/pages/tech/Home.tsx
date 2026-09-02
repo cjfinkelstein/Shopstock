@@ -184,7 +184,7 @@ export default function Home() {
 
       {jobPickerOpen && (
         <Sheet title="Clock in to…" onClose={() => setJobPickerOpen(false)}>
-          <JobPicker onPick={handlePickJobAndClockIn} />
+          <JobPicker onPick={handlePickJobAndClockIn} allowCreate />
         </Sheet>
       )}
 

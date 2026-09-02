@@ -167,11 +167,22 @@ def job_materials(job_id: int, format: str = "", db: Session = Depends(get_db)):
     return out
 
 
-@router.post("", response_model=JobOut, status_code=201, dependencies=[Depends(require_admin)])
-def create_job(body: JobCreate, db: Session = Depends(get_db)):
-    if db.query(Job).filter(Job.job_number == body.job_number.strip()).first():
+def _next_job_number(db: Session) -> str:
+    """JOB-<n> one past the highest existing number -- used when a tech
+    creates a job on the spot and doesn't have a number to give it."""
+    nums = [
+        int(n[4:]) for (n,) in db.query(Job.job_number).all()
+        if n and n.upper().startswith("JOB-") and n[4:].isdigit()
+    ]
+    return f"JOB-{(max(nums) + 1) if nums else 1001}"
+
+
+@router.post("", response_model=JobOut, status_code=201)
+def create_job(body: JobCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    job_number = body.job_number.strip() if body.job_number else _next_job_number(db)
+    if db.query(Job).filter(Job.job_number == job_number).first():
         raise HTTPException(status_code=400, detail="Job number already exists")
-    job = Job(job_number=body.job_number.strip(), name=body.name.strip(),
+    job = Job(job_number=job_number, name=body.name.strip(),
               customer=body.customer, address=body.address, status="active")
     db.add(job)
     db.commit()

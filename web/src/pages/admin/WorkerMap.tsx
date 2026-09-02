@@ -10,15 +10,42 @@ import { hoursLabel } from "../../hours";
 import type { User, WorkerLive } from "../../types";
 
 // Custom pin so we don't depend on leaflet's default marker image assets
-// resolving correctly under Vite's bundler.
-const pin = L.divIcon({
-  className: "",
-  html: `<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
-    background:#0ea5e9;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 30],
-  popupAnchor: [0, -28],
-});
+// resolving correctly under Vite's bundler. A count badge is added for
+// clusters of 2+ techs standing at (nearly) the same spot, so overlapping
+// markers never just silently hide each other.
+function pinIcon(count: number) {
+  const badge =
+    count > 1
+      ? `<div style="position:absolute;top:-6px;right:-7px;min-width:18px;height:18px;padding:0 4px;
+          border-radius:9999px;background:#ef4444;color:#fff;font:700 11px/18px system-ui,sans-serif;
+          text-align:center;border:2px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.25)">${count}</div>`
+      : "";
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;width:30px;height:30px;">
+      <div style="width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+        background:#0ea5e9;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>
+      ${badge}
+    </div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 30],
+    popupAnchor: [0, -28],
+  });
+}
+
+// Groups techs standing within ~11m of each other (4 decimal places of
+// lat/lng) into one cluster, so identical/near-identical coordinates render
+// as a single pin with a count instead of stacking invisibly.
+function clusterWorkers(workers: WorkerLive[]) {
+  const clusters = new Map<string, { lat: number; lng: number; members: WorkerLive[] }>();
+  for (const w of workers) {
+    const key = `${w.lat!.toFixed(4)},${w.lng!.toFixed(4)}`;
+    const c = clusters.get(key);
+    if (c) c.members.push(w);
+    else clusters.set(key, { lat: w.lat!, lng: w.lng!, members: [w] });
+  }
+  return [...clusters.values()];
+}
 
 const REFRESH_MS = 20_000;
 const DEFAULT_CENTER: [number, number] = [39.2904, -76.6122]; // Baltimore, MD
@@ -108,25 +135,33 @@ export default function WorkerMap() {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  {located.map((w) => (
-                    <Marker key={w.user_id} position={[w.lat!, w.lng!]} icon={pin}>
+                  {clusterWorkers(located).map((c) => (
+                    <Marker
+                      key={`${c.lat},${c.lng}`}
+                      position={[c.lat, c.lng]}
+                      icon={pinIcon(c.members.length)}
+                    >
                       <Popup>
-                        <span className="font-semibold">{w.user_name}</span>
-                        {w.job_number && (
-                          <>
+                        {c.members.map((w, i) => (
+                          <div key={w.user_id} className={i > 0 ? "mt-2 border-t border-slate-200 pt-2" : ""}>
+                            <span className="font-semibold">{w.user_name}</span>
+                            {w.job_number && (
+                              <>
+                                <br />
+                                {w.job_number}
+                                {w.job_name ? ` — ${w.job_name}` : ""}
+                              </>
+                            )}
                             <br />
-                            {w.job_number}
-                            {w.job_name ? ` — ${w.job_name}` : ""}
-                          </>
-                        )}
-                        <br />
-                        Clocked in{" "}
-                        {new Date(w.clock_in_at).toLocaleTimeString(undefined, {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                        <br />
-                        Location: {timeAgo(w.last_ping_at)}
+                            Clocked in{" "}
+                            {new Date(w.clock_in_at).toLocaleTimeString(undefined, {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                            <br />
+                            Location: {timeAgo(w.last_ping_at)}
+                          </div>
+                        ))}
                       </Popup>
                     </Marker>
                   ))}

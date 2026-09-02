@@ -275,7 +275,7 @@ class ItemStockOut(BaseModel):
 # ---------- Jobs ----------
 
 class JobCreate(BaseModel):
-    job_number: str
+    job_number: str | None = None
     name: str
     customer: str | None = None
     address: str | None = None

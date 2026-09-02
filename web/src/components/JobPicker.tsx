@@ -2,18 +2,25 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api";
 import Icon from "./Icon";
-import { Empty } from "./ui";
+import { Empty, Spinner } from "./ui";
 import type { Job } from "../types";
 
 interface Props {
   onPick: (job: Job) => void;
+  /** Shows a "+ Create new job" row that lets the user type a brand-new job
+   * name and select it immediately -- used where the job might not exist
+   * in the system yet (e.g. clocking in at a new site). */
+  allowCreate?: boolean;
 }
 
 /** 5 most recent jobs first, then a searchable list of active jobs. */
-export default function JobPicker({ onPick }: Props) {
+export default function JobPicker({ onPick, allowCreate }: Props) {
   const [recent, setRecent] = useState<Job[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api<Job[]>("/jobs/recent").then(setRecent).catch(() => {});
@@ -30,6 +37,18 @@ export default function JobPicker({ onPick }: Props) {
 
   const recentIds = new Set(recent.map((j) => j.id));
   const rest = jobs.filter((j) => !recentIds.has(j.id) || search);
+
+  const createJob = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const job = await api<Job>("/jobs", { method: "POST", body: { name } });
+      onPick(job);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const JobButton = ({ job }: { job: Job }) => (
     <button type="button" onClick={() => onPick(job)} className="card-interactive flex w-full items-center gap-3 p-3.5">
@@ -63,6 +82,56 @@ export default function JobPicker({ onPick }: Props) {
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
+
+      {allowCreate &&
+        (creating ? (
+          <div className="card space-y-2.5 p-3.5">
+            <label className="block">
+              <span className="label">New job name</span>
+              <input
+                className="input"
+                autoFocus
+                placeholder="e.g. 22 Oak Street"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createJob()}
+              />
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn-secondary flex-1"
+                onClick={() => {
+                  setCreating(false);
+                  setNewName("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary flex-1"
+                disabled={busy || !newName.trim()}
+                onClick={createJob}
+              >
+                {busy ? <Spinner /> : <Icon name="check" size={16} />}
+                Create &amp; Select
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="card-interactive flex w-full items-center gap-3 border-dashed p-3.5"
+          >
+            <span className="icon-tile bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+              <Icon name="plus" size={20} />
+            </span>
+            <span className="text-[15px] font-semibold">Create new job</span>
+          </button>
+        ))}
+
       {!search && recent.length > 0 && (
         <>
           <p className="section-title flex items-center gap-1.5 px-1">
