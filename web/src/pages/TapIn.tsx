@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Icon from "../components/Icon";
 import Illustration from "../components/Illustration";
-import Sheet from "../components/Sheet";
 import { Avatar, Empty } from "../components/ui";
 import { useToast } from "../toast";
 import type { TechName } from "../types";
@@ -118,54 +118,76 @@ export default function TapIn() {
         </Link>
       </div>
 
-      {pinFor && (
-        <Sheet
-          title={`Hi ${pinFor.name}`}
-          subtitle="Enter your 4-digit PIN"
-          onClose={() => {
-            setPinFor(null);
-            setPin("");
-          }}
-        >
-          <div className="pb-2 pt-1">
-            <div className="mb-6 flex justify-center gap-3.5">
-              {[0, 1, 2, 3].map((i) => (
-                <span
-                  key={i}
-                  className={`h-3.5 w-3.5 rounded-full transition-all duration-200 ${
-                    i < pin.length
-                      ? "scale-110 bg-gradient-to-b from-brand-500 to-brand-600 shadow-[0_2px_8px_rgb(62_100_238/0.5)]"
-                      : "bg-slate-200 dark:bg-slate-700"
-                  }`}
-                />
-              ))}
-            </div>
-            <div className="mx-auto grid max-w-xs grid-cols-3 gap-2.5">
-              {KEYS.map((k, i) =>
-                k === "" ? (
-                  <div key={i} />
-                ) : (
-                  <button
+      {pinFor &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-5 backdrop-blur-[2px] animate-fade-in"
+            onClick={() => {
+              setPinFor(null);
+              setPin("");
+            }}
+          >
+            <div
+              className="w-full max-w-xs animate-scale-in rounded-[28px] bg-white p-5 shadow-sheet dark:bg-slate-900"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label={`Hi ${pinFor.name}`}
+            >
+              <div className="mb-4 flex items-start justify-between">
+                <div className="min-w-0 pr-3">
+                  <h2 className="truncate text-[17px] font-bold tracking-tight">Hi {pinFor.name}</h2>
+                  <p className="mt-0.5 truncate text-sm text-slate-400">Enter your 4-digit PIN</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setPinFor(null);
+                    setPin("");
+                  }}
+                  className="icon-btn -mr-2 -mt-1 shrink-0 bg-slate-100 dark:bg-slate-800"
+                  aria-label="Close"
+                >
+                  <Icon name="x" size={18} />
+                </button>
+              </div>
+              <div className="mb-6 flex justify-center gap-3.5">
+                {[0, 1, 2, 3].map((i) => (
+                  <span
                     key={i}
-                    className="btn-secondary min-h-[60px] rounded-full text-[22px] font-semibold tabular-nums"
-                    aria-label={k === "back" ? "Delete digit" : k}
-                    onClick={() => {
-                      if (k === "back") return setPin((p) => p.slice(0, -1));
-                      const next = (pin + k).slice(0, 4);
-                      setPin(next);
-                      if (next.length === 4) {
-                        tap(pinFor, next);
-                      }
-                    }}
-                  >
-                    {k === "back" ? <Icon name="backspace" size={24} /> : k}
-                  </button>
-                ),
-              )}
+                    className={`h-3.5 w-3.5 rounded-full transition-all duration-200 ${
+                      i < pin.length
+                        ? "scale-110 bg-gradient-to-b from-brand-500 to-brand-600 shadow-[0_2px_8px_rgb(62_100_238/0.5)]"
+                        : "bg-slate-200 dark:bg-slate-700"
+                    }`}
+                  />
+                ))}
+              </div>
+              <div className="mx-auto grid max-w-xs grid-cols-3 gap-2.5">
+                {KEYS.map((k, i) =>
+                  k === "" ? (
+                    <div key={i} />
+                  ) : (
+                    <button
+                      key={i}
+                      className="btn-secondary min-h-[60px] rounded-full text-[22px] font-semibold tabular-nums"
+                      aria-label={k === "back" ? "Delete digit" : k}
+                      onClick={() => {
+                        if (k === "back") return setPin((p) => p.slice(0, -1));
+                        const next = (pin + k).slice(0, 4);
+                        setPin(next);
+                        if (next.length === 4) {
+                          tap(pinFor, next);
+                        }
+                      }}
+                    >
+                      {k === "back" ? <Icon name="backspace" size={24} /> : k}
+                    </button>
+                  ),
+                )}
+              </div>
             </div>
-          </div>
-        </Sheet>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
