@@ -5,8 +5,9 @@ import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 
 import { api, fmtWhen } from "../../api";
 import Icon from "../../components/Icon";
-import { Avatar, Empty, ListSkeleton } from "../../components/ui";
+import { Avatar, Empty, ListSkeleton, Spinner } from "../../components/ui";
 import { hoursLabel } from "../../hours";
+import { useToast } from "../../toast";
 import type { User, WorkerLive } from "../../types";
 
 // Custom pin so we don't depend on leaflet's default marker image assets
@@ -59,6 +60,7 @@ interface Shift {
   hours: number;
   job_number: string | null;
   job_name: string | null;
+  approval_status: string;
 }
 
 interface TechTimesheet {
@@ -78,9 +80,34 @@ function timeAgo(iso: string | null) {
 }
 
 export default function WorkerMap() {
+  const toast = useToast();
   const [live, setLive] = useState<WorkerLive[] | null>(null);
   const [techs, setTechs] = useState<User[] | null>(null);
   const [timesheets, setTimesheets] = useState<Record<number, TechTimesheet>>({});
+  const [approving, setApproving] = useState<number | null>(null);
+
+  const approveShift = async (userId: number, shiftId: number) => {
+    setApproving(shiftId);
+    try {
+      await api(`/time/${shiftId}/approve`, { method: "POST" });
+      setTimesheets((prev) => {
+        const sheet = prev[userId];
+        if (!sheet) return prev;
+        return {
+          ...prev,
+          [userId]: {
+            ...sheet,
+            shifts: sheet.shifts.map((s) => (s.id === shiftId ? { ...s, approval_status: "approved" } : s)),
+          },
+        };
+      });
+      toast("success", "Shift approved");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't approve shift");
+    } finally {
+      setApproving(null);
+    }
+  };
 
   useEffect(() => {
     const load = () => api<WorkerLive[]>("/time/live").then(setLive).catch(() => {});
@@ -175,7 +202,14 @@ export default function WorkerMap() {
                 {(live ?? []).map((w) => (
                   <div key={w.user_id} className="card flex items-center justify-between gap-3 p-3.5">
                     <div className="min-w-0">
-                      <p className="text-[13.5px] font-semibold">{w.user_name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[13.5px] font-semibold">{w.user_name}</p>
+                        {w.approval_status === "pending" && (
+                          <span className="badge shrink-0 bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                            Pending
+                          </span>
+                        )}
+                      </div>
                       {w.job_number && (
                         <p className="truncate text-[12px] font-medium text-brand-600 dark:text-brand-400">
                           {w.job_number}
@@ -239,7 +273,14 @@ export default function WorkerMap() {
                               className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/60"
                             >
                               <div className="min-w-0">
-                                <p className="truncate text-[13px] font-medium">{fmtWhen(s.clock_in_at)}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="truncate text-[13px] font-medium">{fmtWhen(s.clock_in_at)}</p>
+                                  {s.approval_status === "pending" && (
+                                    <span className="badge shrink-0 bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                                      Pending
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="truncate text-[11.5px] text-slate-400 dark:text-slate-500">
                                   {s.job_number ? `${s.job_number}${s.job_name ? ` — ${s.job_name}` : ""} · ` : ""}
                                   {s.still_clocked_in ? (
@@ -251,9 +292,20 @@ export default function WorkerMap() {
                                   )}
                                 </p>
                               </div>
-                              <span className="shrink-0 text-[12.5px] font-bold tabular-nums">
-                                {hoursLabel(s.hours)}
-                              </span>
+                              <div className="flex shrink-0 items-center gap-2.5">
+                                <span className="text-[12.5px] font-bold tabular-nums">{hoursLabel(s.hours)}</span>
+                                {s.approval_status === "pending" && (
+                                  <button
+                                    type="button"
+                                    disabled={approving === s.id}
+                                    onClick={() => approveShift(tech.id, s.id)}
+                                    className="btn-secondary !min-h-0 px-2.5 py-1.5 text-[12px]"
+                                  >
+                                    {approving === s.id ? <Spinner /> : <Icon name="check" size={13} />}
+                                    Approve
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>

@@ -14,6 +14,7 @@ interface Shift {
   hours: number;
   job_number: string | null;
   job_name: string | null;
+  approval_status: string;
 }
 
 export default function MyHours() {
@@ -60,7 +61,14 @@ export default function MyHours() {
             {shifts.map((s) => (
               <div key={s.id} className="card flex items-center justify-between gap-3 p-3.5">
                 <div className="min-w-0">
-                  <p className="text-[13.5px] font-semibold">{fmtWhen(s.clock_in_at)}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[13.5px] font-semibold">{fmtWhen(s.clock_in_at)}</p>
+                    {s.approval_status === "pending" && (
+                      <span className="badge shrink-0 bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                        Pending
+                      </span>
+                    )}
+                  </div>
                   {s.job_number && (
                     <p className="truncate text-[12px] font-medium text-brand-600 dark:text-brand-400">
                       {s.job_number}

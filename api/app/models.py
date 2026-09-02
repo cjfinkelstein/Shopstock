@@ -86,8 +86,12 @@ class ClockEvent(TimestampMixin, Base):
     clock_out_at: Mapped[datetime | None] = mapped_column(DateTime)
     clock_out_lat: Mapped[float | None] = mapped_column(Float)
     clock_out_lng: Mapped[float | None] = mapped_column(Float)
+    approval_status: Mapped[str] = mapped_column(String(10), default="pending", nullable=False)  # pending | approved
+    approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime)
 
-    user: Mapped["User"] = relationship()
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_id])
     job: Mapped["Job | None"] = relationship()
     pings: Mapped[list["LocationPing"]] = relationship(
         back_populates="clock_event", order_by="LocationPing.recorded_at"

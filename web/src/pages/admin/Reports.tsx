@@ -306,6 +306,7 @@ export default function Reports() {
                       <th className="px-3 py-2">Job</th>
                       <th className="px-3 py-2">Clock In</th>
                       <th className="px-3 py-2">Clock Out</th>
+                      <th className="px-3 py-2">Status</th>
                       <th className="px-3 py-2 text-right">Hours</th>
                     </tr>
                   </thead>
@@ -321,6 +322,17 @@ export default function Reports() {
                             </span>
                           ) : (
                             fmtWhen(s.clock_out_at)
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {s.approval_status === "pending" ? (
+                            <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                              Pending
+                            </span>
+                          ) : (
+                            <span className="badge bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                              Approved
+                            </span>
                           )}
                         </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums">

@@ -27,6 +27,7 @@ export default function Home() {
     clockInAt,
     jobNumber,
     jobName,
+    approvalStatus,
     loading: clockLoading,
     clockIn,
     clockOut,
@@ -119,9 +120,16 @@ export default function Home() {
           {clockedIn ? (
             <div className="space-y-3 text-center">
               <div>
-                <p className="text-[13.5px] font-semibold text-emerald-700 dark:text-emerald-400">
-                  Clocked in
-                </p>
+                <div className="flex items-center justify-center gap-1.5">
+                  <p className="text-[13.5px] font-semibold text-emerald-700 dark:text-emerald-400">
+                    Clocked in
+                  </p>
+                  {approvalStatus === "pending" && (
+                    <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                      Pending approval
+                    </span>
+                  )}
+                </div>
                 {jobNumber && (
                   <p className="truncate text-[13px] font-medium">
                     {jobNumber}

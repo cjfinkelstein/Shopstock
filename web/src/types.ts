@@ -148,6 +148,7 @@ export interface ClockStatus {
   job_id?: number | null;
   job_number?: string | null;
   job_name?: string | null;
+  approval_status?: string | null;
   gps_consent_given: boolean;
 }
 
@@ -157,6 +158,7 @@ export interface WorkerLive {
   job_number: string | null;
   job_name: string | null;
   clock_in_at: string;
+  approval_status: string;
   lat: number | null;
   lng: number | null;
   last_ping_at: string | null;

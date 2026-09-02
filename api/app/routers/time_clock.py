@@ -28,6 +28,7 @@ def _status_for(ev: ClockEvent | None, *, consented: bool) -> ClockStatusOut:
         job_id=ev.job_id,
         job_number=ev.job.job_number if ev.job else None,
         job_name=ev.job.name if ev.job else None,
+        approval_status=ev.approval_status,
         gps_consent_given=consented,
     )
 
@@ -110,6 +111,7 @@ def my_shifts(db: Session = Depends(get_db), user: User = Depends(get_current_us
             hours=round(((e.clock_out_at or now) - e.clock_in_at).total_seconds() / 3600, 2),
             job_number=e.job.job_number if e.job else None,
             job_name=e.job.name if e.job else None,
+            approval_status=e.approval_status,
         )
         for e in events
     ]
@@ -133,9 +135,32 @@ def live(db: Session = Depends(get_db), _: User = Depends(require_admin)):
                 job_number=ev.job.job_number if ev.job else None,
                 job_name=ev.job.name if ev.job else None,
                 clock_in_at=ev.clock_in_at,
+                approval_status=ev.approval_status,
                 lat=last_ping.lat if last_ping else ev.clock_in_lat,
                 lng=last_ping.lng if last_ping else ev.clock_in_lng,
                 last_ping_at=last_ping.recorded_at if last_ping else None,
             )
         )
     return out
+
+
+@router.post("/{event_id}/approve", response_model=MyShiftOut)
+def approve_shift(event_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    ev = db.get(ClockEvent, event_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    ev.approval_status = "approved"
+    ev.approved_by_id = admin.id
+    ev.approved_at = utcnow()
+    db.commit()
+    now = utcnow()
+    return MyShiftOut(
+        id=ev.id,
+        clock_in_at=ev.clock_in_at,
+        clock_out_at=ev.clock_out_at,
+        still_clocked_in=ev.clock_out_at is None,
+        hours=round(((ev.clock_out_at or now) - ev.clock_in_at).total_seconds() / 3600, 2),
+        job_number=ev.job.job_number if ev.job else None,
+        job_name=ev.job.name if ev.job else None,
+        approval_status=ev.approval_status,
+    )

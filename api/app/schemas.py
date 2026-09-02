@@ -117,6 +117,7 @@ class ClockStatusOut(BaseModel):
     job_id: int | None = None
     job_number: str | None = None
     job_name: str | None = None
+    approval_status: str | None = None
     gps_consent_given: bool = False
 
     @field_serializer("clock_in_at")
@@ -130,6 +131,7 @@ class WorkerLiveOut(BaseModel):
     job_number: str | None = None
     job_name: str | None = None
     clock_in_at: datetime
+    approval_status: str
     lat: float | None = None
     lng: float | None = None
     last_ping_at: datetime | None = None
@@ -147,6 +149,7 @@ class MyShiftOut(BaseModel):
     hours: float
     job_number: str | None = None
     job_name: str | None = None
+    approval_status: str
 
     @field_serializer("clock_in_at", "clock_out_at")
     def _ser_dt(self, v: datetime | None, _info):

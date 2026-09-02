@@ -322,15 +322,16 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "",
             "clock_out_at": e.clock_out_at,
             "still_clocked_in": e.clock_out_at is None,
             "hours": hours,
+            "approval_status": e.approval_status,
         })
 
     if format == "csv":
         return _csv_response("timesheet.csv",
-            ["Tech", "Job", "Clock In", "Clock Out", "Hours"],
+            ["Tech", "Job", "Clock In", "Clock Out", "Hours", "Status"],
             [[r["user_name"], r["job_number"] or "",
               to_local(r["clock_in_at"]).strftime("%Y-%m-%d %H:%M"),
               to_local(r["clock_out_at"]).strftime("%Y-%m-%d %H:%M") if r["clock_out_at"] else "still clocked in",
-              r["hours"]] for r in rows])
+              r["hours"], r["approval_status"]] for r in rows])
 
     techs: dict[int, dict] = {}
     for r in rows:
@@ -345,6 +346,7 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "",
             "clock_out_at": _utc_iso(r["clock_out_at"]),
             "still_clocked_in": r["still_clocked_in"],
             "hours": r["hours"],
+            "approval_status": r["approval_status"],
         })
         t["total_hours"] += r["hours"]
     for t in techs.values():

@@ -9,6 +9,7 @@ interface ClockState {
   clockInAt: string | null;
   jobNumber: string | null;
   jobName: string | null;
+  approvalStatus: string | null;
   gpsConsentGiven: boolean;
   loading: boolean;
   clockIn: (jobId: number) => Promise<void>;
@@ -41,6 +42,7 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
   const [clockInAt, setClockInAt] = useState<string | null>(null);
   const [jobNumber, setJobNumber] = useState<string | null>(null);
   const [jobName, setJobName] = useState<string | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [gpsConsentGiven, setGpsConsentGiven] = useState(false);
   const [loading, setLoading] = useState(true);
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -50,6 +52,7 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     setClockInAt(s.clock_in_at ?? null);
     setJobNumber(s.job_number ?? null);
     setJobName(s.job_name ?? null);
+    setApprovalStatus(s.approval_status ?? null);
     setGpsConsentGiven(s.gps_consent_given);
   };
 
@@ -65,6 +68,7 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
         setClockInAt(null);
         setJobNumber(null);
         setJobName(null);
+        setApprovalStatus(null);
         setGpsConsentGiven(false);
       })
       .finally(() => setLoading(false));
@@ -119,6 +123,7 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     setClockInAt(null);
     setJobNumber(null);
     setJobName(null);
+    setApprovalStatus(null);
   };
 
   return (
@@ -128,6 +133,7 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
         clockInAt,
         jobNumber,
         jobName,
+        approvalStatus,
         gpsConsentGiven,
         loading,
         clockIn,
