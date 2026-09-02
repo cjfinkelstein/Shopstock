@@ -296,11 +296,13 @@ export interface PublicEstimateLine {
   description: string;
   qty: string;
   unit: string;
+  amount: string;
 }
 
 export interface PublicEstimateSection {
   name: string;
   lines: PublicEstimateLine[];
+  section_total: string;
 }
 
 export interface PublicEstimate {

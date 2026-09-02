@@ -638,11 +638,13 @@ class PublicEstimateLine(BaseModel):
     description: str
     qty: Decimal
     unit: str
+    amount: Decimal
 
 
 class PublicEstimateSection(BaseModel):
     name: str
     lines: list[PublicEstimateLine]
+    section_total: Decimal
 
 
 class PublicEstimateOut(BaseModel):

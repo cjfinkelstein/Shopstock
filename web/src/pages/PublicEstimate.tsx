@@ -97,16 +97,23 @@ export default function PublicEstimate() {
               <Icon name="package" size={14} />
               {section.name}
             </p>
-            <ul className="space-y-1.5">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {section.lines.map((line, i) => (
-                <li key={i} className="flex justify-between gap-3 text-[14px]">
-                  <span className="text-slate-700 dark:text-slate-200">{line.description}</span>
-                  <span className="shrink-0 tabular-nums text-slate-400 dark:text-slate-500">
-                    {line.qty} {line.unit}
+                <li key={i} className="flex items-start justify-between gap-3 py-2 text-[14px] first:pt-0 last:pb-0">
+                  <span className="min-w-0">
+                    <span className="block text-slate-700 dark:text-slate-200">{line.description}</span>
+                    <span className="block text-[12px] text-slate-400 dark:text-slate-500">
+                      {line.qty} {line.unit}
+                    </span>
                   </span>
+                  <span className="shrink-0 pt-0.5 font-semibold tabular-nums">{fmtMoney(line.amount)}</span>
                 </li>
               ))}
             </ul>
+            <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-[13px] font-semibold text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              <span>Section total</span>
+              <span className="tabular-nums">{fmtMoney(section.section_total)}</span>
+            </div>
           </div>
         ))}
 

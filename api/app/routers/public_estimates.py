@@ -29,19 +29,37 @@ def _get_by_token_or_404(db: Session, token: str) -> Estimate:
 
 def _public_out(estimate: Estimate) -> PublicEstimateOut:
     subtotal = Decimal("0.00")
-    sections = []
+    raw_by_section: list[tuple[EstimateSection, list[tuple[EstimateLine, Decimal]]]] = []
     for section in estimate.sections:
         if not section.lines:
             continue
-        lines = []
+        raw_lines = []
         for l in section.lines:
-            subtotal += _line_total(l)
-            lines.append(PublicEstimateLine(description=l.description, qty=l.qty, unit=l.unit))
-        sections.append(PublicEstimateSection(name=section.name, lines=lines))
+            raw = _line_total(l)
+            subtotal += raw
+            raw_lines.append((l, raw))
+        raw_by_section.append((section, raw_lines))
 
     profit_amount = (subtotal * estimate.profit_pct / Decimal("100")).quantize(Decimal("0.01"))
     discount_amount = ((subtotal + profit_amount) * estimate.discount_pct / Decimal("100")).quantize(Decimal("0.01"))
     total = (subtotal + profit_amount - discount_amount).quantize(Decimal("0.01"))
+
+    # No individual line carries its own markup -- profit/discount only apply
+    # to the estimate as a whole -- so a per-line customer-facing price is
+    # each line's raw cost scaled by that same overall multiplier, not its
+    # raw cost as-is (which would just be showing the customer our cost
+    # basis with zero margin).
+    multiplier = (total / subtotal) if subtotal else Decimal("1")
+
+    sections = []
+    for section, raw_lines in raw_by_section:
+        lines = []
+        section_total = Decimal("0.00")
+        for l, raw in raw_lines:
+            amount = (raw * multiplier).quantize(Decimal("0.01"))
+            section_total += amount
+            lines.append(PublicEstimateLine(description=l.description, qty=l.qty, unit=l.unit, amount=amount))
+        sections.append(PublicEstimateSection(name=section.name, lines=lines, section_total=section_total))
 
     return PublicEstimateOut(
         estimate_number=estimate.estimate_number, customer=estimate.customer, address=estimate.address,
