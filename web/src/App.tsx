@@ -23,6 +23,7 @@ import Activity from "./pages/tech/Activity";
 import Cart from "./pages/tech/Cart";
 import Home from "./pages/tech/Home";
 import ItemSheet from "./pages/tech/ItemSheet";
+import MyHours from "./pages/tech/MyHours";
 import Search from "./pages/tech/Search";
 import Trucks from "./pages/tech/Trucks";
 
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/activity" element={<Activity />} />
         <Route path="/item/:id" element={<ItemSheet />} />
         <Route path="/cart" element={<Cart />} />
+        <Route path="/my-hours" element={<MyHours />} />
       </Route>
       {user.role === "admin" && (
         <Route path="/admin" element={<AdminLayout />}>

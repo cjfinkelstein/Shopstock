@@ -155,16 +155,28 @@ export default function TechLayout() {
               </button>
             )}
             {user?.role === "tech" && (
-              <button
-                className="btn-secondary w-full"
-                onClick={() => {
-                  setAccountOpen(false);
-                  setChangePinOpen(true);
-                }}
-              >
-                <Icon name="keypad" size={18} />
-                Change PIN
-              </button>
+              <>
+                <button
+                  className="btn-secondary w-full"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    navigate("/my-hours");
+                  }}
+                >
+                  <Icon name="clock" size={18} />
+                  My Hours
+                </button>
+                <button
+                  className="btn-secondary w-full"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    setChangePinOpen(true);
+                  }}
+                >
+                  <Icon name="keypad" size={18} />
+                  Change PIN
+                </button>
+              </>
             )}
             <button className="btn-secondary w-full" onClick={logout}>
               <Icon name="logout" size={18} />

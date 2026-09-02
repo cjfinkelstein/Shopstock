@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_admin
 from app.database import get_db
 from app.models import ClockEvent, LocationPing, User, utcnow
-from app.schemas import ClockInIn, ClockOutIn, ClockStatusOut, LocationPingIn, WorkerLiveOut
+from app.schemas import ClockInIn, ClockOutIn, ClockStatusOut, LocationPingIn, MyShiftOut, WorkerLiveOut
 
 router = APIRouter(prefix="/time", tags=["time"])
 
@@ -77,6 +77,29 @@ def ping(body: LocationPingIn, db: Session = Depends(get_db), user: User = Depen
         raise HTTPException(status_code=400, detail="Not clocked in")
     db.add(LocationPing(clock_event_id=ev.id, user_id=user.id, lat=body.lat, lng=body.lng))
     db.commit()
+
+
+@router.get("/my-shifts", response_model=list[MyShiftOut])
+def my_shifts(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """A tech's own clock-in/out history -- never another tech's."""
+    events = (
+        db.query(ClockEvent)
+        .filter(ClockEvent.user_id == user.id)
+        .order_by(ClockEvent.clock_in_at.desc())
+        .limit(200)
+        .all()
+    )
+    now = utcnow()
+    return [
+        MyShiftOut(
+            id=e.id,
+            clock_in_at=e.clock_in_at,
+            clock_out_at=e.clock_out_at,
+            still_clocked_in=e.clock_out_at is None,
+            hours=round(((e.clock_out_at or now) - e.clock_in_at).total_seconds() / 3600, 2),
+        )
+        for e in events
+    ]
 
 
 @router.get("/live", response_model=list[WorkerLiveOut])

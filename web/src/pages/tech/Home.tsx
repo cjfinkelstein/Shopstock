@@ -130,6 +130,13 @@ export default function Home() {
                 {clockBusy ? <Spinner /> : <Icon name="logout" size={16} />}
                 Clock Out
               </button>
+              <button
+                type="button"
+                onClick={() => navigate("/my-hours")}
+                className="text-[12px] font-semibold text-slate-400 underline-offset-2 hover:underline dark:text-slate-500"
+              >
+                View my hours
+              </button>
             </div>
           ) : (
             <div className="space-y-2.5">

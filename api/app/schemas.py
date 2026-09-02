@@ -133,6 +133,18 @@ class WorkerLiveOut(BaseModel):
         return _utc_iso(v)
 
 
+class MyShiftOut(BaseModel):
+    id: int
+    clock_in_at: datetime
+    clock_out_at: datetime | None = None
+    still_clocked_in: bool
+    hours: float
+
+    @field_serializer("clock_in_at", "clock_out_at")
+    def _ser_dt(self, v: datetime | None, _info):
+        return _utc_iso(v)
+
+
 # ---------- Trucks / Locations / Vendors ----------
 
 class TruckCreate(BaseModel):
