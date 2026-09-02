@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import require_admin
 from app.database import get_db
-from app.models import Item, Job, LoginEvent, Location, StockLevel, Transaction, User
+from app.models import ClockEvent, Item, Job, LoginEvent, Location, StockLevel, Transaction, User
+from app.schemas import _utc_iso
 from app.services.dates import day_end_utc, day_start_utc, to_local
 
 router = APIRouter(prefix="/reports", tags=["reports"], dependencies=[Depends(require_admin)])
@@ -294,3 +295,54 @@ def adjustments(date_from: str = "", date_to: str = "", format: str = "",
             [[r["created_at"], r["sku"], r["item_name"], r["qty"], r["direction"],
               r["location"], r["reason"], r["note"], r["user_name"], r["cost_impact"]] for r in rows])
     return {"adjustments": rows}
+
+
+@router.get("/timesheet")
+def timesheet(date_from: str = "", date_to: str = "", format: str = "",
+              db: Session = Depends(get_db)):
+    q = db.query(ClockEvent).options(joinedload(ClockEvent.user))
+    if date_from:
+        q = q.filter(ClockEvent.clock_in_at >= day_start_utc(date_from))
+    if date_to:
+        q = q.filter(ClockEvent.clock_in_at < day_end_utc(date_to))
+    events = q.order_by(ClockEvent.clock_in_at).all()
+
+    now = datetime.utcnow()
+    rows = []
+    for e in events:
+        end = e.clock_out_at or now
+        hours = round((end - e.clock_in_at).total_seconds() / 3600, 2)
+        rows.append({
+            "id": e.id,
+            "user_id": e.user_id,
+            "user_name": e.user.name if e.user else "?",
+            "clock_in_at": e.clock_in_at,
+            "clock_out_at": e.clock_out_at,
+            "still_clocked_in": e.clock_out_at is None,
+            "hours": hours,
+        })
+
+    if format == "csv":
+        return _csv_response("timesheet.csv",
+            ["Tech", "Clock In", "Clock Out", "Hours"],
+            [[r["user_name"], to_local(r["clock_in_at"]).strftime("%Y-%m-%d %H:%M"),
+              to_local(r["clock_out_at"]).strftime("%Y-%m-%d %H:%M") if r["clock_out_at"] else "still clocked in",
+              r["hours"]] for r in rows])
+
+    techs: dict[int, dict] = {}
+    for r in rows:
+        t = techs.setdefault(r["user_id"], {
+            "user_id": r["user_id"], "user_name": r["user_name"], "total_hours": 0.0, "shifts": [],
+        })
+        t["shifts"].append({
+            "id": r["id"],
+            "clock_in_at": _utc_iso(r["clock_in_at"]),
+            "clock_out_at": _utc_iso(r["clock_out_at"]),
+            "still_clocked_in": r["still_clocked_in"],
+            "hours": r["hours"],
+        })
+        t["total_hours"] += r["hours"]
+    for t in techs.values():
+        t["total_hours"] = round(t["total_hours"], 2)
+        t["shifts"].sort(key=lambda s: s["clock_in_at"], reverse=True)
+    return {"techs": sorted(techs.values(), key=lambda t: t["user_name"])}

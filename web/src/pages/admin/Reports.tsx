@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api, downloadCsv, fmtMoney, fmtQty, fmtWhen } from "../../api";
+import { hoursLabel } from "../../hours";
 import { catTint } from "../../catcolor";
 import Icon from "../../components/Icon";
 import { Avatar, Empty, ItemThumb, ListSkeleton } from "../../components/ui";
 
-type Tab = "reorder" | "usage-by-tech" | "usage-by-job" | "receiving" | "maurice" | "adjustments";
+type Tab =
+  | "reorder"
+  | "usage-by-tech"
+  | "usage-by-job"
+  | "receiving"
+  | "maurice"
+  | "adjustments"
+  | "timesheet";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "reorder", label: "Reorder" },
@@ -14,6 +22,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "receiving", label: "Receiving" },
   { key: "maurice", label: "Maurice" },
   { key: "adjustments", label: "Adjustments" },
+  { key: "timesheet", label: "Timesheets" },
 ];
 
 const MAURICE_VENDOR_NAME = "Maurice Electrical Supply";
@@ -83,6 +92,7 @@ export default function Reports() {
     receiving: "receiving",
     maurice: "receiving",
     adjustments: "adjustments",
+    timesheet: "techs",
   };
   const shaped = data && SHAPE_KEY[tab] in data;
 
@@ -270,6 +280,55 @@ export default function Reports() {
                 </span>
               </div>
               <UsageTable lines={t.lines} leadLabel="Job" leadField="job_number" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {shaped && tab === "timesheet" && (
+        <div className="space-y-6">
+          {data.techs.length === 0 && (
+            <Empty icon="clock" title="No shifts in range" hint="Try a wider date range." />
+          )}
+          {data.techs.map((t: any, i: number) => (
+            <div key={t.user_id}>
+              <div className="mb-2.5 flex items-center gap-3">
+                <Avatar name={t.user_name} index={t.user_id ?? i} size={36} />
+                <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{t.user_name}</span>
+                <span className="badge stat-number bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  {hoursLabel(t.total_hours)}
+                </span>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
+                <table className="w-full text-[13.5px]">
+                  <thead>
+                    <tr className={THEAD_ROW}>
+                      <th className="px-3 py-2">Clock In</th>
+                      <th className="px-3 py-2">Clock Out</th>
+                      <th className="px-3 py-2 text-right">Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {t.shifts.map((s: any) => (
+                      <tr key={s.id} className={BODY_ROW}>
+                        <td className="px-3 py-2">{fmtWhen(s.clock_in_at)}</td>
+                        <td className="px-3 py-2">
+                          {s.still_clocked_in ? (
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              Still clocked in
+                            </span>
+                          ) : (
+                            fmtWhen(s.clock_out_at)
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                          {hoursLabel(s.hours)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
         </div>
