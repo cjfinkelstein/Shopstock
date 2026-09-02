@@ -70,7 +70,7 @@ export default {
           to: { opacity: "1", transform: "scale(1)" },
         },
         "toast-in": {
-          from: { opacity: "0", transform: "translateY(12px) scale(0.97)" },
+          from: { opacity: "0", transform: "translateY(-12px) scale(0.97)" },
           to: { opacity: "1", transform: "translateY(0) scale(1)" },
         },
         shimmer: {
