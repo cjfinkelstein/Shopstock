@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
@@ -58,6 +58,7 @@ class UserUpdate(BaseModel):
     pin: str | None = Field(default=None, pattern=r"^\d{4}$")
     clear_pin: bool = False
     active: bool | None = None
+    hourly_rate: Decimal | None = None
 
 
 class UserOut(TimestampedOut):
@@ -68,6 +69,7 @@ class UserOut(TimestampedOut):
     active: bool
     has_pin: bool = False
     pin: str | None = None  # plaintext — populated for admin views only
+    hourly_rate: Decimal | None = None  # admin-only field, never sent to techs
 
 
 class ChangePinIn(BaseModel):
@@ -397,6 +399,135 @@ class JobFileIn(BaseModel):
     filename: str
     mime_type: str
     data: str  # data: URL
+
+
+# ---------- Expenses ----------
+
+EXPENSE_CATEGORY_PATTERN = "^(fuel|tools_equipment|permits_fees|subcontractor|office_admin|insurance|travel|misc)$"
+
+
+class ExpenseCreate(BaseModel):
+    expense_date: date
+    amount: Decimal
+    category: str = Field(pattern=EXPENSE_CATEGORY_PATTERN)
+    job_id: int | None = None
+    notes: str | None = None
+    receipt_filename: str | None = None
+    receipt_mime_type: str | None = None
+    receipt_data: str | None = None  # data: URL
+
+
+class ExpenseUpdate(BaseModel):
+    expense_date: date | None = None
+    amount: Decimal | None = None
+    category: str | None = Field(default=None, pattern=EXPENSE_CATEGORY_PATTERN)
+    job_id: int | None = None
+    clear_job: bool = False
+    notes: str | None = None
+    receipt_filename: str | None = None
+    receipt_mime_type: str | None = None
+    receipt_data: str | None = None
+    clear_receipt: bool = False
+
+
+class ExpenseOut(TimestampedOut):
+    id: int
+    expense_date: date
+    amount: Decimal
+    category: str
+    job_id: int | None
+    job_number: str | None = None
+    notes: str | None
+    receipt_filename: str | None
+    receipt_mime_type: str | None
+    receipt_data: str | None
+    created_by_name: str | None = None
+
+
+class ExpenseMetaOut(TimestampedOut):
+    """Same as ExpenseOut but without the (potentially huge) base64 receipt_data
+    field -- used for list views, mirroring JobFileMetaOut."""
+    id: int
+    expense_date: date
+    amount: Decimal
+    category: str
+    job_id: int | None
+    job_number: str | None = None
+    notes: str | None
+    has_receipt: bool = False
+    created_by_name: str | None = None
+
+
+# ---------- Job revenue ----------
+
+class JobRevenueCreate(BaseModel):
+    received_date: date
+    amount: Decimal
+    kind: str = Field(default="other", pattern="^(deposit|progress|final|other)$")
+    ref: str | None = None
+    notes: str | None = None
+
+
+class JobRevenueUpdate(BaseModel):
+    received_date: date | None = None
+    amount: Decimal | None = None
+    kind: str | None = Field(default=None, pattern="^(deposit|progress|final|other)$")
+    ref: str | None = None
+    notes: str | None = None
+
+
+class JobRevenueOut(TimestampedOut):
+    id: int
+    job_id: int
+    received_date: date
+    amount: Decimal
+    kind: str
+    ref: str | None
+    notes: str | None
+    created_by_name: str | None = None
+
+
+# ---------- Job costing / profit ----------
+
+class MissingRateUser(BaseModel):
+    user_id: int
+    user_name: str
+    hours: float
+
+
+class JobCostingOut(BaseModel):
+    job: JobOut
+    material_cost: Decimal
+    labor_cost: Decimal
+    labor_hours: float
+    expense_cost: Decimal
+    revenue: Decimal
+    profit: Decimal
+    revenue_lines: list[JobRevenueOut] = []
+    expense_lines: list[ExpenseMetaOut] = []
+    missing_rate_users: list[MissingRateUser] = []
+
+
+class PnlJobRow(BaseModel):
+    job_id: int
+    job_number: str
+    job_name: str
+    revenue: Decimal
+    material_cost: Decimal
+    labor_cost: Decimal
+    expense_cost: Decimal
+    profit: Decimal
+
+
+class PnlOut(BaseModel):
+    revenue: Decimal
+    material_cost: Decimal
+    labor_cost: Decimal
+    expense_cost: Decimal
+    overhead_expenses: Decimal
+    profit: Decimal
+    by_job: list[PnlJobRow] = []
+    missing_rate_users: list[MissingRateUser] = []
 
 
 # ---------- Estimates ----------

@@ -67,5 +67,7 @@ def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db)):
         user.pin = body.pin
     if body.active is not None:
         user.active = body.active  # soft-delete
+    if body.hourly_rate is not None:
+        user.hourly_rate = body.hourly_rate
     db.commit()
     return _out(user)

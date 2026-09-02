@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint, Index
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, Num
@@ -29,6 +29,7 @@ class User(TimestampMixin, Base):
     password_hash: Mapped[str | None] = mapped_column(String(200))
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     gps_consent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    hourly_rate: Mapped[Decimal | None] = mapped_column(Num(10, 2))  # admin-settable; None = not set yet
 
     truck: Mapped["Truck | None"] = relationship(back_populates="assigned_user", uselist=False)
 
@@ -182,6 +183,60 @@ class JobFile(TimestampMixin, Base):
 
     job: Mapped[Job] = relationship()
     uploader: Mapped["User | None"] = relationship()
+
+
+class Expense(TimestampMixin, Base):
+    """General ledger of money out -- fuel, tools, permits, subs, office,
+    insurance, travel, misc. job_id is nullable: an expense either belongs to
+    one job (subtracted from that job's profit) or is general/overhead
+    business spend (counted only in the business-wide P&L, never allocated
+    to a single job). Deliberately excludes a "materials" category since job
+    material cost is already derived from the inventory ledger (Transaction)
+    -- a materials expense here would risk double-counting."""
+
+    __tablename__ = "expenses"
+    __table_args__ = (
+        Index("ix_expenses_job", "job_id"),
+        Index("ix_expenses_date", "expense_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    expense_date: Mapped[date] = mapped_column(Date, nullable=False)  # business date, not created_at
+    amount: Mapped[Decimal] = mapped_column(Num(12, 2), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"))
+    notes: Mapped[str | None] = mapped_column(Text)
+    receipt_filename: Mapped[str | None] = mapped_column(String(255))
+    receipt_mime_type: Mapped[str | None] = mapped_column(String(100))
+    receipt_data: Mapped[str | None] = mapped_column(Text)  # data: URL, same convention as JobFile.data
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+    job: Mapped["Job | None"] = relationship()
+    creator: Mapped["User | None"] = relationship()
+
+
+class JobRevenue(TimestampMixin, Base):
+    """One dated payment/invoice amount against a job -- sum(amount) for a
+    job is that job's total revenue. No separate 'contract price' field on
+    Job; revenue is always this aggregate, computed on request, matching the
+    app's existing convention (Item.on_hand, JobMaterialsOut.total_cost,
+    MyShiftOut.hours are all computed the same way, never stored
+    denormalized)."""
+
+    __tablename__ = "job_revenues"
+    __table_args__ = (Index("ix_job_revenues_job", "job_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False)
+    received_date: Mapped[date] = mapped_column(Date, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Num(12, 2), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), default="other", nullable=False)  # deposit|progress|final|other
+    ref: Mapped[str | None] = mapped_column(String(100))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+    job: Mapped["Job"] = relationship()
+    creator: Mapped["User | None"] = relationship()
 
 
 class Estimate(TimestampMixin, Base):

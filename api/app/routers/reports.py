@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import require_admin
 from app.database import get_db
-from app.models import ClockEvent, Item, Job, LoginEvent, Location, StockLevel, Transaction, User
-from app.schemas import _utc_iso
+from app.models import ClockEvent, Expense, Item, Job, JobRevenue, LoginEvent, Location, StockLevel, Transaction, User
+from app.schemas import MissingRateUser, PnlJobRow, PnlOut, _utc_iso
 from app.services.dates import day_end_utc, day_start_utc, to_local
 
 router = APIRouter(prefix="/reports", tags=["reports"], dependencies=[Depends(require_admin)])
@@ -376,3 +376,112 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "",
         t["total_hours"] = round(t["total_hours"], 2)
         t["shifts"].sort(key=lambda s: s["clock_in_at"], reverse=True)
     return {"techs": sorted(techs.values(), key=lambda t: t["user_name"])}
+
+
+@router.get("/pnl")
+def pnl(date_from: str = "", date_to: str = "", format: str = "", db: Session = Depends(get_db)):
+    """Business-wide profit & loss over an optional date range, grouped by
+    job: revenue minus materials (from the inventory ledger, same formula as
+    _usage()), labor (approved clocked hours x rate), and expenses. Expenses
+    with no job_id are overhead -- counted in the grand total but reported
+    separately, never allocated to one job."""
+    usage_rows = _usage(db, date_from, date_to)
+    material_by_job: dict[int, Decimal] = {}
+    for r in usage_rows:
+        if r["job_id"] is None:
+            continue
+        material_by_job[r["job_id"]] = material_by_job.get(r["job_id"], Decimal("0")) + r["net_cost"]
+
+    events_q = (
+        db.query(ClockEvent)
+        .options(joinedload(ClockEvent.user))
+        .filter(ClockEvent.approval_status == "approved", ClockEvent.job_id.isnot(None))
+    )
+    if date_from:
+        events_q = events_q.filter(ClockEvent.clock_in_at >= day_start_utc(date_from))
+    if date_to:
+        events_q = events_q.filter(ClockEvent.clock_in_at < day_end_utc(date_to))
+    now = datetime.utcnow()
+    labor_by_job: dict[int, Decimal] = {}
+    missing_hours_by_user: dict[int, MissingRateUser] = {}
+    for e in events_q.all():
+        hours = round(((e.clock_out_at or now) - e.clock_in_at).total_seconds() / 3600, 2)
+        if e.user.hourly_rate is None:
+            m = missing_hours_by_user.setdefault(
+                e.user_id, MissingRateUser(user_id=e.user_id, user_name=e.user.name, hours=0.0))
+            m.hours = round(m.hours + hours, 2)
+        else:
+            cost = (Decimal(str(hours)) * e.user.hourly_rate).quantize(Decimal("0.01"))
+            labor_by_job[e.job_id] = labor_by_job.get(e.job_id, Decimal("0")) + cost
+
+    expense_q = db.query(Expense)
+    if date_from:
+        expense_q = expense_q.filter(Expense.expense_date >= date_from)
+    if date_to:
+        expense_q = expense_q.filter(Expense.expense_date <= date_to)
+    expense_by_job: dict[int, Decimal] = {}
+    overhead_expenses = Decimal("0")
+    for e in expense_q.all():
+        if e.job_id is None:
+            overhead_expenses += e.amount
+        else:
+            expense_by_job[e.job_id] = expense_by_job.get(e.job_id, Decimal("0")) + e.amount
+
+    revenue_q = db.query(JobRevenue)
+    if date_from:
+        revenue_q = revenue_q.filter(JobRevenue.received_date >= date_from)
+    if date_to:
+        revenue_q = revenue_q.filter(JobRevenue.received_date <= date_to)
+    revenue_by_job: dict[int, Decimal] = {}
+    for r in revenue_q.all():
+        revenue_by_job[r.job_id] = revenue_by_job.get(r.job_id, Decimal("0")) + r.amount
+
+    job_ids = set(material_by_job) | set(labor_by_job) | set(expense_by_job) | set(revenue_by_job)
+    jobs_by_id = {j.id: j for j in db.query(Job).filter(Job.id.in_(job_ids)).all()} if job_ids else {}
+
+    by_job: list[PnlJobRow] = []
+    total_revenue = Decimal("0")
+    total_material = Decimal("0")
+    total_labor = Decimal("0")
+    total_expense = Decimal("0")
+    for jid in job_ids:
+        job = jobs_by_id.get(jid)
+        if not job:
+            continue
+        revenue = revenue_by_job.get(jid, Decimal("0"))
+        material = material_by_job.get(jid, Decimal("0"))
+        labor = labor_by_job.get(jid, Decimal("0"))
+        expense = expense_by_job.get(jid, Decimal("0"))
+        by_job.append(PnlJobRow(
+            job_id=jid, job_number=job.job_number, job_name=job.name,
+            revenue=revenue, material_cost=material, labor_cost=labor, expense_cost=expense,
+            profit=revenue - (material + labor + expense),
+        ))
+        total_revenue += revenue
+        total_material += material
+        total_labor += labor
+        total_expense += expense
+    by_job.sort(key=lambda r: r.job_number)
+
+    total_expense_all = total_expense + overhead_expenses
+    total_profit = total_revenue - (total_material + total_labor + total_expense_all)
+
+    out = PnlOut(
+        revenue=total_revenue, material_cost=total_material, labor_cost=total_labor,
+        expense_cost=total_expense_all, overhead_expenses=overhead_expenses, profit=total_profit,
+        by_job=by_job, missing_rate_users=list(missing_hours_by_user.values()),
+    )
+    if format == "csv":
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["Job #", "Job", "Revenue", "Material Cost", "Labor Cost", "Expense Cost", "Profit"])
+        for r in by_job:
+            w.writerow([r.job_number, r.job_name, r.revenue, r.material_cost, r.labor_cost,
+                        r.expense_cost, r.profit])
+        w.writerow([])
+        w.writerow(["", "Overhead expenses", "", "", "", overhead_expenses, ""])
+        w.writerow(["", "TOTAL", total_revenue, total_material, total_labor, total_expense_all, total_profit])
+        buf.seek(0)
+        return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={
+            "Content-Disposition": 'attachment; filename="profit-and-loss.csv"'})
+    return out

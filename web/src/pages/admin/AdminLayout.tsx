@@ -14,6 +14,7 @@ const links = [
   { to: "/admin/estimates", label: "Estimates", icon: "clipboard-list" },
   { to: "/admin/trucks", label: "Trucks", icon: "truck" },
   { to: "/admin/calendar", label: "Login Hours", icon: "map-pin" },
+  { to: "/admin/expenses", label: "Expenses", icon: "dollar-sign" },
   { to: "/admin/reports", label: "Reports", icon: "file-text" },
   { to: "/admin/settings", label: "Settings", icon: "settings" },
 ];
@@ -102,9 +103,10 @@ export default function AdminLayout() {
         </main>
       </div>
 
-      {/* Mobile bottom nav — icon-only */}
+      {/* Mobile bottom nav — icon-only. Scrolls horizontally once there are more
+          tabs than fit a phone width, so every tab stays reachable. */}
       <nav className="glass fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] md:hidden">
-        <div className="flex items-stretch">
+        <div className="no-scrollbar flex items-stretch overflow-x-auto">
           {links.map((l) => (
             <NavLink
               key={l.to}
@@ -112,7 +114,7 @@ export default function AdminLayout() {
               end={l.end}
               aria-label={l.label}
               className={({ isActive }) =>
-                `relative flex min-h-[60px] min-w-[48px] flex-1 flex-col items-center justify-center transition-colors ${
+                `relative flex min-h-[60px] w-[52px] shrink-0 flex-col items-center justify-center transition-colors ${
                   isActive
                     ? "text-brand-600 dark:text-brand-400"
                     : "text-slate-400 dark:text-slate-500"

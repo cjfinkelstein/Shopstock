@@ -2,11 +2,104 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { api, downloadCsv, fmtMoney, fmtQty, fmtWhen } from "../../api";
+import ExpenseSheet from "../../components/ExpenseSheet";
 import Icon from "../../components/Icon";
+import Sheet from "../../components/Sheet";
 import { Empty, ItemThumb, PageLoader, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { EstimateSummary, JobFile, JobFileMeta, JobMaterialsOut } from "../../types";
+import { EXPENSE_CATEGORY_LABELS } from "../../types";
+import type { EstimateSummary, Expense, JobCostingOut, JobFile, JobFileMeta, JobMaterialsOut } from "../../types";
 import EstimateWizard from "./EstimateWizard";
+
+const REVENUE_KIND_LABEL: Record<string, string> = {
+  deposit: "Deposit",
+  progress: "Progress payment",
+  final: "Final payment",
+  other: "Other",
+};
+
+function AddRevenueSheet({ jobId, onClose, onSaved }: { jobId: number; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [amount, setAmount] = useState("");
+  const [kind, setKind] = useState("deposit");
+  const [ref, setRef] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    if (!date || !amount) {
+      toast("error", "Date and amount are required");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/jobs/${jobId}/revenues`, {
+        method: "POST",
+        body: { received_date: date, amount, kind, ref: ref.trim() || null, notes: notes.trim() || null },
+      });
+      toast("success", "Revenue added");
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet title="Add revenue" subtitle="A payment received against this job" onClose={onClose}>
+      <div className="space-y-3.5 pb-2">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="label">Date</span>
+            <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="label">Amount</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              className="input"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </label>
+        </div>
+        <label className="block">
+          <span className="label">Kind</span>
+          <select className="input" value={kind} onChange={(e) => setKind(e.target.value)}>
+            {Object.entries(REVENUE_KIND_LABEL).map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="label">Reference (optional)</span>
+          <input className="input" placeholder="Invoice #, check #…" value={ref} onChange={(e) => setRef(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="label">Notes</span>
+          <textarea
+            className="input min-h-[72px] resize-none"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
+        <button className="btn-primary w-full" disabled={busy} onClick={save}>
+          {busy ? <Spinner /> : <Icon name="check" size={18} />}
+          Add revenue
+        </button>
+      </div>
+    </Sheet>
+  );
+}
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -57,7 +150,7 @@ function LazyPhoto({ file, onRemove }: { file: JobFileMeta; onRemove: () => void
   );
 }
 
-type Tab = "items" | "activity" | "estimates" | "files";
+type Tab = "items" | "activity" | "costing" | "estimates" | "files";
 
 const STATUS_TINT: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
@@ -85,7 +178,11 @@ export default function JobDetail() {
   const [tab, setTab] = useState<Tab>("items");
   const [estimates, setEstimates] = useState<EstimateSummary[] | null>(null);
   const [files, setFiles] = useState<JobFileMeta[] | null>(null);
+  const [costing, setCosting] = useState<JobCostingOut | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [addRevenueOpen, setAddRevenueOpen] = useState(false);
+  const [addExpenseOpen, setAddExpenseOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [uploading, setUploading] = useState(false);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,9 +199,14 @@ export default function JobDetail() {
     api<JobFileMeta[]>(`/jobs/${id}/files`).then(setFiles).catch(() => {});
   }, [id]);
 
+  const loadCosting = useCallback(() => {
+    api<JobCostingOut>(`/jobs/${id}/costing`).then(setCosting).catch(() => {});
+  }, [id]);
+
   useEffect(load, [load]);
   useEffect(loadEstimates, [loadEstimates]);
   useEffect(loadFiles, [loadFiles]);
+  useEffect(loadCosting, [loadCosting]);
 
   const handleFilesPicked = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -227,6 +329,13 @@ export default function JobDetail() {
           onClick={() => setTab("activity")}
         >
           Activity
+        </button>
+        <button
+          className={`chip ${tab === "costing" ? "chip-active" : ""}`}
+          aria-pressed={tab === "costing"}
+          onClick={() => setTab("costing")}
+        >
+          Cost &amp; Profit
         </button>
         <button
           className={`chip ${tab === "estimates" ? "chip-active" : ""}`}
@@ -398,6 +507,190 @@ export default function JobDetail() {
         )
       )}
 
+      {tab === "costing" && (
+        costing === null ? (
+          <div className="card p-6 text-center text-sm text-slate-400 dark:text-slate-500">Loading…</div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <button
+                className="btn-secondary"
+                onClick={() =>
+                  downloadCsv(`/jobs/${job.id}/costing?format=csv`, `${job.job_number}-costing.csv`)
+                }
+              >
+                <Icon name="download" size={18} />
+                CSV
+              </button>
+            </div>
+
+            {costing.missing_rate_users.length > 0 && (
+              <div className="alert-card">
+                <span className="icon-disc bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+                  <Icon name="alert-triangle" size={20} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-red-700 dark:text-red-300">
+                    Labor cost may be understated
+                  </span>
+                  <span className="block text-[13px] text-red-600/80 dark:text-red-300/70">
+                    No pay rate set for{" "}
+                    {costing.missing_rate_users
+                      .map((m) => `${m.user_name} (${m.hours}h)`)
+                      .join(", ")}
+                    . Set a rate in Settings → Techs to include their hours.
+                  </span>
+                </span>
+              </div>
+            )}
+
+            <div className="card overflow-hidden p-0">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[14px] font-semibold text-slate-500 dark:text-slate-400">Revenue</span>
+                  <span className="font-semibold tabular-nums">{fmtMoney(costing.revenue)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[14px] font-semibold text-slate-500 dark:text-slate-400">
+                    Material cost
+                  </span>
+                  <span className="tabular-nums">−{fmtMoney(costing.material_cost)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[14px] font-semibold text-slate-500 dark:text-slate-400">
+                    Labor cost
+                    <span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">
+                      ({costing.labor_hours}h)
+                    </span>
+                  </span>
+                  <span className="tabular-nums">−{fmtMoney(costing.labor_cost)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[14px] font-semibold text-slate-500 dark:text-slate-400">Expenses</span>
+                  <span className="tabular-nums">−{fmtMoney(costing.expense_cost)}</span>
+                </div>
+                <div
+                  className={`flex items-center justify-between px-4 py-4 ${
+                    parseFloat(costing.profit) >= 0
+                      ? "bg-emerald-50/60 dark:bg-emerald-500/10"
+                      : "bg-red-50/60 dark:bg-red-500/10"
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2 font-bold">
+                    <Icon
+                      name="dollar-sign"
+                      size={16}
+                      className={
+                        parseFloat(costing.profit) >= 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-red-600 dark:text-red-400"
+                      }
+                    />
+                    Profit
+                  </span>
+                  <span
+                    className={`stat-number text-[22px] ${
+                      parseFloat(costing.profit) >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-600 dark:text-red-400"
+                    }`}
+                  >
+                    {fmtMoney(costing.profit)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2.5 flex items-center justify-between">
+                <p className="section-title !mb-0">Revenue entries</p>
+                <button className="btn-secondary !min-h-[38px] px-3 text-[13px]" onClick={() => setAddRevenueOpen(true)}>
+                  <Icon name="plus" size={15} />
+                  Add revenue
+                </button>
+              </div>
+              {costing.revenue_lines.length === 0 ? (
+                <div className="card p-0">
+                  <Empty icon="dollar-sign" title="No revenue recorded yet" hint="Add a deposit or payment received for this job." />
+                </div>
+              ) : (
+                <div className="card divide-y divide-slate-100 p-0 dark:divide-slate-800">
+                  {costing.revenue_lines.map((r) => (
+                    <div key={r.id} className="flex items-center gap-3 px-4 py-3">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14px] font-semibold">
+                          {REVENUE_KIND_LABEL[r.kind] ?? r.kind}
+                        </span>
+                        <span className="block text-[12px] text-slate-400 dark:text-slate-500">
+                          {r.received_date}
+                          {r.ref ? ` · ${r.ref}` : ""}
+                        </span>
+                      </span>
+                      <span className="font-semibold tabular-nums">{fmtMoney(r.amount)}</span>
+                      <button
+                        className="icon-btn"
+                        aria-label="Delete revenue entry"
+                        onClick={async () => {
+                          if (!confirm(`Delete this ${fmtMoney(r.amount)} revenue entry?`)) return;
+                          await api(`/jobs/revenues/${r.id}`, { method: "DELETE" });
+                          loadCosting();
+                        }}
+                      >
+                        <Icon name="trash" size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2.5 flex items-center justify-between">
+                <p className="section-title !mb-0">Expenses (this job)</p>
+                <button className="btn-secondary !min-h-[38px] px-3 text-[13px]" onClick={() => setAddExpenseOpen(true)}>
+                  <Icon name="plus" size={15} />
+                  Add expense
+                </button>
+              </div>
+              {costing.expense_lines.length === 0 ? (
+                <div className="card p-0">
+                  <Empty icon="dollar-sign" title="No expenses logged for this job" hint="Fuel, permits, subcontractors, and more." />
+                </div>
+              ) : (
+                <div className="card divide-y divide-slate-100 p-0 dark:divide-slate-800">
+                  {costing.expense_lines.map((e) => (
+                    <div key={e.id} className="flex items-center gap-3 px-4 py-3">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14px] font-semibold">{EXPENSE_CATEGORY_LABELS[e.category]}</span>
+                        <span className="block truncate text-[12px] text-slate-400 dark:text-slate-500">
+                          {e.expense_date}
+                          {e.notes ? ` · ${e.notes}` : ""}
+                        </span>
+                      </span>
+                      <span className="font-semibold tabular-nums">{fmtMoney(e.amount)}</span>
+                      <button className="icon-btn" aria-label="Edit expense" onClick={() => setEditingExpense(e)}>
+                        <Icon name="pencil" size={15} />
+                      </button>
+                      <button
+                        className="icon-btn"
+                        aria-label="Delete expense"
+                        onClick={async () => {
+                          if (!confirm(`Delete this ${fmtMoney(e.amount)} expense?`)) return;
+                          await api(`/expenses/${e.id}`, { method: "DELETE" });
+                          loadCosting();
+                        }}
+                      >
+                        <Icon name="trash" size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      )}
+
       {tab === "estimates" && (
         <div className="space-y-3">
           <div className="flex justify-end">
@@ -523,6 +816,22 @@ export default function JobDetail() {
           initialAddress={job.address ?? ""}
           onClose={() => setWizardOpen(false)}
           onCreated={(e) => navigate(`/admin/estimates/${e.id}`)}
+        />
+      )}
+
+      {addRevenueOpen && (
+        <AddRevenueSheet jobId={job.id} onClose={() => setAddRevenueOpen(false)} onSaved={loadCosting} />
+      )}
+
+      {(addExpenseOpen || editingExpense) && (
+        <ExpenseSheet
+          expense={editingExpense ?? undefined}
+          fixedJobId={job.id}
+          onClose={() => {
+            setAddExpenseOpen(false);
+            setEditingExpense(null);
+          }}
+          onSaved={loadCosting}
         />
       )}
     </div>

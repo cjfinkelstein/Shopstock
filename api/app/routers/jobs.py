@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session, defer, joinedload
 
 from app.auth import get_current_user, require_admin
 from app.database import get_db
-from app.models import Job, JobFile, Location, Transaction, User, Vendor
+from app.models import ClockEvent, Expense, Job, JobFile, JobRevenue, Location, Transaction, User, Vendor, utcnow
 from app.schemas import (
-    JobActivityLine, JobCreate, JobFileIn, JobFileMetaOut, JobFileOut, JobMaterialLine, JobMaterialsOut, JobOut,
-    JobUpdate,
+    ExpenseMetaOut, JobActivityLine, JobCostingOut, JobCreate, JobFileIn, JobFileMetaOut, JobFileOut,
+    JobMaterialLine, JobMaterialsOut, JobOut, JobRevenueCreate, JobRevenueOut, JobRevenueUpdate, JobUpdate,
+    MissingRateUser,
 )
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -164,6 +165,156 @@ def job_materials(job_id: int, format: str = "", db: Session = Depends(get_db)):
         buf.seek(0)
         return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={
             "Content-Disposition": f'attachment; filename="{job.job_number}-materials.csv"'})
+    return out
+
+
+def _revenue_out(r: JobRevenue) -> JobRevenueOut:
+    return JobRevenueOut(
+        id=r.id, job_id=r.job_id, received_date=r.received_date, amount=r.amount, kind=r.kind,
+        ref=r.ref, notes=r.notes, created_by_name=r.creator.name if r.creator else None,
+        created_at=r.created_at, updated_at=r.updated_at,
+    )
+
+
+@router.get("/{job_id}/revenues", response_model=list[JobRevenueOut], dependencies=[Depends(require_admin)])
+def list_job_revenues(job_id: int, db: Session = Depends(get_db)):
+    if not db.get(Job, job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    rows = (
+        db.query(JobRevenue)
+        .options(joinedload(JobRevenue.creator))
+        .filter(JobRevenue.job_id == job_id)
+        .order_by(JobRevenue.received_date.desc(), JobRevenue.id.desc())
+        .all()
+    )
+    return [_revenue_out(r) for r in rows]
+
+
+@router.post("/{job_id}/revenues", response_model=JobRevenueOut, status_code=201,
+             dependencies=[Depends(require_admin)])
+def create_job_revenue(job_id: int, body: JobRevenueCreate, db: Session = Depends(get_db),
+                       user: User = Depends(get_current_user)):
+    if not db.get(Job, job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    r = JobRevenue(
+        job_id=job_id, received_date=body.received_date, amount=body.amount, kind=body.kind,
+        ref=body.ref, notes=body.notes, created_by=user.id,
+    )
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return _revenue_out(r)
+
+
+@router.patch("/revenues/{revenue_id}", response_model=JobRevenueOut, dependencies=[Depends(require_admin)])
+def update_job_revenue(revenue_id: int, body: JobRevenueUpdate, db: Session = Depends(get_db)):
+    r = db.get(JobRevenue, revenue_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="Revenue entry not found")
+    data = body.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        setattr(r, field, value)
+    db.commit()
+    return _revenue_out(r)
+
+
+@router.delete("/revenues/{revenue_id}", status_code=204, dependencies=[Depends(require_admin)])
+def delete_job_revenue(revenue_id: int, db: Session = Depends(get_db)):
+    r = db.get(JobRevenue, revenue_id)
+    if r:
+        db.delete(r)
+        db.commit()
+
+
+def _expense_meta_out(e: Expense) -> ExpenseMetaOut:
+    return ExpenseMetaOut(
+        id=e.id, expense_date=e.expense_date, amount=e.amount, category=e.category,
+        job_id=e.job_id, job_number=e.job.job_number if e.job else None, notes=e.notes,
+        has_receipt=e.receipt_data is not None, created_by_name=e.creator.name if e.creator else None,
+        created_at=e.created_at, updated_at=e.updated_at,
+    )
+
+
+@router.get("/{job_id}/costing", dependencies=[Depends(require_admin)])
+def job_costing(job_id: int, format: str = "", db: Session = Depends(get_db)):
+    """Lifetime-to-date profit for one job: revenue minus materials, labor,
+    and expenses. Materials cost reuses _job_materials()'s total directly
+    rather than re-deriving it."""
+    job = db.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    material_cost = _job_materials(db, job).total_cost
+
+    events = (
+        db.query(ClockEvent)
+        .options(joinedload(ClockEvent.user))
+        .filter(ClockEvent.job_id == job_id, ClockEvent.approval_status == "approved")
+        .all()
+    )
+    now = utcnow()
+    labor_cost = Decimal("0")
+    labor_hours = 0.0
+    missing_hours_by_user: dict[int, MissingRateUser] = {}
+    for ev in events:
+        hours = round(((ev.clock_out_at or now) - ev.clock_in_at).total_seconds() / 3600, 2)
+        labor_hours += hours
+        if ev.user.hourly_rate is None:
+            m = missing_hours_by_user.setdefault(
+                ev.user_id, MissingRateUser(user_id=ev.user_id, user_name=ev.user.name, hours=0.0))
+            m.hours = round(m.hours + hours, 2)
+        else:
+            labor_cost += (Decimal(str(hours)) * ev.user.hourly_rate).quantize(Decimal("0.01"))
+
+    expenses = (
+        db.query(Expense)
+        .options(joinedload(Expense.creator), joinedload(Expense.job))
+        .filter(Expense.job_id == job_id)
+        .order_by(Expense.expense_date.desc(), Expense.id.desc())
+        .all()
+    )
+    expense_cost = sum((e.amount for e in expenses), Decimal("0"))
+    expense_lines = [_expense_meta_out(e) for e in expenses]
+
+    revenues = (
+        db.query(JobRevenue)
+        .options(joinedload(JobRevenue.creator))
+        .filter(JobRevenue.job_id == job_id)
+        .order_by(JobRevenue.received_date.desc(), JobRevenue.id.desc())
+        .all()
+    )
+    revenue = sum((r.amount for r in revenues), Decimal("0"))
+    revenue_lines = [_revenue_out(r) for r in revenues]
+
+    profit = revenue - (material_cost + labor_cost + expense_cost)
+
+    out = JobCostingOut(
+        job=JobOut.model_validate(job), material_cost=material_cost, labor_cost=labor_cost,
+        labor_hours=labor_hours, expense_cost=expense_cost, revenue=revenue, profit=profit,
+        revenue_lines=revenue_lines, expense_lines=expense_lines,
+        missing_rate_users=list(missing_hours_by_user.values()),
+    )
+    if format == "csv":
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["Revenue entries"])
+        w.writerow(["Date", "Kind", "Amount", "Ref", "Notes"])
+        for r in revenue_lines:
+            w.writerow([r.received_date, r.kind, r.amount, r.ref or "", r.notes or ""])
+        w.writerow([])
+        w.writerow(["Expenses"])
+        w.writerow(["Date", "Category", "Amount", "Notes"])
+        for e in expense_lines:
+            w.writerow([e.expense_date, e.category, e.amount, e.notes or ""])
+        w.writerow([])
+        w.writerow(["Revenue", revenue])
+        w.writerow(["Material cost", material_cost])
+        w.writerow(["Labor cost", labor_cost])
+        w.writerow(["Expense cost", expense_cost])
+        w.writerow(["Profit", profit])
+        buf.seek(0)
+        return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={
+            "Content-Disposition": f'attachment; filename="{job.job_number}-costing.csv"'})
     return out
 
 

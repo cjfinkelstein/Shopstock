@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { api } from "../../api";
+import { api, fmtMoney } from "../../api";
 import { catTint } from "../../catcolor";
 import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
@@ -61,6 +61,8 @@ export default function Settings() {
   const [categories, setCategories] = useState<string[]>([]);
   const [pinFor, setPinFor] = useState<User | null>(null);
   const [pin, setPin] = useState("");
+  const [rateFor, setRateFor] = useState<User | null>(null);
+  const [rate, setRate] = useState("");
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [addName, setAddName] = useState("");
@@ -108,6 +110,15 @@ export default function Settings() {
     toast("success", `PIN set for ${pinFor.name}`);
     setPinFor(null);
     setPin("");
+    load();
+  };
+
+  const saveRate = async () => {
+    if (!rateFor || !rate || Number(rate) < 0) return;
+    await api(`/users/${rateFor.id}`, { method: "PATCH", body: { hourly_rate: rate } });
+    toast("success", `Pay rate set for ${rateFor.name}`);
+    setRateFor(null);
+    setRate("");
     load();
   };
 
@@ -173,6 +184,17 @@ export default function Settings() {
             >
               <Avatar name={u.name} index={u.id} size={36} />
               <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
+              <button
+                className="chip !min-h-[40px] px-3.5"
+                onClick={() => {
+                  setRateFor(u);
+                  setRate(u.hourly_rate ?? "");
+                }}
+                title="Tap to change pay rate"
+              >
+                <Icon name="dollar-sign" size={15} />
+                {u.hourly_rate ? `${fmtMoney(u.hourly_rate)}/hr` : "Set rate"}
+              </button>
               {u.has_pin ? (
                 <span className="flex items-center gap-1.5">
                   <button
@@ -373,6 +395,37 @@ export default function Settings() {
             </label>
             <button className="btn-primary w-full" disabled={!/^\d{4}$/.test(pin)} onClick={savePin}>
               Save PIN
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {rateFor && (
+        <Sheet
+          title={`Pay rate for ${rateFor.name}`}
+          subtitle="Used to calculate labor cost on job costing reports"
+          onClose={() => {
+            setRateFor(null);
+            setRate("");
+          }}
+        >
+          <div className="space-y-4">
+            <label className="block">
+              <span className="label">$ / hour</span>
+              <input
+                className="input"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                autoFocus
+                value={rate}
+                onChange={(e) => setRate(e.target.value)}
+              />
+            </label>
+            <button className="btn-primary w-full" disabled={!rate || Number(rate) < 0} onClick={saveRate}>
+              Save rate
             </button>
           </div>
         </Sheet>

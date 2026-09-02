@@ -8,6 +8,7 @@ import AdminCalendar from "./pages/admin/Calendar";
 import AdminDashboard from "./pages/admin/Dashboard";
 import EstimateDetail from "./pages/admin/EstimateDetail";
 import AdminEstimates from "./pages/admin/Estimates";
+import AdminExpenses from "./pages/admin/Expenses";
 import AdminItems from "./pages/admin/Items";
 import AdminJobs from "./pages/admin/Jobs";
 import JobDetail from "./pages/admin/JobDetail";
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="trucks" element={<AdminTrucks />} />
           <Route path="worker-map" element={<Navigate to="/admin/calendar" replace />} />
           <Route path="calendar" element={<AdminCalendar />} />
+          <Route path="expenses" element={<AdminExpenses />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>

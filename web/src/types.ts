@@ -6,6 +6,7 @@ export interface User {
   active: boolean;
   has_pin: boolean;
   pin?: string | null; // plaintext — only populated on admin-only endpoints
+  hourly_rate?: string | null; // admin-only field, never rendered in the tech app
 }
 
 export interface TechName {
@@ -312,4 +313,91 @@ export interface JobFileMeta {
   uploaded_by_name: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export const EXPENSE_CATEGORIES = [
+  "fuel", "tools_equipment", "permits_fees", "subcontractor", "office_admin", "insurance", "travel", "misc",
+] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  fuel: "Fuel",
+  tools_equipment: "Tools & Equipment",
+  permits_fees: "Permits & Fees",
+  subcontractor: "Subcontractor",
+  office_admin: "Office / Admin",
+  insurance: "Insurance",
+  travel: "Travel",
+  misc: "Misc",
+};
+
+export interface Expense {
+  id: number;
+  expense_date: string;
+  amount: string;
+  category: ExpenseCategory;
+  job_id: number | null;
+  job_number: string | null;
+  notes: string | null;
+  receipt_filename?: string | null;
+  receipt_mime_type?: string | null;
+  receipt_data?: string | null; // only present on the single-expense GET
+  has_receipt?: boolean; // only present on list views
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobRevenue {
+  id: number;
+  job_id: number;
+  received_date: string;
+  amount: string;
+  kind: "deposit" | "progress" | "final" | "other";
+  ref: string | null;
+  notes: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MissingRateUser {
+  user_id: number;
+  user_name: string;
+  hours: number;
+}
+
+export interface JobCostingOut {
+  job: Job;
+  material_cost: string;
+  labor_cost: string;
+  labor_hours: number;
+  expense_cost: string;
+  revenue: string;
+  profit: string;
+  revenue_lines: JobRevenue[];
+  expense_lines: Expense[];
+  missing_rate_users: MissingRateUser[];
+}
+
+export interface PnlJobRow {
+  job_id: number;
+  job_number: string;
+  job_name: string;
+  revenue: string;
+  material_cost: string;
+  labor_cost: string;
+  expense_cost: string;
+  profit: string;
+}
+
+export interface PnlOut {
+  revenue: string;
+  material_cost: string;
+  labor_cost: string;
+  expense_cost: string;
+  overhead_expenses: string;
+  profit: string;
+  by_job: PnlJobRow[];
+  missing_rate_users: MissingRateUser[];
 }

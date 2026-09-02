@@ -13,7 +13,8 @@ type Tab =
   | "receiving"
   | "maurice"
   | "adjustments"
-  | "timesheet";
+  | "timesheet"
+  | "pnl";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "reorder", label: "Reorder" },
@@ -23,6 +24,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "maurice", label: "Maurice" },
   { key: "adjustments", label: "Adjustments" },
   { key: "timesheet", label: "Timesheets" },
+  { key: "pnl", label: "Profit & Loss" },
 ];
 
 const MAURICE_VENDOR_NAME = "Maurice Electrical Supply";
@@ -93,6 +95,7 @@ export default function Reports() {
     maurice: "receiving",
     adjustments: "adjustments",
     timesheet: "techs",
+    pnl: "by_job",
   };
   const shaped = data && SHAPE_KEY[tab] in data;
 
@@ -520,6 +523,97 @@ export default function Reports() {
             </table>
           </div>
         )
+      )}
+
+      {shaped && tab === "pnl" && (
+        <div className="space-y-4">
+          {data.missing_rate_users.length > 0 && (
+            <div className="alert-card">
+              <span className="icon-disc bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+                <Icon name="alert-triangle" size={20} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-red-700 dark:text-red-300">
+                  Labor cost may be understated
+                </span>
+                <span className="block text-[13px] text-red-600/80 dark:text-red-300/70">
+                  No pay rate set for{" "}
+                  {data.missing_rate_users
+                    .map((m: any) => `${m.user_name} (${m.hours}h)`)
+                    .join(", ")}
+                  . Set a rate in Settings → Techs to include their hours.
+                </span>
+              </span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              { label: "Revenue", value: data.revenue, tint: "text-slate-900 dark:text-slate-100" },
+              { label: "Materials", value: data.material_cost, tint: "text-slate-500 dark:text-slate-400" },
+              { label: "Labor", value: data.labor_cost, tint: "text-slate-500 dark:text-slate-400" },
+              { label: "Expenses", value: data.expense_cost, tint: "text-slate-500 dark:text-slate-400" },
+              { label: "Overhead", value: data.overhead_expenses, tint: "text-slate-400 dark:text-slate-500" },
+              {
+                label: "Profit",
+                value: data.profit,
+                tint:
+                  parseFloat(data.profit) >= 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400",
+              },
+            ].map((c) => (
+              <div key={c.label} className="card p-3.5">
+                <p className="section-title !mb-1">{c.label}</p>
+                <p className={`stat-number text-[18px] ${c.tint}`}>{fmtMoney(c.value)}</p>
+              </div>
+            ))}
+          </div>
+
+          {data.by_job.length === 0 ? (
+            <Empty icon="dollar-sign" title="No job activity in range" hint="Try a wider date range." />
+          ) : (
+            <div className="card overflow-x-auto p-0">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead>
+                  <tr className={THEAD_ROW}>
+                    <th className="px-4 py-3">Job</th>
+                    <th className="px-4 py-3 text-right">Revenue</th>
+                    <th className="px-4 py-3 text-right">Materials</th>
+                    <th className="px-4 py-3 text-right">Labor</th>
+                    <th className="px-4 py-3 text-right">Expenses</th>
+                    <th className="px-4 py-3 text-right">Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_job.map((j: any) => (
+                    <tr key={j.job_id} className={BODY_ROW}>
+                      <td className="px-4 py-3">
+                        <span className="block truncate font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          {j.job_number}
+                        </span>
+                        <span className="block truncate font-semibold">{j.job_name}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtMoney(j.revenue)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtMoney(j.material_cost)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtMoney(j.labor_cost)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtMoney(j.expense_cost)}</td>
+                      <td
+                        className={`px-4 py-3 text-right font-semibold tabular-nums ${
+                          parseFloat(j.profit) >= 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {fmtMoney(j.profit)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
