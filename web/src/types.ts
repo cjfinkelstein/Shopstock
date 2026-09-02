@@ -164,6 +164,22 @@ export interface WorkerLive {
   last_ping_at: string | null;
 }
 
+export interface RoutePoint {
+  lat: number;
+  lng: number;
+  at: string;
+  kind: "clock_in" | "ping" | "clock_out";
+}
+
+export interface ShiftRoute {
+  user_name: string;
+  job_number: string | null;
+  job_name: string | null;
+  clock_in_at: string;
+  clock_out_at: string | null;
+  points: RoutePoint[];
+}
+
 export interface JobMaterialsOut {
   job: Job;
   lines: {

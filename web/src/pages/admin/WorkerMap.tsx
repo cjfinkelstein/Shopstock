@@ -1,14 +1,15 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useState } from "react";
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 
 import { api, fmtWhen } from "../../api";
 import Icon from "../../components/Icon";
+import Sheet from "../../components/Sheet";
 import { Avatar, Empty, ListSkeleton, Spinner } from "../../components/ui";
 import { hoursLabel } from "../../hours";
 import { useToast } from "../../toast";
-import type { User, WorkerLive } from "../../types";
+import type { RoutePoint, ShiftRoute, User, WorkerLive } from "../../types";
 
 // Custom pin so we don't depend on leaflet's default marker image assets
 // resolving correctly under Vite's bundler. A count badge is added for
@@ -48,6 +49,31 @@ function clusterWorkers(workers: WorkerLive[]) {
   return [...clusters.values()];
 }
 
+// Fits the map's view to the route's points once they're known -- MapContainer's
+// own center/zoom props only apply on first mount, so bounds need to be set
+// imperatively after the async fetch resolves.
+function FitToRoute({ points }: { points: RoutePoint[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length === 0) return;
+    if (points.length === 1) {
+      map.setView([points[0].lat, points[0].lng], 15);
+      return;
+    }
+    map.fitBounds(
+      points.map((p) => [p.lat, p.lng] as [number, number]),
+      { padding: [30, 30] },
+    );
+  }, [points, map]);
+  return null;
+}
+
+const KIND_COLOR: Record<RoutePoint["kind"], string> = {
+  clock_in: "#10b981",
+  ping: "#0ea5e9",
+  clock_out: "#ef4444",
+};
+
 const REFRESH_MS = 20_000;
 const DEFAULT_CENTER: [number, number] = [39.2904, -76.6122]; // Baltimore, MD
 const SHIFTS_PER_TECH = 10;
@@ -85,6 +111,24 @@ export default function WorkerMap() {
   const [techs, setTechs] = useState<User[] | null>(null);
   const [timesheets, setTimesheets] = useState<Record<number, TechTimesheet>>({});
   const [approving, setApproving] = useState<number | null>(null);
+  const [routeShiftId, setRouteShiftId] = useState<number | null>(null);
+  const [route, setRoute] = useState<ShiftRoute | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+
+  const openRoute = async (shiftId: number) => {
+    setRouteShiftId(shiftId);
+    setRoute(null);
+    setRouteLoading(true);
+    try {
+      const r = await api<ShiftRoute>(`/time/${shiftId}/route`);
+      setRoute(r);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't load that shift's route");
+      setRouteShiftId(null);
+    } finally {
+      setRouteLoading(false);
+    }
+  };
 
   const approveShift = async (userId: number, shiftId: number) => {
     setApproving(shiftId);
@@ -274,7 +318,11 @@ export default function WorkerMap() {
                           {shifts.map((s) => (
                             <div
                               key={s.id}
-                              className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/60"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openRoute(s.id)}
+                              onKeyDown={(e) => e.key === "Enter" && openRoute(s.id)}
+                              className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800"
                             >
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
@@ -306,7 +354,10 @@ export default function WorkerMap() {
                                   <button
                                     type="button"
                                     disabled={approving === s.id}
-                                    onClick={() => approveShift(tech.id, s.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      approveShift(tech.id, s.id);
+                                    }}
                                     className="btn-secondary !min-h-0 px-2.5 py-1.5 text-[12px]"
                                   >
                                     {approving === s.id ? <Spinner /> : <Icon name="check" size={13} />}
@@ -330,6 +381,85 @@ export default function WorkerMap() {
             )}
           </div>
         </>
+      )}
+
+      {routeShiftId !== null && (
+        <Sheet
+          title={route ? `${route.user_name}'s route` : "Loading route…"}
+          subtitle={
+            route
+              ? `${route.job_number ? `${route.job_number}${route.job_name ? ` — ${route.job_name}` : ""} · ` : ""}${fmtWhen(route.clock_in_at)} → ${route.clock_out_at ? fmtWhen(route.clock_out_at) : "still clocked in"}`
+              : undefined
+          }
+          onClose={() => {
+            setRouteShiftId(null);
+            setRoute(null);
+          }}
+        >
+          {routeLoading ? (
+            <div className="py-10">
+              <ListSkeleton rows={1} />
+            </div>
+          ) : !route || route.points.length === 0 ? (
+            <div className="py-4">
+              <Empty
+                icon="map-pin"
+                title="No GPS points for this shift"
+                hint="Location wasn't captured for this clock-in/out."
+              />
+            </div>
+          ) : (
+            <div className="space-y-3 pb-2">
+              <div className="overflow-hidden rounded-2xl border border-slate-200/70 dark:border-slate-800">
+                <MapContainer
+                  center={[route.points[0].lat, route.points[0].lng]}
+                  zoom={15}
+                  style={{ height: 340, width: "100%" }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <FitToRoute points={route.points} />
+                  <Polyline
+                    positions={route.points.map((p) => [p.lat, p.lng])}
+                    pathOptions={{ color: "#3e64ee", weight: 4, opacity: 0.8 }}
+                  />
+                  {route.points.map((p, i) => (
+                    <CircleMarker
+                      key={i}
+                      center={[p.lat, p.lng]}
+                      radius={p.kind === "ping" ? 5 : 9}
+                      pathOptions={{
+                        color: "#fff",
+                        weight: 2,
+                        fillColor: KIND_COLOR[p.kind],
+                        fillOpacity: 1,
+                      }}
+                    >
+                      <Popup>
+                        {p.kind === "clock_in" ? "Clocked in" : p.kind === "clock_out" ? "Clocked out" : "Location"}
+                        <br />
+                        {new Date(p.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                      </Popup>
+                    </CircleMarker>
+                  ))}
+                </MapContainer>
+              </div>
+              <div className="flex items-center justify-center gap-4 text-[12px] text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Clock in
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-brand-500" /> GPS ping
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Clock out
+                </span>
+              </div>
+            </div>
+          )}
+        </Sheet>
       )}
     </div>
   );

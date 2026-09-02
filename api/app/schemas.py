@@ -156,6 +156,30 @@ class MyShiftOut(BaseModel):
         return _utc_iso(v)
 
 
+class RoutePoint(BaseModel):
+    lat: float
+    lng: float
+    at: datetime
+    kind: str  # clock_in | ping | clock_out
+
+    @field_serializer("at")
+    def _ser_at(self, v: datetime, _info):
+        return _utc_iso(v)
+
+
+class ShiftRouteOut(BaseModel):
+    user_name: str
+    job_number: str | None = None
+    job_name: str | None = None
+    clock_in_at: datetime
+    clock_out_at: datetime | None = None
+    points: list[RoutePoint]
+
+    @field_serializer("clock_in_at", "clock_out_at")
+    def _ser_dt(self, v: datetime | None, _info):
+        return _utc_iso(v)
+
+
 # ---------- Trucks / Locations / Vendors ----------
 
 class TruckCreate(BaseModel):

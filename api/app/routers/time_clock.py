@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth import get_current_user, require_admin
 from app.database import get_db
 from app.models import ClockEvent, Job, LocationPing, User, utcnow
-from app.schemas import ClockInIn, ClockOutIn, ClockStatusOut, LocationPingIn, MyShiftOut, WorkerLiveOut
+from app.schemas import (
+    ClockInIn, ClockOutIn, ClockStatusOut, LocationPingIn, MyShiftOut, RoutePoint, ShiftRouteOut, WorkerLiveOut,
+)
 
 router = APIRouter(prefix="/time", tags=["time"])
 
@@ -142,6 +144,40 @@ def live(db: Session = Depends(get_db), _: User = Depends(require_admin)):
             )
         )
     return out
+
+
+@router.get("/{event_id}/route", response_model=ShiftRouteOut)
+def shift_route(event_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Every GPS point recorded for one shift, in order: where a tech clocked
+    in, every periodic ping while they were on the clock, and where they
+    clocked out -- the full trail an admin can trace on a map."""
+    ev = db.get(ClockEvent, event_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    points: list[RoutePoint] = []
+    if ev.clock_in_lat is not None and ev.clock_in_lng is not None:
+        points.append(RoutePoint(lat=ev.clock_in_lat, lng=ev.clock_in_lng, at=ev.clock_in_at, kind="clock_in"))
+
+    pings = (
+        db.query(LocationPing)
+        .filter(LocationPing.clock_event_id == event_id)
+        .order_by(LocationPing.recorded_at)
+        .all()
+    )
+    points.extend(RoutePoint(lat=p.lat, lng=p.lng, at=p.recorded_at, kind="ping") for p in pings)
+
+    if ev.clock_out_at is not None and ev.clock_out_lat is not None and ev.clock_out_lng is not None:
+        points.append(RoutePoint(lat=ev.clock_out_lat, lng=ev.clock_out_lng, at=ev.clock_out_at, kind="clock_out"))
+
+    return ShiftRouteOut(
+        user_name=ev.user.name,
+        job_number=ev.job.job_number if ev.job else None,
+        job_name=ev.job.name if ev.job else None,
+        clock_in_at=ev.clock_in_at,
+        clock_out_at=ev.clock_out_at,
+        points=points,
+    )
 
 
 @router.post("/{event_id}/approve", response_model=MyShiftOut)
