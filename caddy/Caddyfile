@@ -1,0 +1,12 @@
+shop.apexelectricalgroupinc.com {
+	# When the app (nginx/api behind localhost:8080) is unreachable or erroring
+	# -- e.g. mid-deploy, while containers are being swapped -- show a friendly
+	# "we're updating" page instead of a raw connection error or 502.
+	handle_errors {
+		root * /srv/maintenance
+		rewrite * /maintenance.html
+		file_server
+	}
+
+	reverse_proxy localhost:8080
+}
