@@ -43,6 +43,8 @@ export default function Reports() {
   const [jobTab, setJobTab] = useState<number | null>(null);
   const [qboOpen, setQboOpen] = useState(false);
   const [qboJobIds, setQboJobIds] = useState<Set<number>>(new Set());
+  const [payrollExportOpen, setPayrollExportOpen] = useState(false);
+  const [payrollItem, setPayrollItem] = useState("Regular Pay");
 
   useEffect(() => {
     api<{ id: number; name: string }[]>("/vendors")
@@ -77,6 +79,13 @@ export default function Reports() {
     const suffix = ids.length && ids.length !== all.length ? `&job_ids=${ids.join(",")}` : "";
     downloadCsv(`/reports/usage-by-job?${query}&format=qbo${suffix}`, "quickbooks-job-materials.csv");
     setQboOpen(false);
+  };
+  const payrollExport = () => {
+    downloadCsv(
+      `/reports/timesheet?${query}&format=qbo&payroll_item=${encodeURIComponent(payrollItem)}`,
+      "quickbooks-time-import.csv",
+    );
+    setPayrollExportOpen(false);
   };
   const toggleQboJob = (id: number) => {
     setQboJobIds((prev) => {
@@ -149,7 +158,45 @@ export default function Reports() {
             Export to QuickBooks
           </button>
         )}
+        {tab === "timesheet" && (
+          <button className="btn-secondary" onClick={() => setPayrollExportOpen((o) => !o)}>
+            <Icon name="download" size={18} />
+            Export to QuickBooks
+          </button>
+        )}
       </div>
+
+      {tab === "timesheet" && payrollExportOpen && (
+        <div className="card space-y-3">
+          <p className="text-[13px] font-bold uppercase tracking-wider text-slate-400">
+            Export approved hours for QuickBooks Online
+          </p>
+          <p className="text-[13px] text-slate-500 dark:text-slate-400">
+            Only approved, completed shifts in the date range above are included — still-clocked-in or
+            not-yet-approved hours are left out. In QuickBooks Online, use{" "}
+            <span className="font-semibold">Time → Import Time Activity</span> to upload the file. Each tech's
+            name must match their QuickBooks employee name exactly, or that row won't match during import.
+          </p>
+          <label className="block max-w-xs">
+            <span className="label">Payroll item</span>
+            <input
+              className="input"
+              value={payrollItem}
+              onChange={(e) => setPayrollItem(e.target.value)}
+              placeholder="e.g. Regular Pay"
+            />
+          </label>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+            <button className="btn-ghost" onClick={() => setPayrollExportOpen(false)}>
+              Cancel
+            </button>
+            <button className="btn-primary" disabled={!payrollItem.trim()} onClick={payrollExport}>
+              <Icon name="download" size={18} />
+              Download
+            </button>
+          </div>
+        </div>
+      )}
 
       {tab === "usage-by-job" && qboOpen && shaped && (
         <div className="card space-y-3">

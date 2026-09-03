@@ -321,7 +321,7 @@ def adjustments(date_from: str = "", date_to: str = "", format: str = "",
 
 
 @router.get("/timesheet")
-def timesheet(date_from: str = "", date_to: str = "", format: str = "",
+def timesheet(date_from: str = "", date_to: str = "", format: str = "", payroll_item: str = "Regular Pay",
               db: Session = Depends(get_db)):
     q = db.query(ClockEvent).options(joinedload(ClockEvent.user), joinedload(ClockEvent.job))
     if date_from:
@@ -355,6 +355,34 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "",
               to_local(r["clock_in_at"]).strftime("%Y-%m-%d %H:%M"),
               to_local(r["clock_out_at"]).strftime("%Y-%m-%d %H:%M") if r["clock_out_at"] else "still clocked in",
               r["hours"], r["approval_status"]] for r in rows])
+
+    if format == "qbo":
+        # QuickBooks Online's "Import employee time" CSV shape -- Name must
+        # match the employee's QBO Display Name exactly, Payroll item must
+        # match an existing QBO payroll item, Duration is H:MM (not decimal).
+        # Only approved, finished shifts go to payroll -- a still-running or
+        # never-approved shift isn't final yet.
+        qbo_rows = []
+        for r in rows:
+            if r["still_clocked_in"] or r["approval_status"] != "approved":
+                continue
+            total_minutes = round(r["hours"] * 60)
+            duration = f"{total_minutes // 60}:{total_minutes % 60:02d}"
+            qbo_rows.append([
+                r["user_name"],
+                to_local(r["clock_in_at"]).strftime("%m/%d/%Y"),
+                r["job_number"] or "",
+                "",  # Service Item -- fill in during import if your QBO setup uses one
+                payroll_item,
+                duration,
+                "",  # Class
+                "",  # Billable
+                r["job_name"] or "",  # Notes
+            ])
+        return _csv_response("quickbooks-time-import.csv",
+            ["Name", "Transaction Date", "Customer", "Service Item", "Payroll item", "Duration", "Class",
+             "Billable", "Notes"],
+            qbo_rows)
 
     techs: dict[int, dict] = {}
     for r in rows:
