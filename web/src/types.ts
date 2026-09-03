@@ -429,3 +429,10 @@ export interface PnlOut {
   by_job: PnlJobRow[];
   missing_rate_users: MissingRateUser[];
 }
+
+export type ChatEvent =
+  | { type: "text"; text: string }
+  | { type: "tool_start"; tool: string; label: string }
+  | { type: "tool_end"; tool: string }
+  | { type: "done" }
+  | { type: "error"; message: string };

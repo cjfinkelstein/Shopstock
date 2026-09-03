@@ -69,6 +69,57 @@ export async function api<T>(
   return res.json() as Promise<T>;
 }
 
+/** Calls an authenticated endpoint that streams newline-delimited JSON
+ * events back (the AI assistant panel), yielding each parsed event as it
+ * arrives. Uses fetch()'s ReadableStream reader instead of EventSource,
+ * since EventSource can't send the Authorization header this app's
+ * Bearer-token auth needs. */
+export async function* streamApi<T = unknown>(
+  path: string,
+  opts: { method?: string; body?: unknown } = {},
+): AsyncGenerator<T> {
+  const res = await fetch(API + path, {
+    method: opts.method ?? "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
+  if (res.status === 401) {
+    if (token) {
+      setToken(null);
+      onUnauthorized?.();
+      throw new ApiError("Session expired — tap in again", 401);
+    }
+    throw new ApiError("Not authenticated", 401);
+  }
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const data = await res.json();
+      if (typeof data.detail === "string") detail = data.detail;
+    } catch {
+      /* not json */
+    }
+    throw new ApiError(detail, res.status);
+  }
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? ""; // keep the last, possibly-incomplete line
+    for (const line of lines) {
+      if (line.trim()) yield JSON.parse(line) as T;
+    }
+  }
+  if (buffer.trim()) yield JSON.parse(buffer) as T;
+}
+
 /** Calls a public (no-auth) endpoint — never attaches the stored session
  * token, so a customer using a shared/staff browser never has a stray
  * logged-in tech/admin token leak into the request headers. */

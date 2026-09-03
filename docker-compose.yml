@@ -36,6 +36,10 @@ services:
       SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-APEX Electrical Group}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://shop.apexelectricalgroupinc.com}
+      # AI features (admin console assistant panel + plan-sheet reading on
+      # estimates) -- blank = both cleanly fail with a clear error instead
+      # of pretending to work
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

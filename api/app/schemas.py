@@ -697,6 +697,18 @@ class PlanAnalyzeOut(BaseModel):
     items: list[PlanAnalyzeItem]
 
 
+# ---------- AI assistant ----------
+
+class AssistantMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str
+
+
+class AssistantChatIn(BaseModel):
+    message: str
+    history: list[AssistantMessage] = []
+
+
 # ---------- Transactions ----------
 
 class ReceiveIn(BaseModel):

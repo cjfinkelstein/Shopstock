@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../auth";
+import AssistantPanel from "../../components/AssistantPanel";
 import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import { Avatar } from "../../components/ui";
@@ -161,6 +162,8 @@ export default function AdminLayout() {
           </div>
         </Sheet>
       )}
+
+      <AssistantPanel />
     </div>
   );
 }
