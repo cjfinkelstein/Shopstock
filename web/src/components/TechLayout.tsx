@@ -12,6 +12,7 @@ import { Avatar } from "./ui";
 const LEFT_TABS = [
   { to: "/home", label: "Home", icon: "home" },
   { to: "/truck", label: "Trucks", icon: "truck" },
+  { to: "/calendar", label: "Calendar", icon: "calendar" },
 ];
 
 function Tab({
