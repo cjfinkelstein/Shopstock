@@ -15,6 +15,10 @@ services:
       retries: 10
 
   api:
+    # Pulled from GitHub Container Registry by default (built there, not on
+    # this droplet -- see .github/workflows/build.yml). `build:` stays here
+    # only so `docker compose build` still works if ever needed by hand.
+    image: ghcr.io/cjfinkelstein/shopstock-api:latest
     build: ./api
     restart: unless-stopped
     environment:
@@ -45,6 +49,7 @@ services:
         condition: service_healthy
 
   web:
+    image: ghcr.io/cjfinkelstein/shopstock-web:latest
     build: ./web
     restart: unless-stopped
     ports:
