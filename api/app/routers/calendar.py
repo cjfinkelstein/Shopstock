@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
@@ -27,7 +29,7 @@ def _out(e: CalendarEvent) -> CalendarEventOut:
 
 
 @router.get("", response_model=list[CalendarEventOut])
-def list_events(date_from: str = "", date_to: str = "", db: Session = Depends(get_db)):
+def list_events(date_from: date | None = None, date_to: date | None = None, db: Session = Depends(get_db)):
     q = db.query(CalendarEvent).options(
         joinedload(CalendarEvent.creator),
         joinedload(CalendarEvent.edits).joinedload(CalendarEventEdit.editor),

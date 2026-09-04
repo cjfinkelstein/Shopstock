@@ -1,5 +1,6 @@
 import csv
 import io
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -34,7 +35,7 @@ def _meta_out(e: Expense, has_receipt: bool) -> ExpenseMetaOut:
 
 
 @router.get("")
-def list_expenses(date_from: str = "", date_to: str = "", job_id: str = "", category: str = "",
+def list_expenses(date_from: date | None = None, date_to: date | None = None, job_id: str = "", category: str = "",
                   format: str = "", db: Session = Depends(get_db)):
     # `receipt_data` holds the full base64 photo and can be huge -- defer it here
     # (mirrors list_job_files) so listing expenses can't balloon API memory.
