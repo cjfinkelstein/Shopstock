@@ -173,6 +173,16 @@ export default function TechLayout() {
                   className="btn-secondary w-full"
                   onClick={() => {
                     setAccountOpen(false);
+                    navigate("/calendar");
+                  }}
+                >
+                  <Icon name="calendar" size={18} />
+                  Team Calendar
+                </button>
+                <button
+                  className="btn-secondary w-full"
+                  onClick={() => {
+                    setAccountOpen(false);
                     setChangePinOpen(true);
                   }}
                 >

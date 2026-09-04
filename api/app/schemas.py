@@ -857,6 +857,46 @@ class ValuationOut(BaseModel):
     total: Decimal
 
 
+# ---------- Team calendar ----------
+
+class CalendarEventCreate(BaseModel):
+    event_date: date
+    title: str
+    notes: str | None = None
+
+
+class CalendarEventUpdate(BaseModel):
+    event_date: date | None = None
+    title: str | None = None
+    notes: str | None = None
+    done: bool | None = None
+
+
+class CalendarEventEditOut(ApiModel):
+    id: int
+    field: str
+    old_value: str | None
+    new_value: str | None
+    edited_by_name: str | None = None
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def _ser_dt(self, v: datetime, _info):
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
+
+
+class CalendarEventOut(TimestampedOut):
+    id: int
+    event_date: date
+    title: str
+    notes: str | None
+    done: bool
+    created_by_name: str | None = None
+    edits: list[CalendarEventEditOut] = []
+
+
 # ---------- Labels ----------
 
 class LabelPrintIn(BaseModel):

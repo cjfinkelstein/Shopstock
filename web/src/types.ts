@@ -181,6 +181,27 @@ export interface ShiftRoute {
   points: RoutePoint[];
 }
 
+export interface CalendarEventEdit {
+  id: number;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  edited_by_name: string | null;
+  created_at: string;
+}
+
+export interface CalendarEvent {
+  id: number;
+  event_date: string;
+  title: string;
+  notes: string | null;
+  done: boolean;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+  edits: CalendarEventEdit[];
+}
+
 export interface JobMaterialsOut {
   job: Job;
   lines: {

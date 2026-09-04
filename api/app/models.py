@@ -320,6 +320,45 @@ class EstimateChecklistItem(TimestampMixin, Base):
     label: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
+class CalendarEvent(TimestampMixin, Base):
+    """A shared to-do/event on one date, visible to every logged-in user
+    (tech or admin) -- one team calendar, not per-user. Field-level edits are
+    recorded in CalendarEventEdit so anyone can see who changed what."""
+
+    __tablename__ = "calendar_events"
+    __table_args__ = (Index("ix_calendar_events_date", "event_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_date: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+    creator: Mapped["User | None"] = relationship()
+    edits: Mapped[list["CalendarEventEdit"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan", order_by="CalendarEventEdit.created_at")
+
+
+class CalendarEventEdit(Base):
+    """One row per field change on a CalendarEvent -- powers the "X changed
+    the title from A to B" history shown on each item."""
+
+    __tablename__ = "calendar_event_edits"
+    __table_args__ = (Index("ix_calendar_event_edits_event", "event_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("calendar_events.id"), nullable=False)
+    edited_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    field: Mapped[str] = mapped_column(String(20), nullable=False)  # title | event_date | notes | done
+    old_value: Mapped[str | None] = mapped_column(Text)
+    new_value: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    event: Mapped[CalendarEvent] = relationship(back_populates="edits")
+    editor: Mapped["User | None"] = relationship()
+
+
 class Transaction(TimestampMixin, Base):
     """The ledger — source of truth for every stock change."""
 

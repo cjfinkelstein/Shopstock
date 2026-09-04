@@ -10,6 +10,7 @@ import EstimateDetail from "./pages/admin/EstimateDetail";
 import AdminEstimates from "./pages/admin/Estimates";
 import AdminExpenses from "./pages/admin/Expenses";
 import PublicEstimate from "./pages/PublicEstimate";
+import TeamCalendar from "./pages/TeamCalendar";
 import AdminItems from "./pages/admin/Items";
 import AdminJobs from "./pages/admin/Jobs";
 import JobDetail from "./pages/admin/JobDetail";
@@ -62,6 +63,7 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/calendar" element={<TeamCalendar />} />
       <Route element={<TechLayout />}>
         <Route path="/home" element={<Home />} />
         <Route path="/search" element={<Search />} />
