@@ -32,7 +32,7 @@ def health():
 for r in (auth_routes.router, users.router, trucks.router, vendors.router, items.router,
           labels.router, jobs.router, transactions.router, stock.router, reports.router,
           dashboard.router, estimates.router, time_clock.router, expenses.router, public_estimates.router,
-          assistant.router, calendar.router):
+          assistant.router, calendar.router, calendar.admin_router):
     api.include_router(r)
 
 app.include_router(api)

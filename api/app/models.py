@@ -338,6 +338,9 @@ class CalendarEvent(TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
     done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    # shared = the Team Calendar everyone sees; admin_only = an admin's
+    # private note on the Login Hours page, never returned to a tech.
+    visibility: Mapped[str] = mapped_column(String(10), default="shared", nullable=False)
 
     creator: Mapped["User | None"] = relationship()
     edits: Mapped[list["CalendarEventEdit"]] = relationship(

@@ -66,6 +66,10 @@ export async function api<T>(
     }
     throw new ApiError(detail, res.status);
   }
+  // 204 No Content (every DELETE in this app) has no body -- res.json()
+  // throws "Unexpected end of JSON input" on it, which every caller was
+  // catching as a false "delete failed" even though the delete succeeded.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

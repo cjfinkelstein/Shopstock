@@ -9,7 +9,7 @@ import Sheet from "../../components/Sheet";
 import { Avatar, Empty, ItemThumb, ListSkeleton, Spinner } from "../../components/ui";
 import { hoursLabel } from "../../hours";
 import { useToast } from "../../toast";
-import type { RoutePoint, ShiftRoute, User, WorkerLive } from "../../types";
+import type { CalendarEvent, RoutePoint, ShiftRoute, User, WorkerLive } from "../../types";
 
 // ---------- Live map helpers (pins, clustering, route line) ----------
 
@@ -263,6 +263,114 @@ export default function Calendar() {
 
   useEffect(loadDays, [loadDays]);
 
+  // ---- Admin-only private notes -- never sent to techs, shown only here ----
+  const [adminNotes, setAdminNotes] = useState<Record<string, CalendarEvent[]>>({});
+  const [noteExpandedId, setNoteExpandedId] = useState<number | null>(null);
+  const [noteEditDraft, setNoteEditDraft] = useState<{ title: string; event_date: string; notes: string } | null>(
+    null,
+  );
+  const [newNoteTitle, setNewNoteTitle] = useState("");
+  const [newNoteText, setNewNoteText] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+
+  const loadAdminNotes = useCallback(() => {
+    const from = toISODate(month);
+    const to = toISODate(new Date(month.getFullYear(), month.getMonth() + 1, 0));
+    api<CalendarEvent[]>(`/calendar/admin?date_from=${from}&date_to=${to}`)
+      .then((rows) => {
+        const byDate: Record<string, CalendarEvent[]> = {};
+        rows.forEach((r) => {
+          (byDate[r.event_date] ??= []).push(r);
+        });
+        setAdminNotes(byDate);
+      })
+      .catch(() => {});
+  }, [month]);
+
+  useEffect(loadAdminNotes, [loadAdminNotes]);
+
+  const closeNoteEditor = () => {
+    setNoteExpandedId(null);
+    setNoteEditDraft(null);
+  };
+
+  const startNoteEdit = (n: CalendarEvent) => {
+    setNoteExpandedId(n.id);
+    setNoteEditDraft({ title: n.title, event_date: n.event_date, notes: n.notes ?? "" });
+  };
+
+  const addNote = async () => {
+    if (!selected || !newNoteTitle.trim()) return;
+    setNoteSaving(true);
+    try {
+      const created = await api<CalendarEvent>("/calendar/admin", {
+        method: "POST",
+        body: { event_date: selected, title: newNoteTitle.trim(), notes: newNoteText.trim() || null },
+      });
+      setAdminNotes((prev) => ({ ...prev, [selected]: [...(prev[selected] ?? []), created] }));
+      setNewNoteTitle("");
+      setNewNoteText("");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not add note");
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  const toggleNoteDone = async (n: CalendarEvent) => {
+    try {
+      const updated = await api<CalendarEvent>(`/calendar/admin/${n.id}`, {
+        method: "PATCH",
+        body: { done: !n.done },
+      });
+      setAdminNotes((prev) => ({
+        ...prev,
+        [updated.event_date]: (prev[updated.event_date] ?? []).map((x) => (x.id === updated.id ? updated : x)),
+      }));
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not update note");
+    }
+  };
+
+  const saveNoteEdit = async (n: CalendarEvent) => {
+    if (!noteEditDraft) return;
+    setNoteSaving(true);
+    try {
+      const updated = await api<CalendarEvent>(`/calendar/admin/${n.id}`, {
+        method: "PATCH",
+        body: {
+          title: noteEditDraft.title.trim(),
+          event_date: noteEditDraft.event_date,
+          notes: noteEditDraft.notes.trim() || null,
+        },
+      });
+      setAdminNotes((prev) => {
+        const next = { ...prev };
+        next[n.event_date] = (next[n.event_date] ?? []).filter((x) => x.id !== n.id);
+        next[updated.event_date] = [...(next[updated.event_date] ?? []), updated];
+        return next;
+      });
+      closeNoteEditor();
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not save note");
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  const deleteNote = async (n: CalendarEvent) => {
+    try {
+      await api(`/calendar/admin/${n.id}`, { method: "DELETE" });
+      setAdminNotes((prev) => ({
+        ...prev,
+        [n.event_date]: (prev[n.event_date] ?? []).filter((x) => x.id !== n.id),
+      }));
+      closeNoteEditor();
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not delete note");
+    }
+  };
+
   const today = toISODate(new Date());
   const firstOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -321,6 +429,10 @@ export default function Calendar() {
             <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
             Signed out
           </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-violet-500" />
+            Personal notes
+          </span>
         </div>
 
         {!days ? (
@@ -348,37 +460,43 @@ export default function Calendar() {
                   );
                 const iso = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                 const d = days[iso];
-                const hasData = d && (d.logins.length > 0 || d.shifts.length > 0 || d.sign_outs.length > 0);
+                const notesForDay = adminNotes[iso] ?? [];
+                const hasData = Boolean(
+                  (d && (d.logins.length > 0 || d.shifts.length > 0 || d.sign_outs.length > 0)) ||
+                    notesForDay.length > 0,
+                );
                 const isToday = iso === today;
-                const summaryLines = hasData
-                  ? [
-                      ...d.shifts.map((s, si) => ({
-                        key: `sh${si}-${s.time}${s.user_name}`,
-                        dot: "bg-emerald-500",
-                        text: `${s.user_name} · ${hoursLabel(s.hours)}`,
-                      })),
-                      ...d.logins.map((l, li) => ({
-                        key: `l${li}-${l.time}${l.user_name}`,
-                        dot: "bg-brand-500",
-                        text: `${l.user_name} logged in`,
-                      })),
-                      ...d.sign_outs.map((s, si) => ({
-                        key: `s${si}-${s.time}${s.item_name}`,
-                        dot: "bg-amber-500",
-                        text: `${fmtQty(s.qty, s.unit)} ${s.item_name}`,
-                      })),
-                    ]
-                  : [];
+                const summaryLines = [
+                  ...(d?.shifts ?? []).map((s, si) => ({
+                    key: `sh${si}-${s.time}${s.user_name}`,
+                    dot: "bg-emerald-500",
+                    text: `${s.user_name} · ${hoursLabel(s.hours)}`,
+                  })),
+                  ...(d?.logins ?? []).map((l, li) => ({
+                    key: `l${li}-${l.time}${l.user_name}`,
+                    dot: "bg-brand-500",
+                    text: `${l.user_name} logged in`,
+                  })),
+                  ...(d?.sign_outs ?? []).map((s, si) => ({
+                    key: `s${si}-${s.time}${s.item_name}`,
+                    dot: "bg-amber-500",
+                    text: `${fmtQty(s.qty, s.unit)} ${s.item_name}`,
+                  })),
+                  ...notesForDay.map((n) => ({
+                    key: `n${n.id}`,
+                    dot: "bg-violet-500",
+                    text: n.title,
+                  })),
+                ];
                 const shown = summaryLines.slice(0, 3);
                 const hiddenCount = summaryLines.length - shown.length;
                 return (
                   <button
                     key={i}
-                    onClick={() => hasData && setSelected(iso)}
-                    disabled={!hasData}
-                    className={`flex min-h-[92px] flex-col items-start gap-1 border-b border-r p-2 text-left transition-colors last:border-r-0 dark:border-slate-800 md:min-h-[132px] lg:min-h-[150px] ${
-                      hasData ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40" : "cursor-default"
-                    } ${(i + 1) % 7 === 0 ? "border-r-0" : "border-slate-100"}`}
+                    onClick={() => setSelected(iso)}
+                    className={`flex min-h-[92px] cursor-pointer flex-col items-start gap-1 border-b border-r p-2 text-left transition-colors last:border-r-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40 md:min-h-[132px] lg:min-h-[150px] ${
+                      (i + 1) % 7 === 0 ? "border-r-0" : "border-slate-100"
+                    }`}
                   >
                     <span className="flex w-full items-center justify-between">
                       <span
@@ -390,14 +508,19 @@ export default function Calendar() {
                       </span>
                       {hasData && (
                         <span className="flex gap-1 md:hidden">
-                          {d.shifts.length > 0 && (
+                          {(d?.shifts.length ?? 0) > 0 && (
                             <span className="badge bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                              {d.shifts.length}
+                              {d!.shifts.length}
                             </span>
                           )}
-                          {d.sign_outs.length > 0 && (
+                          {(d?.sign_outs.length ?? 0) > 0 && (
                             <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                              {d.sign_outs.length}
+                              {d!.sign_outs.length}
+                            </span>
+                          )}
+                          {notesForDay.length > 0 && (
+                            <span className="badge bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+                              {notesForDay.length}
                             </span>
                           )}
                         </span>
@@ -612,9 +735,152 @@ export default function Calendar() {
             day: "numeric",
             year: "numeric",
           })}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null);
+            closeNoteEditor();
+            setNewNoteTitle("");
+            setNewNoteText("");
+          }}
         >
           <div className="space-y-5">
+            <div>
+              <h2 className="section-title flex items-center gap-1.5">
+                <Icon name="lock" size={14} />
+                Personal notes ({(adminNotes[selected] ?? []).length})
+              </h2>
+              {(adminNotes[selected] ?? []).length === 0 ? (
+                <p className="px-1 text-[12.5px] text-slate-400 dark:text-slate-500">
+                  Only admins can see these — never shown to techs.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {(adminNotes[selected] ?? []).map((n) => {
+                    const isOpen = noteExpandedId === n.id;
+                    return (
+                      <div key={n.id} className="rounded-xl bg-violet-50/60 dark:bg-violet-500/10">
+                        <div className="flex items-start gap-3 p-3">
+                          <button
+                            type="button"
+                            aria-label={n.done ? "Mark not done" : "Mark done"}
+                            onClick={() => toggleNoteDone(n)}
+                            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                              n.done
+                                ? "border-violet-500 bg-violet-500 text-white"
+                                : "border-violet-300 dark:border-violet-700"
+                            }`}
+                          >
+                            {n.done && <Icon name="check" size={12} strokeWidth={3} />}
+                          </button>
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => (isOpen ? closeNoteEditor() : startNoteEdit(n))}
+                          >
+                            <span
+                              className={`block truncate text-[14px] font-semibold ${n.done ? "text-slate-400 line-through" : ""}`}
+                            >
+                              {n.title}
+                            </span>
+                            {n.notes && !isOpen && (
+                              <span className="mt-0.5 block truncate text-[12px] text-slate-500 dark:text-slate-400">
+                                {n.notes}
+                              </span>
+                            )}
+                          </button>
+                          <Icon
+                            name={isOpen ? "chevron-down" : "chevron-right"}
+                            size={16}
+                            className="mt-1 shrink-0 text-slate-300"
+                          />
+                        </div>
+                        {isOpen && noteEditDraft && (
+                          <div className="space-y-3 border-t border-violet-200/70 p-3 dark:border-violet-800/60">
+                            <label className="block">
+                              <span className="label">Title</span>
+                              <input
+                                className="input"
+                                value={noteEditDraft.title}
+                                onChange={(e) => setNoteEditDraft({ ...noteEditDraft, title: e.target.value })}
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="label">Date</span>
+                              <input
+                                type="date"
+                                className="input"
+                                value={noteEditDraft.event_date}
+                                onChange={(e) => setNoteEditDraft({ ...noteEditDraft, event_date: e.target.value })}
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="label">Notes</span>
+                              <textarea
+                                className="input min-h-[70px]"
+                                value={noteEditDraft.notes}
+                                onChange={(e) => setNoteEditDraft({ ...noteEditDraft, notes: e.target.value })}
+                              />
+                            </label>
+                            <div className="flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                className="btn-ghost text-red-600 dark:text-red-400"
+                                onClick={() => deleteNote(n)}
+                              >
+                                <Icon name="trash" size={16} />
+                                Delete
+                              </button>
+                              <div className="flex gap-2">
+                                <button type="button" className="btn-ghost" onClick={closeNoteEditor}>
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-primary"
+                                  disabled={noteSaving || !noteEditDraft.title.trim()}
+                                  onClick={() => saveNoteEdit(n)}
+                                >
+                                  {noteSaving ? <Spinner /> : "Save"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="space-y-2.5 pt-3">
+                <input
+                  className="input"
+                  placeholder="Add a personal note or to-do…"
+                  value={newNoteTitle}
+                  onChange={(e) => setNewNoteTitle(e.target.value)}
+                />
+                <textarea
+                  className="input min-h-[50px]"
+                  placeholder="Details (optional)"
+                  value={newNoteText}
+                  onChange={(e) => setNewNoteText(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary w-full"
+                  disabled={noteSaving || !newNoteTitle.trim()}
+                  onClick={addNote}
+                >
+                  {noteSaving ? (
+                    <Spinner />
+                  ) : (
+                    <>
+                      <Icon name="plus" size={18} />
+                      Add note
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
             <div>
               <h2 className="section-title flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
