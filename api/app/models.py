@@ -90,6 +90,10 @@ class ClockEvent(TimestampMixin, Base):
     approval_status: Mapped[str] = mapped_column(String(10), default="pending", nullable=False)  # pending | approved
     approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Required at clock-out going forward; nullable only because shifts
+    # closed before this field existed have none. Admin-only -- never shown
+    # on the shared team calendar.
+    clock_out_note: Mapped[str | None] = mapped_column(Text)
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
     approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_id])

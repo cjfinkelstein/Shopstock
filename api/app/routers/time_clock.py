@@ -79,6 +79,7 @@ def clock_out(body: ClockOutIn, db: Session = Depends(get_db), user: User = Depe
     ev.clock_out_at = utcnow()
     ev.clock_out_lat = body.lat
     ev.clock_out_lng = body.lng
+    ev.clock_out_note = body.note
     db.commit()
     return ClockStatusOut(clocked_in=False)
 

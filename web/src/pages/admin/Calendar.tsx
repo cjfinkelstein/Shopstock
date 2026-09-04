@@ -127,6 +127,7 @@ interface DayShiftEntry {
   still_clocked_in: boolean;
   hours: number;
   approval_status: string;
+  note: string | null;
 }
 
 interface SignOutEntry {
@@ -635,8 +636,9 @@ export default function Calendar() {
                       tabIndex={0}
                       onClick={() => openRoute(s.id)}
                       onKeyDown={(e) => e.key === "Enter" && openRoute(s.id)}
-                      className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 px-3.5 py-2.5 transition-colors hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800"
+                      className="cursor-pointer rounded-xl bg-slate-50 px-3.5 py-2.5 transition-colors hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800"
                     >
+                    <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate font-semibold">{s.user_name}</span>
@@ -673,6 +675,12 @@ export default function Calendar() {
                           {s.approval_status === "pending" ? "Approve" : "Unapprove"}
                         </button>
                       </div>
+                    </div>
+                    {s.note && (
+                      <p className="mt-2 border-t border-slate-200/70 pt-2 text-[12.5px] italic text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        "{s.note}"
+                      </p>
+                    )}
                     </div>
                   ))}
                 </div>

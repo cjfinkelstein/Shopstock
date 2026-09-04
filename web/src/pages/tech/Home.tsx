@@ -41,6 +41,8 @@ export default function Home() {
   const [clockBusy, setClockBusy] = useState(false);
   const [elapsed, setElapsed] = useState("0:00:00");
   const [jobPickerOpen, setJobPickerOpen] = useState(false);
+  const [clockOutNoteOpen, setClockOutNoteOpen] = useState(false);
+  const [clockOutNote, setClockOutNote] = useState("");
 
   // Big ticking clock -- recomputed every second from clockInAt while on shift.
   useEffect(() => {
@@ -58,10 +60,13 @@ export default function Home() {
   }, [clockedIn, clockInAt]);
 
   const handleClockOut = async () => {
+    if (!clockOutNote.trim()) return;
     setClockBusy(true);
     try {
-      await clockOut();
+      await clockOut(clockOutNote.trim());
       toast("success", "Clocked out");
+      setClockOutNoteOpen(false);
+      setClockOutNote("");
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Couldn't clock out");
     } finally {
@@ -155,7 +160,7 @@ export default function Home() {
               <button
                 type="button"
                 disabled={clockBusy}
-                onClick={handleClockOut}
+                onClick={() => setClockOutNoteOpen(true)}
                 className="btn-secondary w-full"
               >
                 {clockBusy ? <Spinner /> : <Icon name="logout" size={16} />}
@@ -197,6 +202,36 @@ export default function Home() {
       {jobPickerOpen && (
         <Sheet title="Clock in to…" onClose={() => setJobPickerOpen(false)}>
           <JobPicker onPick={handlePickJobAndClockIn} allowCreate />
+        </Sheet>
+      )}
+
+      {clockOutNoteOpen && (
+        <Sheet
+          title="What did you do today?"
+          subtitle="Only your admin can see this"
+          onClose={() => {
+            if (clockBusy) return;
+            setClockOutNoteOpen(false);
+          }}
+        >
+          <div className="space-y-4">
+            <textarea
+              className="input min-h-[120px]"
+              placeholder="e.g. Ran conduit for the panel upgrade, picked up permit from the county office…"
+              autoFocus
+              value={clockOutNote}
+              onChange={(e) => setClockOutNote(e.target.value)}
+            />
+            <button
+              type="button"
+              disabled={clockBusy || !clockOutNote.trim()}
+              onClick={handleClockOut}
+              className="btn-primary w-full"
+            >
+              {clockBusy ? <Spinner /> : <Icon name="logout" size={16} />}
+              Clock Out
+            </button>
+          </div>
         </Sheet>
       )}
 

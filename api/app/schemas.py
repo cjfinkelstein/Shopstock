@@ -95,6 +95,7 @@ class ClockInIn(BaseModel):
 class ClockOutIn(BaseModel):
     lat: float | None = None
     lng: float | None = None
+    note: str = Field(min_length=1)
 
 
 class LocationPingIn(BaseModel):

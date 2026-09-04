@@ -13,7 +13,7 @@ interface ClockState {
   gpsConsentGiven: boolean;
   loading: boolean;
   clockIn: (jobId: number) => Promise<void>;
-  clockOut: () => Promise<void>;
+  clockOut: (note: string) => Promise<void>;
   giveGpsConsent: () => Promise<void>;
 }
 
@@ -125,12 +125,12 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const clockOut = async () => {
+  const clockOut = async (note: string) => {
     const pos = await getPosition();
     try {
       await api("/time/clock-out", {
         method: "POST",
-        body: { lat: pos?.coords.latitude, lng: pos?.coords.longitude },
+        body: { lat: pos?.coords.latitude, lng: pos?.coords.longitude, note },
       });
       setClockedIn(false);
       setClockInAt(null);

@@ -82,6 +82,7 @@ def calendar(date_from: str, date_to: str, db: Session = Depends(get_db)):
             "still_clocked_in": e.clock_out_at is None,
             "hours": round(((e.clock_out_at or now) - e.clock_in_at).total_seconds() / 3600, 2),
             "approval_status": e.approval_status,
+            "note": e.clock_out_note,
         })
 
     signouts = (
