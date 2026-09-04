@@ -21,7 +21,6 @@ import AdminStock from "./pages/admin/Stock";
 import AdminTrucks from "./pages/admin/Trucks";
 import AdminLogin from "./pages/AdminLogin";
 import TapIn from "./pages/TapIn";
-import Activity from "./pages/tech/Activity";
 import Cart from "./pages/tech/Cart";
 import Home from "./pages/tech/Home";
 import ItemSheet from "./pages/tech/ItemSheet";
@@ -70,7 +69,8 @@ export default function App() {
         {/* scanner flow retired — old links land on Find */}
         <Route path="/scan" element={<Navigate to="/search" replace />} />
         <Route path="/truck" element={<Trucks />} />
-        <Route path="/activity" element={<Activity />} />
+        {/* Activity merged into the Cart page's History tab */}
+        <Route path="/activity" element={<Navigate to="/cart" replace />} />
         <Route path="/item/:id" element={<ItemSheet />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/my-hours" element={<MyHours />} />

@@ -129,7 +129,6 @@ export default function TechLayout() {
           </div>
           <Tab to="/cart" label="Cart" icon="cart" badge={lines.length} />
           <Tab to="/my-hours" label="Timesheet" icon="clock" />
-          <Tab to="/activity" label="Activity" icon="history" />
         </div>
       </nav>
 
