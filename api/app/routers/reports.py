@@ -442,11 +442,18 @@ def pnl(date_from: str = "", date_to: str = "", format: str = "", db: Session = 
             cost = (Decimal(str(hours)) * e.user.hourly_rate).quantize(Decimal("0.01"))
             labor_by_job[e.job_id] = labor_by_job.get(e.job_id, Decimal("0")) + cost
 
+    # Expense.expense_date / JobRevenue.received_date are real Date columns --
+    # comparing them against the raw query-string values crashes on Postgres
+    # ("operator does not exist: date >= character varying"), even though
+    # SQLite silently tolerates it. Parse to actual date objects first.
+    date_from_d = date.fromisoformat(date_from) if date_from else None
+    date_to_d = date.fromisoformat(date_to) if date_to else None
+
     expense_q = db.query(Expense)
-    if date_from:
-        expense_q = expense_q.filter(Expense.expense_date >= date_from)
-    if date_to:
-        expense_q = expense_q.filter(Expense.expense_date <= date_to)
+    if date_from_d:
+        expense_q = expense_q.filter(Expense.expense_date >= date_from_d)
+    if date_to_d:
+        expense_q = expense_q.filter(Expense.expense_date <= date_to_d)
     expense_by_job: dict[int, Decimal] = {}
     overhead_expenses = Decimal("0")
     for e in expense_q.all():
@@ -456,10 +463,10 @@ def pnl(date_from: str = "", date_to: str = "", format: str = "", db: Session = 
             expense_by_job[e.job_id] = expense_by_job.get(e.job_id, Decimal("0")) + e.amount
 
     revenue_q = db.query(JobRevenue)
-    if date_from:
-        revenue_q = revenue_q.filter(JobRevenue.received_date >= date_from)
-    if date_to:
-        revenue_q = revenue_q.filter(JobRevenue.received_date <= date_to)
+    if date_from_d:
+        revenue_q = revenue_q.filter(JobRevenue.received_date >= date_from_d)
+    if date_to_d:
+        revenue_q = revenue_q.filter(JobRevenue.received_date <= date_to_d)
     revenue_by_job: dict[int, Decimal] = {}
     for r in revenue_q.all():
         revenue_by_job[r.job_id] = revenue_by_job.get(r.job_id, Decimal("0")) + r.amount
