@@ -7,7 +7,7 @@ import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import { Avatar, Empty, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { SmtpSettings, Truck, User, Vendor } from "../../types";
+import type { PtoBalance, SmtpSettings, Truck, User, Vendor } from "../../types";
 
 type AddKind = "tech" | "truck" | "vendor";
 
@@ -63,6 +63,13 @@ export default function Settings() {
   const [pin, setPin] = useState("");
   const [rateFor, setRateFor] = useState<User | null>(null);
   const [rate, setRate] = useState("");
+  const [ptoFor, setPtoFor] = useState<User | null>(null);
+  const [ptoBalance, setPtoBalance] = useState<PtoBalance | null>(null);
+  const [newPtoDate, setNewPtoDate] = useState("");
+  const [newPtoCategory, setNewPtoCategory] = useState<"vacation" | "personal">("vacation");
+  const [newPtoDays, setNewPtoDays] = useState("1");
+  const [newPtoNotes, setNewPtoNotes] = useState("");
+  const [ptoSaving, setPtoSaving] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [addName, setAddName] = useState("");
@@ -166,6 +173,62 @@ export default function Settings() {
     load();
   };
 
+  const openPto = (u: User) => {
+    setPtoFor(u);
+    setPtoBalance(null);
+    setNewPtoDate("");
+    setNewPtoCategory("vacation");
+    setNewPtoDays("1");
+    setNewPtoNotes("");
+    api<PtoBalance[]>(`/pto?year=${new Date().getFullYear()}`)
+      .then((rows) => {
+        const mine = rows.find((b) => b.user_id === u.id);
+        if (mine) setPtoBalance(mine);
+      })
+      .catch(() => {});
+  };
+
+  const closePto = () => {
+    setPtoFor(null);
+    setPtoBalance(null);
+  };
+
+  const addPto = async () => {
+    if (!ptoFor || !newPtoDate || !newPtoDays || Number(newPtoDays) <= 0) return;
+    setPtoSaving(true);
+    try {
+      const updated = await api<PtoBalance>("/pto", {
+        method: "POST",
+        body: {
+          user_id: ptoFor.id,
+          entry_date: newPtoDate,
+          category: newPtoCategory,
+          days: newPtoDays,
+          notes: newPtoNotes.trim() || null,
+        },
+      });
+      setPtoBalance(updated);
+      setNewPtoDate("");
+      setNewPtoDays("1");
+      setNewPtoNotes("");
+      toast("success", `Logged ${newPtoDays} ${newPtoCategory} day(s) for ${ptoFor.name}`);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not log PTO");
+    } finally {
+      setPtoSaving(false);
+    }
+  };
+
+  const deletePto = async (entryId: number) => {
+    if (!ptoFor) return;
+    try {
+      await api(`/pto/${entryId}`, { method: "DELETE" });
+      openPto(ptoFor);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not remove entry");
+    }
+  };
+
   const clearPin = async (u: User) => {
     await api(`/users/${u.id}`, { method: "PATCH", body: { clear_pin: true } });
     toast("success", `PIN removed for ${u.name}`);
@@ -238,6 +301,10 @@ export default function Settings() {
               >
                 <Icon name="dollar-sign" size={15} />
                 {u.hourly_rate ? `${fmtMoney(u.hourly_rate)}/hr` : "Set rate"}
+              </button>
+              <button className="chip !min-h-[40px] px-3.5" onClick={() => openPto(u)} title="View/log PTO">
+                <Icon name="calendar" size={15} />
+                PTO
               </button>
               {u.has_pin ? (
                 <span className="flex items-center gap-1.5">
@@ -568,6 +635,135 @@ export default function Settings() {
               Save rate
             </button>
           </div>
+        </Sheet>
+      )}
+
+      {ptoFor && (
+        <Sheet
+          title={`PTO for ${ptoFor.name}`}
+          subtitle={`${ptoBalance?.year ?? new Date().getFullYear()} · resets every January 1st, no carryover`}
+          onClose={closePto}
+        >
+          {!ptoBalance ? (
+            <p className="py-6 text-center text-[13px] text-slate-400">Loading...</p>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-emerald-50 p-3.5 text-center dark:bg-emerald-500/10">
+                  <p className="text-[24px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                    {ptoBalance.vacation_remaining}
+                  </p>
+                  <p className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    of {ptoBalance.vacation_allotted} vacation days left
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-brand-50 p-3.5 text-center dark:bg-brand-500/10">
+                  <p className="text-[24px] font-extrabold text-brand-700 dark:text-brand-300">
+                    {ptoBalance.personal_remaining}
+                  </p>
+                  <p className="text-[11.5px] font-semibold text-brand-600 dark:text-brand-400">
+                    of {ptoBalance.personal_allotted} personal days left
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 rounded-2xl bg-slate-50 p-3.5 dark:bg-slate-800/60">
+                <p className="text-[13px] font-bold uppercase tracking-wider text-slate-400">Log a day</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="block">
+                    <span className="label">Date</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={newPtoDate}
+                      onChange={(e) => setNewPtoDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="label">Days</span>
+                    <input
+                      type="number"
+                      className="input"
+                      min="0.5"
+                      step="0.5"
+                      value={newPtoDays}
+                      onChange={(e) => setNewPtoDays(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="label">Type</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={`chip flex-1 !justify-center ${newPtoCategory === "vacation" ? "chip-active" : ""}`}
+                      onClick={() => setNewPtoCategory("vacation")}
+                    >
+                      Vacation
+                    </button>
+                    <button
+                      type="button"
+                      className={`chip flex-1 !justify-center ${newPtoCategory === "personal" ? "chip-active" : ""}`}
+                      onClick={() => setNewPtoCategory("personal")}
+                    >
+                      Personal
+                    </button>
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="label">Notes (optional)</span>
+                  <input
+                    className="input"
+                    placeholder="e.g. Family trip"
+                    value={newPtoNotes}
+                    onChange={(e) => setNewPtoNotes(e.target.value)}
+                  />
+                </label>
+                <button
+                  className="btn-primary w-full"
+                  disabled={ptoSaving || !newPtoDate || !newPtoDays || Number(newPtoDays) <= 0}
+                  onClick={addPto}
+                >
+                  {ptoSaving ? <Spinner /> : <Icon name="plus" size={16} />}
+                  Log PTO
+                </button>
+              </div>
+
+              <div>
+                <p className="mb-2 text-[13px] font-bold uppercase tracking-wider text-slate-400">
+                  This year's entries ({ptoBalance.entries.length})
+                </p>
+                {ptoBalance.entries.length === 0 ? (
+                  <p className="text-[12.5px] text-slate-400">Nothing logged yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {ptoBalance.entries.map((e) => (
+                      <div
+                        key={e.id}
+                        className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-semibold">
+                            {e.entry_date} · {e.days} {e.category} day{Number(e.days) === 1 ? "" : "s"}
+                          </p>
+                          {e.notes && (
+                            <p className="truncate text-[12px] text-slate-400 dark:text-slate-500">{e.notes}</p>
+                          )}
+                        </div>
+                        <button
+                          className="icon-btn shrink-0"
+                          aria-label="Remove entry"
+                          onClick={() => deletePto(e.id)}
+                        >
+                          <Icon name="trash" size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </Sheet>
       )}
 

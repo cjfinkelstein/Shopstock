@@ -928,6 +928,40 @@ class CalendarEventOut(TimestampedOut):
     edits: list[CalendarEventEditOut] = []
 
 
+# ---------- PTO ----------
+
+class PtoEntryCreate(BaseModel):
+    user_id: int
+    entry_date: date
+    category: str = Field(pattern="^(vacation|personal)$")
+    days: Decimal = Decimal("1")
+    notes: str | None = None
+
+
+class PtoEntryOut(TimestampedOut):
+    id: int
+    user_id: int
+    user_name: str
+    entry_date: date
+    category: str
+    days: Decimal
+    notes: str | None
+    created_by_name: str | None = None
+
+
+class PtoBalanceOut(BaseModel):
+    user_id: int
+    user_name: str
+    year: int
+    vacation_allotted: Decimal
+    vacation_used: Decimal
+    vacation_remaining: Decimal
+    personal_allotted: Decimal
+    personal_used: Decimal
+    personal_remaining: Decimal
+    entries: list[PtoEntryOut] = []
+
+
 # ---------- Labels ----------
 
 class LabelPrintIn(BaseModel):

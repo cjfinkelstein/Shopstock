@@ -76,6 +76,28 @@ class Location(TimestampMixin, Base):
     truck: Mapped[Truck | None] = relationship(back_populates="location")
 
 
+class PtoEntry(TimestampMixin, Base):
+    """One logged PTO/personal day (or partial day) taken by a tech, deducted
+    from their annual allotment -- 15 vacation days + 5 personal days per
+    the employee handbook. Balances reset every January 1st (no carryover
+    per the handbook), so remaining balance is always computed by summing
+    entries within the calendar year in question, never stored directly."""
+
+    __tablename__ = "pto_entries"
+    __table_args__ = (Index("ix_pto_entries_user", "user_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    category: Mapped[str] = mapped_column(String(10), nullable=False)  # vacation | personal
+    days: Mapped[Decimal] = mapped_column(Num(4, 2), default=Decimal("1"), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    creator: Mapped["User | None"] = relationship(foreign_keys=[created_by])
+
+
 class ClockEvent(TimestampMixin, Base):
     """One row per work shift: clock-in through clock-out."""
 

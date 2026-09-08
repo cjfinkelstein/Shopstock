@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import (
     assistant, auth_routes, calendar, dashboard, estimates, expenses, items, jobs, labels, public_estimates,
-    reports, stock, time_clock, transactions, trucks, users, vendors,
+    pto, reports, stock, time_clock, transactions, trucks, users, vendors,
 )
 from app.routers import settings as settings_router
 
@@ -33,7 +33,7 @@ def health():
 for r in (auth_routes.router, users.router, trucks.router, vendors.router, items.router,
           labels.router, jobs.router, transactions.router, stock.router, reports.router,
           dashboard.router, estimates.router, time_clock.router, expenses.router, public_estimates.router,
-          assistant.router, calendar.router, calendar.admin_router, settings_router.router):
+          assistant.router, calendar.router, calendar.admin_router, settings_router.router, pto.router):
     api.include_router(r)
 
 app.include_router(api)

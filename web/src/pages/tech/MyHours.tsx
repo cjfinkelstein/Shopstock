@@ -5,6 +5,7 @@ import { api, fmtWhen } from "../../api";
 import Icon from "../../components/Icon";
 import { Empty, ListSkeleton } from "../../components/ui";
 import { hoursLabel } from "../../hours";
+import type { PtoBalance } from "../../types";
 
 interface Shift {
   id: number;
@@ -20,9 +21,14 @@ interface Shift {
 export default function MyHours() {
   const navigate = useNavigate();
   const [shifts, setShifts] = useState<Shift[] | null>(null);
+  const [pto, setPto] = useState<PtoBalance | null>(null);
 
   useEffect(() => {
     api<Shift[]>("/time/my-shifts").then(setShifts).catch(() => setShifts([]));
+  }, []);
+
+  useEffect(() => {
+    api<PtoBalance>("/pto/balance").then(setPto).catch(() => {});
   }, []);
 
   const totalHours = shifts?.reduce((sum, s) => sum + s.hours, 0) ?? 0;
@@ -43,6 +49,27 @@ export default function MyHours() {
           <h1 className="page-title mt-1">Timesheet</h1>
         </div>
       </header>
+
+      {pto && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl bg-emerald-50 p-3.5 text-center dark:bg-emerald-500/10">
+            <p className="text-[24px] font-extrabold text-emerald-700 dark:text-emerald-300">
+              {pto.vacation_remaining}
+            </p>
+            <p className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+              of {pto.vacation_allotted} vacation days left
+            </p>
+          </div>
+          <div className="rounded-2xl bg-brand-50 p-3.5 text-center dark:bg-brand-500/10">
+            <p className="text-[24px] font-extrabold text-brand-700 dark:text-brand-300">
+              {pto.personal_remaining}
+            </p>
+            <p className="text-[11.5px] font-semibold text-brand-600 dark:text-brand-400">
+              of {pto.personal_allotted} personal days left
+            </p>
+          </div>
+        </div>
+      )}
 
       {shifts === null ? (
         <ListSkeleton rows={5} />

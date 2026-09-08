@@ -190,6 +190,31 @@ export interface CalendarEventEdit {
   created_at: string;
 }
 
+export interface PtoEntry {
+  id: number;
+  user_id: number;
+  user_name: string;
+  entry_date: string;
+  category: "vacation" | "personal";
+  days: string;
+  notes: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface PtoBalance {
+  user_id: number;
+  user_name: string;
+  year: number;
+  vacation_allotted: string;
+  vacation_used: string;
+  vacation_remaining: string;
+  personal_allotted: string;
+  personal_used: string;
+  personal_remaining: string;
+  entries: PtoEntry[];
+}
+
 export interface SmtpSettings {
   host: string;
   port: number;
