@@ -190,6 +190,17 @@ export interface CalendarEventEdit {
   created_at: string;
 }
 
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  use_tls: boolean;
+  username: string;
+  from_address: string;
+  from_name: string;
+  has_password: boolean;
+  configured: boolean;
+}
+
 export interface CalendarEvent {
   id: number;
   event_date: string;

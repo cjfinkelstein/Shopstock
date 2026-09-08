@@ -5,9 +5,9 @@ import { api, fmtMoney } from "../../api";
 import { catTint } from "../../catcolor";
 import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
-import { Avatar, Empty } from "../../components/ui";
+import { Avatar, Empty, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { Truck, User, Vendor } from "../../types";
+import type { SmtpSettings, Truck, User, Vendor } from "../../types";
 
 type AddKind = "tech" | "truck" | "vendor";
 
@@ -67,14 +67,58 @@ export default function Settings() {
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [addName, setAddName] = useState("");
 
+  const [smtp, setSmtp] = useState<SmtpSettings | null>(null);
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUseTls, setSmtpUseTls] = useState(true);
+  const [smtpUsername, setSmtpUsername] = useState("");
+  const [smtpFromAddress, setSmtpFromAddress] = useState("");
+  const [smtpFromName, setSmtpFromName] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpSaving, setSmtpSaving] = useState(false);
+
   const load = useCallback(() => {
     api<User[]>("/users?include_inactive=true").then(setUsers).catch(() => {});
     api<Truck[]>("/trucks?include_inactive=true").then(setTrucks).catch(() => {});
     api<Vendor[]>("/vendors?include_inactive=true").then(setVendors).catch(() => {});
     api<string[]>("/items/categories").then(setCategories).catch(() => {});
+    api<SmtpSettings>("/settings/smtp").then((s) => {
+      setSmtp(s);
+      setSmtpHost(s.host);
+      setSmtpPort(String(s.port));
+      setSmtpUseTls(s.use_tls);
+      setSmtpUsername(s.username);
+      setSmtpFromAddress(s.from_address);
+      setSmtpFromName(s.from_name);
+    }).catch(() => {});
   }, []);
 
   useEffect(load, [load]);
+
+  const saveSmtp = async () => {
+    setSmtpSaving(true);
+    try {
+      const s = await api<SmtpSettings>("/settings/smtp", {
+        method: "PUT",
+        body: {
+          host: smtpHost,
+          port: Number(smtpPort) || 587,
+          use_tls: smtpUseTls,
+          username: smtpUsername,
+          from_address: smtpFromAddress,
+          from_name: smtpFromName,
+          password: smtpPassword || null,
+        },
+      });
+      setSmtp(s);
+      setSmtpPassword("");
+      toast("success", "Email settings saved");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not save email settings");
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
 
   const techs = users.filter((u) => u.role === "tech");
 
@@ -349,6 +393,102 @@ export default function Settings() {
           Count corrections, damaged or lost material. Every adjustment is logged with reason and
           note on the Adjustments report.
         </p>
+      </Section>
+
+      {/* Email (SMTP) */}
+      <Section
+        icon="mail"
+        tint="bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400"
+        title="Email"
+        caption={smtp?.configured ? `Sending as ${smtp.from_address}` : "Not connected yet"}
+      >
+        <div className="space-y-4 p-4">
+          <p className="text-sm text-slate-400 dark:text-slate-500">
+            Connects a mailbox for estimate-ready emails and admin password resets. For Gmail or
+            Outlook, use an <span className="font-semibold">app password</span> here, not your
+            regular sign-in password — your provider's account settings can generate one.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="label">SMTP host</span>
+              <input
+                className="input"
+                placeholder="smtp.gmail.com"
+                value={smtpHost}
+                onChange={(e) => setSmtpHost(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="label">Port</span>
+              <input
+                className="input"
+                inputMode="numeric"
+                placeholder="587"
+                value={smtpPort}
+                onChange={(e) => setSmtpPort(e.target.value.replace(/\D/g, ""))}
+              />
+            </label>
+            <label className="block">
+              <span className="label">Mailbox username</span>
+              <input
+                className="input"
+                placeholder="you@company.com"
+                value={smtpUsername}
+                onChange={(e) => setSmtpUsername(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <label className="block">
+              <span className="label">Password / app password</span>
+              <input
+                className="input"
+                type="password"
+                placeholder={smtp?.has_password ? "•••••••• (saved — leave blank to keep)" : "App password"}
+                value={smtpPassword}
+                onChange={(e) => setSmtpPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </label>
+            <label className="block">
+              <span className="label">From address</span>
+              <input
+                className="input"
+                placeholder="you@company.com"
+                value={smtpFromAddress}
+                onChange={(e) => setSmtpFromAddress(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="label">From name</span>
+              <input
+                className="input"
+                placeholder="APEX Electrical Group"
+                value={smtpFromName}
+                onChange={(e) => setSmtpFromName(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <label className="flex items-center gap-2.5 text-[14px] font-medium">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300"
+              checked={smtpUseTls}
+              onChange={(e) => setSmtpUseTls(e.target.checked)}
+            />
+            Use TLS (leave on unless your provider says otherwise)
+          </label>
+
+          <button
+            className="btn-primary"
+            disabled={smtpSaving || !smtpHost.trim() || !smtpFromAddress.trim()}
+            onClick={saveSmtp}
+          >
+            {smtpSaving ? <Spinner /> : <Icon name="check" size={16} />}
+            Save email settings
+          </button>
+        </div>
       </Section>
 
       {addKind && (

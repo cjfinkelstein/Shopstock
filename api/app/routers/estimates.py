@@ -479,7 +479,7 @@ def send_estimate(estimate_id: int, db: Session = Depends(get_db)):
     out = _serialize(estimate)
     view_url = f"{settings.public_base_url}/estimate/{estimate.share_token}"
     try:
-        send_estimate_email(estimate.customer_email, estimate, view_url, str(out.total))
+        send_estimate_email(db, estimate.customer_email, estimate, view_url, str(out.total))
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=f"Couldn't send the email: {e}")
 

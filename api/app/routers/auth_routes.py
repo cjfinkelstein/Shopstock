@@ -107,7 +107,7 @@ def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)):
         db.commit()
         reset_url = f"{settings.public_base_url}/reset-password?token={user.reset_token}"
         try:
-            send_password_reset_email(user.email, user.name, reset_url)
+            send_password_reset_email(db, user.email, user.name, reset_url)
         except RuntimeError as e:
             raise HTTPException(status_code=502, detail=f"Couldn't send the email: {e}")
 

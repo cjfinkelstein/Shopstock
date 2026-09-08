@@ -42,6 +42,27 @@ class ForgotPasswordIn(BaseModel):
     email: str
 
 
+class SmtpSettingsIn(BaseModel):
+    host: str = ""
+    port: int = 587
+    use_tls: bool = True
+    username: str = ""
+    from_address: str = ""
+    from_name: str = ""
+    password: str | None = None  # blank/omitted = leave the stored password unchanged
+
+
+class SmtpSettingsOut(BaseModel):
+    host: str
+    port: int
+    use_tls: bool
+    username: str
+    from_address: str
+    from_name: str
+    has_password: bool
+    configured: bool
+
+
 class ResetPasswordIn(BaseModel):
     token: str
     new_password: str = Field(min_length=8)

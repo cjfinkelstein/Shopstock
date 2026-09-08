@@ -370,6 +370,26 @@ class CalendarEventEdit(Base):
     editor: Mapped["User | None"] = relationship()
 
 
+class SmtpSettings(TimestampMixin, Base):
+    """Single-row table (id always 1) holding the outbound-email mailbox an
+    admin connects through the Settings page -- estimate-sending and
+    password-reset emails both send through whatever's configured here.
+    Replaces the old env-var-only SMTP_* config so a non-technical admin can
+    set it up themselves in the app, instead of needing someone to edit the
+    server's .env file (which would mean handling their email password)."""
+
+    __tablename__ = "smtp_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    host: Mapped[str | None] = mapped_column(String(200))
+    port: Mapped[int] = mapped_column(default=587, nullable=False)
+    use_tls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(200))
+    password: Mapped[str | None] = mapped_column(Text)  # plaintext -- never returned by the API, write-only
+    from_address: Mapped[str | None] = mapped_column(String(200))
+    from_name: Mapped[str | None] = mapped_column(String(200))
+
+
 class Transaction(TimestampMixin, Base):
     """The ledger — source of truth for every stock change."""
 
