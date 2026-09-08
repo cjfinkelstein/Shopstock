@@ -74,7 +74,6 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/calendar" element={<TeamCalendar />} />
       <Route element={<TechLayout />}>
         <Route path="/home" element={<Home />} />
         <Route path="/search" element={<Search />} />
@@ -86,6 +85,7 @@ export default function App() {
         <Route path="/item/:id" element={<ItemSheet />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/my-hours" element={<MyHours />} />
+        <Route path="/calendar" element={<TeamCalendar />} />
       </Route>
       {user.role === "admin" && (
         <Route path="/admin" element={<AdminLayout />}>
