@@ -938,15 +938,34 @@ class PtoEntryCreate(BaseModel):
     notes: str | None = None
 
 
+class PtoRequestIn(BaseModel):
+    start_date: date
+    end_date: date
+    category: str = Field(pattern="^(vacation|personal)$")
+    notes: str | None = None
+
+
 class PtoEntryOut(TimestampedOut):
     id: int
     user_id: int
     user_name: str
     entry_date: date
+    end_date: date | None
     category: str
     days: Decimal
+    status: str
     notes: str | None
     created_by_name: str | None = None
+    decided_by_name: str | None = None
+    decided_at: datetime | None = None
+
+    @field_serializer("decided_at")
+    def _ser_decided_at(self, v: datetime | None, _info):
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
 
 
 class PtoBalanceOut(BaseModel):
@@ -956,9 +975,11 @@ class PtoBalanceOut(BaseModel):
     vacation_allotted: Decimal
     vacation_used: Decimal
     vacation_remaining: Decimal
+    vacation_pending: Decimal
     personal_allotted: Decimal
     personal_used: Decimal
     personal_remaining: Decimal
+    personal_pending: Decimal
     entries: list[PtoEntryOut] = []
 
 

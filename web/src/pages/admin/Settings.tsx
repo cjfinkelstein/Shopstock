@@ -7,7 +7,7 @@ import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import { Avatar, Empty, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { PtoBalance, SmtpSettings, Truck, User, Vendor } from "../../types";
+import type { PtoBalance, PtoEntry, SmtpSettings, Truck, User, Vendor } from "../../types";
 
 type AddKind = "tech" | "truck" | "vendor";
 
@@ -70,6 +70,8 @@ export default function Settings() {
   const [newPtoDays, setNewPtoDays] = useState("1");
   const [newPtoNotes, setNewPtoNotes] = useState("");
   const [ptoSaving, setPtoSaving] = useState(false);
+  const [pendingPto, setPendingPto] = useState<PtoEntry[] | null>(null);
+  const [decidingPto, setDecidingPto] = useState<number | null>(null);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [addName, setAddName] = useState("");
@@ -98,7 +100,21 @@ export default function Settings() {
       setSmtpFromAddress(s.from_address);
       setSmtpFromName(s.from_name);
     }).catch(() => {});
+    api<PtoEntry[]>("/pto/pending").then(setPendingPto).catch(() => setPendingPto([]));
   }, []);
+
+  const decidePto = async (entryId: number, decision: "approve" | "deny") => {
+    setDecidingPto(entryId);
+    try {
+      await api(`/pto/${entryId}/${decision}`, { method: "POST" });
+      setPendingPto((prev) => (prev ?? []).filter((e) => e.id !== entryId));
+      toast("success", decision === "approve" ? "Request approved" : "Request denied");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not update request");
+    } finally {
+      setDecidingPto(null);
+    }
+  };
 
   useEffect(load, [load]);
 
@@ -229,6 +245,17 @@ export default function Settings() {
     }
   };
 
+  const decidePtoInSheet = async (entryId: number, decision: "approve" | "deny") => {
+    if (!ptoFor) return;
+    try {
+      await api(`/pto/${entryId}/${decision}`, { method: "POST" });
+      openPto(ptoFor);
+      setPendingPto((prev) => (prev ?? []).filter((e) => e.id !== entryId));
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not update request");
+    }
+  };
+
   const clearPin = async (u: User) => {
     await api(`/users/${u.id}`, { method: "PATCH", body: { clear_pin: true } });
     toast("success", `PIN removed for ${u.name}`);
@@ -266,6 +293,49 @@ export default function Settings() {
         <p className="page-eyebrow">Workspace</p>
         <h1 className="page-title">Settings</h1>
       </div>
+
+      {/* PTO requests */}
+      {pendingPto && pendingPto.length > 0 && (
+        <Section
+          icon="calendar"
+          tint="bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400"
+          title="PTO Requests"
+          caption={`${plural(pendingPto.length, "request")} waiting on you`}
+        >
+          <div className="divide-list">
+            {pendingPto.map((e) => (
+              <div key={e.id} className="flex flex-wrap items-center gap-2.5 px-4 py-3">
+                <Avatar name={e.user_name} index={e.user_id} size={36} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold">{e.user_name}</p>
+                  <p className="truncate text-[12.5px] text-slate-500 dark:text-slate-400">
+                    {e.entry_date}
+                    {e.end_date && e.end_date !== e.entry_date ? ` – ${e.end_date}` : ""} · {e.days}d{" "}
+                    <span className="capitalize">{e.category}</span>
+                    {e.notes ? ` · ${e.notes}` : ""}
+                  </p>
+                </div>
+                <button
+                  className="btn-secondary !min-h-[40px] px-3.5 text-[13px] text-emerald-700 dark:text-emerald-300"
+                  disabled={decidingPto === e.id}
+                  onClick={() => decidePto(e.id, "approve")}
+                >
+                  {decidingPto === e.id ? <Spinner /> : <Icon name="check" size={15} />}
+                  Approve
+                </button>
+                <button
+                  className="btn-ghost !min-h-[40px] px-3.5 text-[13px]"
+                  disabled={decidingPto === e.id}
+                  onClick={() => decidePto(e.id, "deny")}
+                >
+                  <Icon name="x" size={15} />
+                  Deny
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {/* Techs */}
       <Section
@@ -743,13 +813,44 @@ export default function Settings() {
                         className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60"
                       >
                         <div className="min-w-0">
-                          <p className="text-[13px] font-semibold">
-                            {e.entry_date} · {e.days} {e.category} day{Number(e.days) === 1 ? "" : "s"}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <p className={`text-[13px] font-semibold ${e.status === "denied" ? "text-slate-400 line-through" : ""}`}>
+                              {e.entry_date}
+                              {e.end_date && e.end_date !== e.entry_date ? ` – ${e.end_date}` : ""} · {e.days}{" "}
+                              {e.category} day{Number(e.days) === 1 ? "" : "s"}
+                            </p>
+                            {e.status !== "approved" && (
+                              <span
+                                className={`badge shrink-0 capitalize ${
+                                  e.status === "pending"
+                                    ? "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+                                    : "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400"
+                                }`}
+                              >
+                                {e.status}
+                              </span>
+                            )}
+                          </div>
                           {e.notes && (
                             <p className="truncate text-[12px] text-slate-400 dark:text-slate-500">{e.notes}</p>
                           )}
                         </div>
+                        {e.status === "pending" && (
+                          <div className="flex shrink-0 gap-1.5">
+                            <button
+                              className="btn-secondary !min-h-[36px] px-2.5 text-[12px] text-emerald-700 dark:text-emerald-300"
+                              onClick={() => decidePtoInSheet(e.id, "approve")}
+                            >
+                              <Icon name="check" size={14} />
+                            </button>
+                            <button
+                              className="btn-ghost !min-h-[36px] px-2.5 text-[12px]"
+                              onClick={() => decidePtoInSheet(e.id, "deny")}
+                            >
+                              <Icon name="x" size={14} />
+                            </button>
+                          </div>
+                        )}
                         <button
                           className="icon-btn shrink-0"
                           aria-label="Remove entry"

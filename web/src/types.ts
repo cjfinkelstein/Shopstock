@@ -195,10 +195,14 @@ export interface PtoEntry {
   user_id: number;
   user_name: string;
   entry_date: string;
+  end_date: string | null;
   category: "vacation" | "personal";
   days: string;
+  status: "pending" | "approved" | "denied";
   notes: string | null;
   created_by_name: string | null;
+  decided_by_name: string | null;
+  decided_at: string | null;
   created_at: string;
 }
 
@@ -209,9 +213,11 @@ export interface PtoBalance {
   vacation_allotted: string;
   vacation_used: string;
   vacation_remaining: string;
+  vacation_pending: string;
   personal_allotted: string;
   personal_used: string;
   personal_remaining: string;
+  personal_pending: string;
   entries: PtoEntry[];
 }
 

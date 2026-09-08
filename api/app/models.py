@@ -77,11 +77,18 @@ class Location(TimestampMixin, Base):
 
 
 class PtoEntry(TimestampMixin, Base):
-    """One logged PTO/personal day (or partial day) taken by a tech, deducted
-    from their annual allotment -- 15 vacation days + 5 personal days per
-    the employee handbook. Balances reset every January 1st (no carryover
-    per the handbook), so remaining balance is always computed by summing
-    entries within the calendar year in question, never stored directly."""
+    """One logged or requested PTO/personal block of days for a tech,
+    deducted from their annual allotment -- 15 vacation days + 5 personal
+    days per the employee handbook. Balances reset every January 1st (no
+    carryover per the handbook), so remaining balance is always computed by
+    summing approved entries within the calendar year, never stored
+    directly.
+
+    A tech's own self-service request (POST /pto/request) is created with
+    status="pending" and doesn't count against their balance until an admin
+    approves it. An admin logging a historical/manual entry directly (POST
+    /pto) is auto-approved -- there's nothing to confirm since the admin is
+    the one entering it."""
 
     __tablename__ = "pto_entries"
     __table_args__ = (Index("ix_pto_entries_user", "user_id"),)
@@ -89,13 +96,18 @@ class PtoEntry(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date)  # None = single-day entry (== entry_date)
     category: Mapped[str] = mapped_column(String(10), nullable=False)  # vacation | personal
     days: Mapped[Decimal] = mapped_column(Num(4, 2), default=Decimal("1"), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), default="approved", nullable=False)  # pending|approved|denied
     notes: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
     creator: Mapped["User | None"] = relationship(foreign_keys=[created_by])
+    decider: Mapped["User | None"] = relationship(foreign_keys=[decided_by])
 
 
 class ClockEvent(TimestampMixin, Base):
