@@ -30,6 +30,10 @@ class User(TimestampMixin, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     gps_consent_at: Mapped[datetime | None] = mapped_column(DateTime)
     hourly_rate: Mapped[Decimal | None] = mapped_column(Num(10, 2))  # admin-settable; None = not set yet
+    # Forgot-password flow (admin only) -- same one-time-token shape as
+    # Estimate.share_token. Cleared after use or once a new one is issued.
+    reset_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     truck: Mapped["Truck | None"] = relationship(back_populates="assigned_user", uselist=False)
 

@@ -42,18 +42,26 @@ def _html_body(estimate: Estimate, view_url: str, total: str) -> str:
 
 def send_estimate_email(to_address: str, estimate: Estimate, view_url: str, total: str) -> None:
     """Raises RuntimeError if SMTP isn't configured yet, or the send fails."""
+    text = (
+        f"Your estimate {estimate.estimate_number} for ${total} is ready to review.\n\n"
+        f"View and respond here: {view_url}\n"
+    )
+    _send(
+        to_address, f"Estimate {estimate.estimate_number} from {settings.smtp_from_name}",
+        text, _html_body(estimate, view_url, total),
+    )
+
+
+def _send(to_address: str, subject: str, text_body: str, html_body: str) -> None:
     if not settings.smtp_host or not settings.smtp_from_address:
         raise RuntimeError("Email isn't set up yet -- ask your admin to add SMTP settings.")
 
     msg = EmailMessage()
-    msg["Subject"] = f"Estimate {estimate.estimate_number} from {settings.smtp_from_name}"
+    msg["Subject"] = subject
     msg["From"] = formataddr((settings.smtp_from_name, settings.smtp_from_address))
     msg["To"] = to_address
-    msg.set_content(
-        f"Your estimate {estimate.estimate_number} for ${total} is ready to review.\n\n"
-        f"View and respond here: {view_url}\n"
-    )
-    msg.add_alternative(_html_body(estimate, view_url, total), subtype="html")
+    msg.set_content(text_body)
+    msg.add_alternative(html_body, subtype="html")
 
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
@@ -64,3 +72,33 @@ def send_estimate_email(to_address: str, estimate: Estimate, view_url: str, tota
             smtp.send_message(msg)
     except Exception as e:
         raise RuntimeError(str(e)) from e
+
+
+def send_password_reset_email(to_address: str, name: str, reset_url: str) -> None:
+    """Raises RuntimeError if SMTP isn't configured yet, or the send fails."""
+    html = f"""\
+<div style="font-family:Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1e293b;">
+  <p style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin:0 0 4px;">
+    {settings.smtp_from_name}
+  </p>
+  <h1 style="font-size:20px;margin:0 0 16px;">Reset your admin password</h1>
+  <p style="font-size:15px;line-height:1.5;margin:0 0 20px;">
+    Hi {name}, we got a request to reset the password on your {settings.app_name} admin account.
+    This link works once and expires in 1 hour.
+  </p>
+  <p style="margin:0 0 20px;">
+    <a href="{reset_url}" style="{_BUTTON_STYLE}">Reset Password</a>
+  </p>
+  <p style="font-size:13px;color:#64748b;line-height:1.5;margin:0;">
+    Or copy this link into your browser:<br>
+    <a href="{reset_url}" style="color:#4338ca;">{reset_url}</a><br><br>
+    Didn't request this? You can safely ignore this email -- your password won't change.
+  </p>
+</div>
+"""
+    text = (
+        f"We got a request to reset the password on your {settings.app_name} admin account.\n\n"
+        f"Reset it here (expires in 1 hour): {reset_url}\n\n"
+        "Didn't request this? You can safely ignore this email -- your password won't change."
+    )
+    _send(to_address, f"Reset your {settings.app_name} password", text, html)

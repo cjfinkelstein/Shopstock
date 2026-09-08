@@ -9,6 +9,7 @@ interface AuthState {
   myTruck: TechDashboard["my_truck"];
   tapIn: (userId: number, pin?: string) => Promise<User>;
   adminLogin: (email: string, password: string) => Promise<User>;
+  resetPassword: (token: string, newPassword: string) => Promise<User>;
   logout: () => void;
   refreshTruck: () => void;
 }
@@ -60,6 +61,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return r.user;
   };
 
+  const resetPassword = async (token: string, newPassword: string) => {
+    const r = await api<{ access_token: string; user: User }>("/auth/reset-password", {
+      method: "POST",
+      body: { token, new_password: newPassword },
+    });
+    setToken(r.access_token);
+    setUser(r.user);
+    return r.user;
+  };
+
   const logout = () => {
     api("/auth/logout", { method: "POST" }).catch(() => {});
     setToken(null);
@@ -69,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, myTruck, tapIn, adminLogin, logout, refreshTruck: loadTruck }}
+      value={{ user, loading, myTruck, tapIn, adminLogin, resetPassword, logout, refreshTruck: loadTruck }}
     >
       {children}
     </AuthContext.Provider>

@@ -10,6 +10,7 @@ import EstimateDetail from "./pages/admin/EstimateDetail";
 import AdminEstimates from "./pages/admin/Estimates";
 import AdminExpenses from "./pages/admin/Expenses";
 import PublicEstimate from "./pages/PublicEstimate";
+import ResetPassword from "./pages/ResetPassword";
 import TeamCalendar from "./pages/TeamCalendar";
 import AdminItems from "./pages/admin/Items";
 import AdminJobs from "./pages/admin/Jobs";
@@ -38,6 +39,17 @@ export default function App() {
     return (
       <Routes>
         <Route path="/estimate/:token" element={<PublicEstimate />} />
+      </Routes>
+    );
+  }
+
+  // Same reasoning for the password-reset link -- a locked-out admin has no
+  // valid token in this browser, and resetting takes them straight to
+  // /admin once it succeeds (see ResetPassword's navigate call).
+  if (window.location.pathname.startsWith("/reset-password")) {
+    return (
+      <Routes>
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Routes>
     );
   }

@@ -1,3 +1,6 @@
+import secrets
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -10,11 +13,15 @@ from app.auth import (
     record_failed_attempt,
     verify_secret,
 )
+from app.config import settings
 from app.database import get_db
-from app.models import LoginEvent, User
-from app.schemas import AdminLogin, ChangePinIn, TapIn, TokenOut, UserOut
+from app.models import LoginEvent, User, utcnow
+from app.schemas import AdminLogin, ChangePinIn, ForgotPasswordIn, ResetPasswordIn, TapIn, TokenOut, UserOut
+from app.services.mailer import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+RESET_TOKEN_HOURS = 1
 
 
 def _user_out(user: User) -> UserOut:
@@ -81,3 +88,42 @@ def logout(user: User = Depends(get_current_user)):
     # Stateless JWT: the client discards the token. Endpoint exists so the
     # frontend has one call for the whole logout flow.
     return {"ok": True}
+
+
+@router.post("/forgot-password")
+def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)):
+    """Always returns the same generic message regardless of whether the
+    email matches an account, so this can't be used to check who has an
+    admin login. Rate-limited per email the same way tap/login lockout is."""
+    email = body.email.lower().strip()
+    lock_key = f"forgot:{email}"
+    check_not_locked_out(lock_key)
+    record_failed_attempt(lock_key)
+
+    user = db.query(User).filter(User.email == email, User.role == "admin", User.active).first()
+    if user:
+        user.reset_token = secrets.token_urlsafe(32)
+        user.reset_token_expires_at = utcnow() + timedelta(hours=RESET_TOKEN_HOURS)
+        db.commit()
+        reset_url = f"{settings.public_base_url}/reset-password?token={user.reset_token}"
+        try:
+            send_password_reset_email(user.email, user.name, reset_url)
+        except RuntimeError as e:
+            raise HTTPException(status_code=502, detail=f"Couldn't send the email: {e}")
+
+    return {"detail": "If that email has an admin account, we've sent a reset link."}
+
+
+@router.post("/reset-password", response_model=TokenOut)
+def reset_password(body: ResetPasswordIn, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.reset_token == body.token).first()
+    if not user or not user.reset_token_expires_at or user.reset_token_expires_at < utcnow():
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired.")
+
+    user.password_hash = hash_secret(body.new_password)
+    user.reset_token = None
+    user.reset_token_expires_at = None
+    db.commit()
+    db.add(LoginEvent(user_id=user.id, role=user.role))
+    db.commit()
+    return TokenOut(access_token=create_token(user), user=_user_out(user))

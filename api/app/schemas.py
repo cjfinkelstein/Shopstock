@@ -38,6 +38,15 @@ class TokenOut(BaseModel):
     user: "UserOut"
 
 
+class ForgotPasswordIn(BaseModel):
+    email: str
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8)
+
+
 # ---------- Users ----------
 
 class UserBase(BaseModel):
