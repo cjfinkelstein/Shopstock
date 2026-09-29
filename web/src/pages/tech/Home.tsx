@@ -28,6 +28,8 @@ export default function Home() {
     jobNumber,
     jobName,
     approvalStatus,
+    gpsConsentGiven,
+    offlinePending,
     loading: clockLoading,
     clockIn,
     clockOut,
@@ -80,8 +82,10 @@ export default function Home() {
     try {
       // Tapping Clock In is the agreement itself -- recorded once,
       // permanently, the first time; harmless to send again after that.
-      await giveGpsConsent();
-      await clockIn(job.id);
+      // Skipped once already given so a tech with no signal isn't blocked
+      // by a consent call that has nothing new to record anyway.
+      if (!gpsConsentGiven) await giveGpsConsent();
+      await clockIn(job);
       toast("success", `Clocked in to ${job.job_number}`);
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Couldn't clock in");
@@ -139,6 +143,12 @@ export default function Home() {
                     </span>
                   )}
                 </div>
+                {offlinePending && (
+                  <p className="mt-1 flex items-center justify-center gap-1 text-[11.5px] font-semibold text-orange-600 dark:text-orange-400">
+                    <Icon name="refresh" size={12} />
+                    No signal — will sync automatically
+                  </p>
+                )}
                 {jobNumber && (
                   <p className="truncate text-[13px] font-medium">
                     {jobNumber}
@@ -181,6 +191,12 @@ export default function Home() {
                 <p className="text-[12px] text-slate-500 dark:text-slate-400">
                   Tap in for the day when you start working
                 </p>
+                {offlinePending && (
+                  <p className="mt-1 flex items-center justify-center gap-1 text-[11.5px] font-semibold text-orange-600 dark:text-orange-400">
+                    <Icon name="refresh" size={12} />
+                    No signal — your last clock action will sync automatically
+                  </p>
+                )}
               </div>
               <button
                 type="button"
