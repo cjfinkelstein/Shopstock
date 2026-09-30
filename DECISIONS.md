@@ -96,6 +96,11 @@ Each entry: what was decided, and why.
     harmless, and they keep the door open if scanners ever come back.
 27. **Label printing kept as "Shelf labels"** (admin): physical bin labels still
     help humans find stock even without scanning them.
+27a. **Re-removed a scanner regression (2026-09-30).** This handoff snapshot
+    somehow still had a fully wired camera scanner (`BarcodeScanner.tsx`,
+    `html5-qrcode` dependency, a "Scan" button in Find) despite #26 saying
+    it was gone — deleted again. If it reappears a third time, check
+    whatever produced the zip/snapshot, not just the working tree.
 28. **Design system v2** (`web/DESIGN.md`): category color identity via
     `catTint`, two-line page headers, gradient hero cards, segmented controls,
     and a 7-day activity chart on the admin dashboard.
