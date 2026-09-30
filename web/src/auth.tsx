@@ -1,7 +1,30 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import { api, getToken, setToken, setUnauthorizedHandler } from "./api";
+import { ApiError, api, getToken, setToken, setUnauthorizedHandler } from "./api";
 import type { TechDashboard, User } from "./types";
+
+const USER_CACHE_KEY = "shopstock_user";
+
+/** Last-known identity, used only when we're offline and can't reach
+ * /auth/me to confirm the session -- lets a tech who reopens the app with
+ * no signal land back in the app instead of at tap-in. */
+function cachedUser(): User | null {
+  try {
+    const raw = localStorage.getItem(USER_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheUser(u: User | null) {
+  try {
+    if (u) localStorage.setItem(USER_CACHE_KEY, JSON.stringify(u));
+    else localStorage.removeItem(USER_CACHE_KEY);
+  } catch {
+    /* storage unavailable -- just no offline identity fallback */
+  }
+}
 
 interface AuthState {
   user: User | null;
@@ -28,14 +51,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => setUser(null));
+    setUnauthorizedHandler(() => {
+      setUser(null);
+      cacheUser(null);
+    });
     if (getToken()) {
       api<User>("/auth/me")
         .then((u) => {
           setUser(u);
+          cacheUser(u);
           if (u.role === "tech") loadTruck();
         })
-        .catch(() => setUser(null))
+        .catch((e) => {
+          // A real 401 already cleared the session via the handler above.
+          // Anything else (offline, DNS, 5xx) just means we couldn't
+          // confirm the session right now -- fall back to the last-known
+          // identity instead of bouncing to tap-in.
+          if (e instanceof ApiError && e.status === 401) return;
+          const cached = cachedUser();
+          if (cached) {
+            setUser(cached);
+            if (cached.role === "tech") loadTruck();
+          } else {
+            setUser(null);
+          }
+        })
         .finally(() => setLoading(false));
     }
   }, [loadTruck]);
@@ -47,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     setToken(r.access_token);
     setUser(r.user);
+    cacheUser(r.user);
     loadTruck();
     return r.user;
   };
@@ -58,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     setToken(r.access_token);
     setUser(r.user);
+    cacheUser(r.user);
     return r.user;
   };
 
@@ -76,6 +118,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     setUser(null);
     setMyTruck(null);
+    cacheUser(null);
+    // Drop the offline browse cache so a shared phone's next tech doesn't
+    // briefly see this tech's cached recently-used items or truck stock.
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.controller?.postMessage({ type: "CLEAR_DATA_CACHE" });
+    }
   };
 
   return (

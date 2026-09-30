@@ -80,8 +80,10 @@ web: npx tsc --noEmit && npm run build                 -> clean
 
 - **No admin password-change UI** — set at seed time via env; changing later
   means updating `password_hash` in the DB (`hash_secret` in `app/auth.py`).
-- **No offline mode** — service worker caches the app shell only (spec'd
-  v1 decision); field use needs signal.
+- **Offline browsing only, no offline writes** — the service worker caches
+  tech browse data (items/stock/jobs, see DECISIONS #32) so Find/Trucks/item
+  detail work with no signal, but sign-out/return/transfer still require a
+  live connection; there's no local outbox or sync/conflict handling.
 - **Docker/VPS path never executed** — compose + nginx + Dockerfiles exist
   and follow the spec, but the dev machine has no Docker; expect minor
   first-run friction.

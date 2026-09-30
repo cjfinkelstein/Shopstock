@@ -27,7 +27,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>,
 );
 
-// PWA: app-shell caching only (no offline data sync in v1)
+// PWA: app-shell caching, plus a stale-while-revalidate cache for tech
+// browse GETs (see sw.js) so Find/Trucks/item detail work offline. Writes
+// (sign-out, return, transfer) still always require the network.
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     navigator.serviceWorker

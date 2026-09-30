@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -11,9 +11,6 @@ import Sheet from "../../components/Sheet";
 import { Empty, ItemThumb, ListSkeleton } from "../../components/ui";
 import { useToast } from "../../toast";
 import type { Item, TxnPage } from "../../types";
-
-// Pulls in the barcode-decoding library (~300kB) -- only fetched once someone taps Scan.
-const BarcodeScanner = lazy(() => import("../../components/BarcodeScanner"));
 
 /** The central Find experience: search + browse. In cart mode (?cart=1) every
  * tapped result opens a qty pad and drops straight into the cart. */
@@ -32,7 +29,6 @@ export default function Search() {
   const [recents, setRecents] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [addItem, setAddItem] = useState<Item | null>(null);
-  const [scanning, setScanning] = useState(false);
 
   const browsing = search === "" && category === "";
 
@@ -93,22 +89,6 @@ export default function Search() {
     else navigate(`/item/${id}`);
   };
 
-  const handleScanned = async (code: string) => {
-    setScanning(false);
-    try {
-      const matches = await api<Item[]>(`/items?search=${encodeURIComponent(code)}`);
-      const exact = matches.find((i) => i.barcode === code);
-      if (exact) {
-        openItem(exact);
-        return;
-      }
-    } catch {
-      // fall through to plain-text search below
-    }
-    toast("error", `No item found for barcode ${code}`);
-    setSearch(code);
-  };
-
   const activeTint = category ? catTint(category) : null;
   const showCartBar = cartMode && cart.lines.length > 0;
 
@@ -151,13 +131,6 @@ export default function Search() {
             </button>
           )}
         </div>
-        <button
-          className="btn-secondary !min-h-[48px] shrink-0 px-3.5"
-          onClick={() => setScanning(true)}
-          aria-label="Scan barcode"
-        >
-          <Icon name="scan" size={20} />
-        </button>
       </div>
 
       {browsing ? (
@@ -319,12 +292,6 @@ export default function Search() {
             }}
           />
         </Sheet>
-      )}
-
-      {scanning && (
-        <Suspense fallback={null}>
-          <BarcodeScanner onDetected={handleScanned} onClose={() => setScanning(false)} />
-        </Suspense>
       )}
     </div>
   );
