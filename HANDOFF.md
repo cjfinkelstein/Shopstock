@@ -83,7 +83,11 @@ web: npx tsc --noEmit && npm run build                 -> clean
 - **Offline browsing only, no offline writes** — the service worker caches
   tech browse data (items/stock/jobs, see DECISIONS #32) so Find/Trucks/item
   detail work with no signal, but sign-out/return/transfer still require a
-  live connection; there's no local outbox or sync/conflict handling.
+  live connection; there's no local outbox or sync/conflict handling. The
+  backend now accepts an idempotent `client_ref` on those three writes
+  (DECISIONS #33) so a retry can't double-sign material — that's the only
+  piece built so far; the client-side outbox, queued-state UI, and
+  reconnect sync trigger are still unbuilt.
 - **Docker/VPS path never executed** — compose + nginx + Dockerfiles exist
   and follow the spec, but the dev machine has no Docker; expect minor
   first-run friction.

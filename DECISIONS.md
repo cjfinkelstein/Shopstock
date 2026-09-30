@@ -122,6 +122,26 @@ Each entry: what was decided, and why.
     OS-level dark mode no longer switches the app to dark. All `dark:`
     variants remain in the source for a future opt-in toggle.
 
+## Write idempotency (2026-09-30) — groundwork for an offline write queue
+
+33. **`client_ref` added to transactions, backend only, nothing calls it yet.**
+    `Transaction.client_ref` (nullable `String(64)`, unique index — SQLite
+    and Postgres both allow unlimited NULLs, so callers that omit it never
+    collide) lets a retried write replay its original result instead of
+    moving stock twice. `apply_transaction()` checks for an existing row
+    with the same `client_ref` before doing anything else, and wraps the
+    insert in a SAVEPOINT (`db.begin_nested()`) to catch the unique-index
+    race without rolling back the caller's whole transaction — relevant
+    because batch endpoints loop `apply_transaction()` before one shared
+    commit. Wired into `SignOutIn`/`ReturnIn`/`TransferIn` and their
+    routers only (not `receive`/`adjust`, which are admin/desktop, or the
+    batch endpoints, which aren't part of the planned offline flow).
+    This exists so a future client-side offline outbox (queued sign-out/
+    return/transfer, replayed on reconnect) can safely retry a write whose
+    response was lost without double-signing material — see the offline
+    gaps noted in `HANDOFF.md` and #32 above. No client sends `client_ref`
+    yet; this PR is backend-only groundwork.
+
 ## Offline browsing (2026-09-30)
 
 32. **Offline browsing added, offline writes still out of scope.** The

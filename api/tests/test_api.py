@@ -134,6 +134,29 @@ class TestJobCosting:
         assert r.headers["content-type"].startswith("text/csv")
 
 
+class TestIdempotency:
+    """A retried sign-out (same client_ref) must replay, not double-write --
+    this is what makes a client-side offline write queue safe to retry."""
+
+    def test_repeated_client_ref_replays(self, client, seeded):
+        admin = login_admin(client)
+        tech = login_tech(client, seeded)
+        receive(client, admin, seeded, "box", "10", "2.00")
+
+        body = {"item_id": seeded["box"].id, "qty": "3", "from_location_id": seeded["shop"].id,
+                "job_id": seeded["job"].id, "client_ref": "offline-xyz"}
+        r1 = client.post("/api/v1/transactions/sign-out", headers=tech, json=body)
+        assert r1.status_code == 201, r1.text
+        r2 = client.post("/api/v1/transactions/sign-out", headers=tech, json=body)  # retry
+        assert r2.status_code == 201, r2.text
+        assert r1.json()["id"] == r2.json()["id"]
+
+        stock = client.get("/api/v1/stock", headers=admin).json()
+        row = next(s for s in stock if s["item_id"] == seeded["box"].id
+                   and s["location_id"] == seeded["shop"].id)
+        assert Decimal(str(row["qty"])) == Decimal("7")  # decremented once, not twice
+
+
 class TestBatchAndReports:
     def test_batch_sign_out_atomic(self, client, seeded):
         admin = login_admin(client)

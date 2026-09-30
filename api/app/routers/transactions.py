@@ -50,6 +50,7 @@ def sign_out(body: SignOutIn, db: Session = Depends(get_db), user: User = Depend
     txn = apply_transaction(
         db, type="SIGN_OUT", item_id=body.item_id, qty=body.qty, user=user,
         from_location_id=body.from_location_id, job_id=body.job_id, note=body.note,
+        client_ref=body.client_ref,
     )
     db.commit()
     return serialize_txn(txn, user)
@@ -80,6 +81,7 @@ def return_material(body: ReturnIn, db: Session = Depends(get_db),
     txn = apply_transaction(
         db, type="RETURN", item_id=body.item_id, qty=body.qty, user=user,
         to_location_id=body.to_location_id, job_id=body.job_id, note=body.note,
+        client_ref=body.client_ref,
     )
     db.commit()
     return serialize_txn(txn, user)
@@ -91,7 +93,7 @@ def transfer(body: TransferIn, db: Session = Depends(get_db),
     txn = apply_transaction(
         db, type="TRANSFER", item_id=body.item_id, qty=body.qty, user=user,
         from_location_id=body.from_location_id, to_location_id=body.to_location_id,
-        note=body.note,
+        note=body.note, client_ref=body.client_ref,
     )
     db.commit()
     return serialize_txn(txn, user)
