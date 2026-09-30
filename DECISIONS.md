@@ -117,6 +117,30 @@ Each entry: what was decided, and why.
     OS-level dark mode no longer switches the app to dark. All `dark:`
     variants remain in the source for a future opt-in toggle.
 
+## Offline browsing (2026-09-30)
+
+32. **Offline browsing added, offline writes still out of scope.** The
+    service worker (`web/public/sw.js`) now caches a safelist of tech browse
+    GETs (`/items`, `/items/:id`, `/items/:id/stock`, `/items/categories`,
+    `/locations`, `/stock`, `/dashboard/tech`, `/jobs`, `/jobs/recent`,
+    `/transactions`) stale-while-revalidate, so Find/Trucks/item-detail work
+    with no signal. Gated to the `tech` JWT role (decoded client-side,
+    unverified — a caching decision, not a security boundary) so an admin's
+    cost-bearing responses for the same paths are never persisted to disk;
+    `/stock/valuation` and everything else under `/api/` stays network-only.
+    Sign-out/return/transfer remain network-only per #22 — no local outbox
+    or sync/conflict handling yet, since every write still has to go through
+    `apply_transaction` against live stock and moving-average cost. Logout
+    posts `CLEAR_DATA_CACHE` to the service worker so a shared phone's next
+    tech doesn't see stale cached data. A `useOnline()` hook drives a visible
+    "Offline — showing saved data" banner in `TechLayout` so a cached screen
+    never looks live. `/auth/me` itself isn't cacheable (it's how a 401 is
+    detected), so `AuthProvider` also caches the last-known user object in
+    `localStorage` and falls back to it when that check fails for a
+    non-401 reason (offline, DNS, 5xx) — otherwise every cold reload with no
+    signal bounced a tech back to tap-in before they ever saw the cached
+    data, defeating the feature.
+
 ## Seed
 
 24. Opening stock enters via real RECEIVE transactions (`ref=OPENING`) and truck

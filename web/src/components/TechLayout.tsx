@@ -5,6 +5,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { useCart } from "../cart";
 import { useToast } from "../toast";
+import { useOnline } from "../useOnline";
 import Icon from "./Icon";
 import Sheet from "./Sheet";
 import { Avatar } from "./ui";
@@ -62,6 +63,7 @@ export default function TechLayout() {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const online = useOnline();
   const [accountOpen, setAccountOpen] = useState(false);
   const [changePinOpen, setChangePinOpen] = useState(false);
   const [currentPin, setCurrentPin] = useState("");
@@ -102,6 +104,13 @@ export default function TechLayout() {
           <Avatar name={user?.name ?? "?"} index={user?.id ?? 0} size={36} />
         </button>
       </header>
+
+      {!online && (
+        <div className="sticky top-[53px] z-40 flex items-center justify-center gap-1.5 bg-amber-50 px-3 py-1.5 text-[12px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+          <Icon name="wifi-off" size={13} />
+          Offline — showing saved data
+        </div>
+      )}
 
       <main className="flex-1 overflow-y-auto px-4 pb-32 pt-4">
         <Outlet />
