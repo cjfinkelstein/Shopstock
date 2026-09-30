@@ -13,6 +13,7 @@ import Sheet from "../../components/Sheet";
 import { ItemThumb, PageLoader, Spinner, SuccessCheck } from "../../components/ui";
 import { useToast } from "../../toast";
 import type { Item, ItemStock, Job, Location } from "../../types";
+import { sendOrQueue } from "../../outbox";
 
 type Mode = "signout" | "return" | "transfer";
 type Step = "qty" | "route" | "route-truck" | "destination" | "job" | "location" | "confirm" | "success";
@@ -57,6 +58,7 @@ export default function ItemSheet() {
   const [cartOpen, setCartOpen] = useState(false);
   const [showAllLocations, setShowAllLocations] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [queued, setQueued] = useState(false);
 
   const load = useCallback(() => {
     api<Item>(`/items/${id}`).then(setItem).catch(() => navigate("/search"));
@@ -99,51 +101,60 @@ export default function ItemSheet() {
     setTransferFromId(null);
     setShowAllLocations(false);
     setSaving(false);
+    setQueued(false);
   };
 
   const close = () => setMode(null);
 
   /** Waits for the server to confirm the transaction before showing success —
-   * a blocked oversell or network failure surfaces as an error, never a false
-   * "Signed out" checkmark. */
+   * a blocked oversell surfaces as an error, never a false "Signed out"
+   * checkmark. A pure connectivity failure is the one exception: it queues
+   * the write for later (see ../../outbox) and shows a distinct "Queued"
+   * state instead, so a tech never mistakes a pending sync for a done one. */
   const doConfirm = async () => {
     if (!item || !mode || saving) return;
-    let req: Promise<unknown>;
+    const summary = `${fmtQty(qty, item.unit)} ${item.name}`;
+    let req: ReturnType<typeof sendOrQueue>;
     if (mode === "signout" && signoutDest === "truck") {
       // "Take Out -> My Truck" is a stock relocation, not a job cost.
-      req = api("/transactions/transfer", {
-        method: "POST",
-        body: { item_id: item.id, qty, from_location_id: sourceId, to_location_id: destId },
-      });
+      req = sendOrQueue(
+        "transfer",
+        { item_id: item.id, qty, from_location_id: sourceId, to_location_id: destId },
+        summary,
+      );
     } else if (mode === "signout") {
-      req = api("/transactions/sign-out", {
-        method: "POST",
-        body: { item_id: item.id, qty, from_location_id: sourceId, job_id: job!.id },
-      });
+      req = sendOrQueue(
+        "sign-out",
+        { item_id: item.id, qty, from_location_id: sourceId, job_id: job!.id },
+        summary,
+      );
     } else if (mode === "return") {
-      req = api("/transactions/return", {
-        method: "POST",
-        body: { item_id: item.id, qty, to_location_id: destId, job_id: job!.id },
-      });
+      req = sendOrQueue(
+        "return",
+        { item_id: item.id, qty, to_location_id: destId, job_id: job!.id },
+        summary,
+      );
     } else {
-      req = api("/transactions/transfer", {
-        method: "POST",
-        body: { item_id: item.id, qty, from_location_id: transferFromId, to_location_id: destId },
-      });
+      req = sendOrQueue(
+        "transfer",
+        { item_id: item.id, qty, from_location_id: transferFromId, to_location_id: destId },
+        summary,
+      );
     }
     const finishedMode = mode;
     const finishedToTruck = signoutDest === "truck";
     setSaving(true);
     try {
-      await req;
+      const result = await req;
       setSaving(false);
+      setQueued(result.status === "queued");
       setStep("success");
       setTimeout(() => {
         close();
         if (finishedMode === "signout" && !finishedToTruck) navigate("/search");
         else load();
       }, 1100);
-      load();
+      if (result.status === "confirmed") load();
     } catch (e) {
       setSaving(false);
       toast(
@@ -614,19 +625,32 @@ export default function ItemSheet() {
 
       {mode && step === "success" && createPortal(
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white animate-fade-in dark:bg-slate-950">
-          <SuccessCheck />
+          {queued ? (
+            <div className="flex h-[112px] w-[112px] items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
+              <Icon name="upload" size={48} strokeWidth={2.2} />
+            </div>
+          ) : (
+            <SuccessCheck />
+          )}
           <p className="mt-6 text-[22px] font-bold tracking-tight">
-            {mode === "signout" && signoutDest === "truck"
-              ? "Loaded onto truck"
-              : mode === "signout"
-                ? "Signed out"
-                : mode === "return"
-                  ? "Returned"
-                  : "Transferred"}
+            {queued
+              ? "Queued — will sync"
+              : mode === "signout" && signoutDest === "truck"
+                ? "Loaded onto truck"
+                : mode === "signout"
+                  ? "Signed out"
+                  : mode === "return"
+                    ? "Returned"
+                    : "Transferred"}
           </p>
           <p className="mt-1 text-[15px] text-slate-400 dark:text-slate-500">
             {fmtQty(qty, item.unit)} · {item.name}
           </p>
+          {queued && (
+            <p className="mt-1 max-w-[80%] text-center text-[12.5px] text-amber-600 dark:text-amber-400">
+              No connection — this will send automatically once you're back online.
+            </p>
+          )}
           <div className="mt-4 flex max-w-[90%] items-center justify-center gap-2">
             {mode === "signout" && signoutDest === "truck" && (
               <>

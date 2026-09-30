@@ -139,8 +139,46 @@ Each entry: what was decided, and why.
     This exists so a future client-side offline outbox (queued sign-out/
     return/transfer, replayed on reconnect) can safely retry a write whose
     response was lost without double-signing material — see the offline
-    gaps noted in `HANDOFF.md` and #32 above. No client sends `client_ref`
-    yet; this PR is backend-only groundwork.
+    gaps noted in `HANDOFF.md` and #32 above. (Update: now consumed by the
+    offline write queue in #34 below.)
+
+## Offline write queue (2026-09-30)
+
+34. **Sign-out/return/transfer now queue instead of failing when offline.**
+    `web/src/outbox.ts` wraps the three writes ItemSheet's Take Out/Return/
+    Transfer flows send: `sendOrQueue()` tries the real request first (with
+    a fresh `client_ref`, #33) and only queues to `localStorage` when the
+    *network itself* is unreachable — a real server rejection (`ApiError`,
+    e.g. blocked oversell) still surfaces immediately as before, unqueued,
+    since retrying an outright-rejected write would just fail again.
+    `App.tsx` flushes the queue on login and on every `online` event;
+    `flushOutbox()` retries each entry independently so one failing at sync
+    time (e.g. the job closed while offline) doesn't block the rest — it's
+    marked "failed" and left for a person to retry or discard from the new
+    "Sync queue" sheet (`TechLayout`'s offline banner extends to show
+    pending/failed counts and opens it) rather than retried forever
+    automatically.
+    **Shared-device caveat**: each queued entry records the JWT `sub` of
+    whoever queued it (decoded client-side, unverified — a UX safeguard,
+    not a security boundary), and `flushOutbox()` only syncs entries
+    belonging to the currently logged-in user. This stops a phone shared
+    between techs from syncing tech A's queued sign-out under tech B's
+    name after a login switch — but it also means an entry queued by
+    someone who never logs back into that device sits there indefinitely,
+    invisible to anyone else. Acceptable given CLAUDE.md's "techs find
+    items on their phone" (personal devices); would need real handling
+    (server-side queued-write visibility, an admin recovery path) if
+    shared devices ever become a real scenario.
+    ItemSheet's success screen distinguishes the two outcomes so a tech
+    never mistakes a pending sync for a done one: a green checkmark for
+    "confirmed," an amber upload icon + "Queued — will sync" for "queued."
+    `Cart` checkout (batch endpoints) is NOT wired to the outbox — those
+    endpoints don't accept `client_ref` (#33) and weren't in scope.
+    Verified end-to-end with Playwright against a production build: two
+    sign-outs queued while the browser context was offline, both drained
+    and synced automatically on reconnect, stock decremented by exactly
+    the queued quantities (no double-write) and the API shows exactly one
+    transaction per queued entry.
 
 ## Offline browsing (2026-09-30)
 

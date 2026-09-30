@@ -80,14 +80,17 @@ web: npx tsc --noEmit && npm run build                 -> clean
 
 - **No admin password-change UI** — set at seed time via env; changing later
   means updating `password_hash` in the DB (`hash_secret` in `app/auth.py`).
-- **Offline browsing only, no offline writes** — the service worker caches
-  tech browse data (items/stock/jobs, see DECISIONS #32) so Find/Trucks/item
-  detail work with no signal, but sign-out/return/transfer still require a
-  live connection; there's no local outbox or sync/conflict handling. The
-  backend now accepts an idempotent `client_ref` on those three writes
-  (DECISIONS #33) so a retry can't double-sign material — that's the only
-  piece built so far; the client-side outbox, queued-state UI, and
-  reconnect sync trigger are still unbuilt.
+- **Offline browsing + queued writes from ItemSheet only** — the service
+  worker caches tech browse data (DECISIONS #32) and Take Out/Return/
+  Transfer from an item's detail page now queue and auto-sync on reconnect
+  (DECISIONS #33-34), each write backed by a server-side idempotency key so
+  a retry can't double-sign material. Cart checkout (batch sign-out) is
+  still online-only — the batch endpoints don't accept a `client_ref`. A
+  queued write is tied to the tech who queued it (see the shared-device
+  caveat in DECISIONS #34) and a write the server outright rejects once
+  reachable (e.g. the job closed while offline) needs a person to retry or
+  discard it from the new "Sync queue" sheet — it isn't retried forever
+  automatically.
 - **Docker/VPS path never executed** — compose + nginx + Dockerfiles exist
   and follow the spec, but the dev machine has no Docker; expect minor
   first-run friction.
