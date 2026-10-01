@@ -323,3 +323,22 @@ Each entry: what was decided, and why.
     the real API afterward: `gps_consent_given: true`, correct clock-in,
     and a 3-point route (clock-in + both queued pings) all recorded in
     order after sync.
+
+## Admin can now read clock-out notes in Login Hours (2026-10-02)
+
+38. **A tech's clock-out note now shows in the admin "Login Hours" (Calendar)
+    page for every shift in the "All techs" list, not only inside the
+    day-detail sheet.** `clock_out_note` was already captured and already
+    rendered in the day-detail Sheet's per-shift view, but the flatter
+    "All techs" shift list (the view used when scanning one tech's whole
+    history, which is what triggered this request) left it out entirely --
+    an admin had no way to see what a tech wrote about their day without
+    separately opening each day on the calendar. Added `note` to the
+    `timesheet()` response in `api/app/routers/reports.py` (both the flat
+    `rows` list and the per-tech grouped `shifts` list it's built from) and
+    rendered it under the job/time line in the "All techs" row in
+    `Calendar.tsx`, mirroring the existing italic quote styling from the
+    day-detail sheet. No schema change -- `clock_out_note` already existed
+    on the `TimeEntry` model; this only exposes it through the admin-facing
+    report endpoint, which already stripped it before (admin endpoints need
+    no cost-stripping concerns here, since notes aren't cost data).

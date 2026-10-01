@@ -347,6 +347,7 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "", payroll_
             "still_clocked_in": e.clock_out_at is None,
             "hours": hours,
             "approval_status": e.approval_status,
+            "note": e.clock_out_note,
         })
 
     if format == "csv":
@@ -399,6 +400,7 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "", payroll_
             "still_clocked_in": r["still_clocked_in"],
             "hours": r["hours"],
             "approval_status": r["approval_status"],
+            "note": r["note"],
         })
         t["total_hours"] += r["hours"]
     for t in techs.values():
