@@ -255,3 +255,37 @@ Each entry: what was decided, and why.
     droplet's `/opt/shopstock/api` should really be brought in sync with
     (or replaced by) a real git checkout so this class of mismatch can't
     recur — flagged here, not yet done.
+
+## Branch reconciliation before converting the droplet to git (2026-10-01)
+
+36. **This session's branch forked before `main` gained migrations 0019–0022
+    and a batch of unrelated features.** Investigating the "revision 0022"
+    error (#35) surfaced that `main` already had `0019_password_reset.py`
+    through `0022_pto_requests.py`, plus password reset, admin-configurable
+    SMTP settings, and a PTO request workflow — none of it an ancestor of
+    this branch, all of it already merged to `main` but never deployed to
+    this droplet (which runs a disconnected manual file copy, not git; see
+    #35). This session's own write-idempotency migration (#33) had
+    independently claimed `0019`, colliding with the real one. Renamed it
+    to `0023` (chaining after `0022`, the actual tip) before merging `main`
+    into this branch.
+    The merge itself was clean (no textual conflicts) but needed a semantic
+    check: `main` had independently added `web/src/offlineQueue.ts`, an
+    IndexedDB-backed offline queue for clock-in/out, whose own comment
+    already flagged "material sign-out is a planned follow-up" — exactly
+    what this session's `web/src/outbox.ts` (#34) turned out to be. The two
+    coexist as separate, non-overlapping queues (different write types,
+    different storage) rather than a collision; worth unifying later but
+    not urgent.
+    Verified the merged result properly, not just a clean `git merge`:
+    `alembic heads` shows a single head at `0023`; full backend suite
+    (35/35) and `check_consistency.py` pass against a fresh
+    migrate-then-seed; `tsc`/build clean; and a real browser smoke test
+    (admin login, Settings/SMTP page, the Calendar-sidebar fix from #35,
+    tech tap-in, Home, My Hours' new PTO UI, and Find/Search from #32) hit
+    zero console errors. This is the point: merging into `main` here means
+    the droplet (once converted to a real git clone per #35's closing note)
+    picks up all of that previously-merged-but-never-deployed work in the
+    same motion as this session's own fixes — a much bigger jump than "just
+    deploy tonight's fixes," flagged to and approved by the owner before
+    proceeding.
