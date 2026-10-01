@@ -12,7 +12,7 @@ import type { ClockStatus, Job } from "./types";
 // couldn't reach the app itself (502/503/504 -- e.g. mid-deploy, container
 // restarting). Any other ApiError (400/401/403/404/500, etc.) is a real
 // rejection from the app and should surface normally, not get queued.
-function isConnectivityError(e: unknown): boolean {
+export function isConnectivityError(e: unknown): boolean {
   if (!(e instanceof ApiError)) return true;
   return e.status === 502 || e.status === 503 || e.status === 504;
 }
@@ -102,10 +102,14 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
       let changed = false;
       for (const action of queue) {
         try {
-          if (action.type === "clock_in") {
+          if (action.type === "gps_consent") {
+            await api("/time/gps-consent", { method: "POST" });
+          } else if (action.type === "clock_in") {
             await api<ClockStatus>("/time/clock-in", { method: "POST", body: action.payload });
-          } else {
+          } else if (action.type === "clock_out") {
             await api("/time/clock-out", { method: "POST", body: action.payload });
+          } else {
+            await api("/time/ping", { method: "POST", body: action.payload });
           }
           await removeAction(action.id);
           changed = true;
@@ -114,6 +118,16 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
             // Still no connection (or the server's still unreachable) --
             // stop here, keep the rest queued, try again later.
             break;
+          }
+          if (action.type === "gps_ping" || action.type === "gps_consent") {
+            // A rejected ping (e.g. the clock-out ahead of it in the queue
+            // already closed the shift) is just one missed location point;
+            // a rejected consent replay means it's already recorded (the
+            // endpoint is a no-op once set). Either way, drop it silently
+            // rather than alarming the tech over it.
+            await removeAction(action.id);
+            changed = true;
+            continue;
           }
           const benign =
             e instanceof ApiError &&
@@ -178,10 +192,20 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     const sendPing = async () => {
       const pos = await getPosition();
       if (!pos) return;
-      api("/time/ping", {
-        method: "POST",
-        body: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-      }).catch(() => {});
+      const body = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      try {
+        await api("/time/ping", { method: "POST", body });
+      } catch (e) {
+        // A ping that can't reach the server (no signal) is queued and
+        // replayed in order with any clock in/out -- not just dropped, so a
+        // tech's route still fills in once they're back in range. A real
+        // rejection (clocked out before this ping synced, etc.) just means
+        // one missed point and isn't worth bothering the tech about.
+        if (isConnectivityError(e)) {
+          await enqueueAction("gps_ping", body);
+          setOfflinePending(true);
+        }
+      }
     };
 
     sendPing();

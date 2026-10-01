@@ -289,3 +289,37 @@ Each entry: what was decided, and why.
     same motion as this session's own fixes — a much bigger jump than "just
     deploy tonight's fixes," flagged to and approved by the owner before
     proceeding.
+
+## Offline GPS pings + a first-clock-in-offline bug (2026-10-02)
+
+37. **GPS pings now queue offline too, not just clock in/out.** `offlineQueue.ts`
+    (an IndexedDB queue already built for clock in/out, #36) gained a
+    `gps_ping` action type: a failed `/time/ping` due to connectivity (not a
+    real rejection) is queued instead of silently dropped, and replays in
+    the same oldest-first queue as clock in/out -- which matters because
+    `/time/ping` requires an open clock event server-side, so a queued ping
+    has to land after its clock-in and before its clock-out, which the
+    single shared queue guarantees for free.
+    **Found and fixed a real bug along the way**: a tech's very *first*
+    offline clock-in (never given GPS consent before) was silently failing
+    end-to-end. `/time/clock-in` requires `gps_consent_at` to already be
+    set server-side; `giveGpsConsent()` isn't itself queue-aware, and the
+    existing code only skipped it when consent was already given -- so a
+    first-time offline attempt called it, it threw (no connection), and
+    the catch simply swallowed the failure and proceeded to `clockIn()`
+    anyway. That let the clock-in queue locally and show success in the
+    UI, but the *server* never got consent recorded, so when the queued
+    clock-in replayed on reconnect it was rejected with a 403 the tech
+    never saw -- transient toasts are easy to miss when a test isn't
+    watching for them; the real tell was the UI silently reverting to
+    "not clocked in" after sync. Added a `gps_consent` action type so a
+    first-time offline consent call queues instead of being dropped, and
+    replays before the clock-in behind it in the same queue.
+    Caught this via an actual Playwright run against a real backend with
+    Chromium's virtual clock fast-forwarding the real 2-minute ping
+    interval -- not just code review -- and it's good that it did: the bug
+    was invisible from reading the diff, only showed up as "nothing landed
+    server-side" after a real offline-then-reconnect cycle. Verified via
+    the real API afterward: `gps_consent_given: true`, correct clock-in,
+    and a 3-point route (clock-in + both queued pings) all recorded in
+    order after sync.

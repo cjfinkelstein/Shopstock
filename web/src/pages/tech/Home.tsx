@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { useCart } from "../../cart";
-import { useClock } from "../../clock";
+import { isConnectivityError, useClock } from "../../clock";
+import { enqueueAction } from "../../offlineQueue";
 import Icon from "../../components/Icon";
 import JobPicker from "../../components/JobPicker";
 import Sheet from "../../components/Sheet";
@@ -83,8 +84,21 @@ export default function Home() {
       // Tapping Clock In is the agreement itself -- recorded once,
       // permanently, the first time; harmless to send again after that.
       // Skipped once already given so a tech with no signal isn't blocked
-      // by a consent call that has nothing new to record anyway.
-      if (!gpsConsentGiven) await giveGpsConsent();
+      // by a consent call that has nothing new to record anyway. A tech's
+      // very FIRST clock-in with no signal at all still needs this
+      // recorded -- the server rejects clock-in without it -- so a pure
+      // connectivity failure here queues it instead of dropping it; it
+      // replays ahead of the clock-in queued right after it (same
+      // oldest-first queue), so the consent is in place by the time the
+      // clock-in itself replays.
+      if (!gpsConsentGiven) {
+        try {
+          await giveGpsConsent();
+        } catch (e) {
+          if (!isConnectivityError(e)) throw e;
+          await enqueueAction("gps_consent", {});
+        }
+      }
       await clockIn(job);
       toast("success", `Clocked in to ${job.job_number}`);
     } catch (e) {
