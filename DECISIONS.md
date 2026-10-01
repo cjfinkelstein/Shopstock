@@ -210,3 +210,27 @@ Each entry: what was decided, and why.
     loads via TRANSFERs — the ledger reconciles from the first boot, proven by
     `scripts/check_consistency.py`. Three trucks get starting stock (spec: "2–3").
 25. Seed is guarded: it refuses to run against a database that already has users.
+
+## Bug fix: worker-map tiles (2026-10-01)
+
+35. **Swapped the GPS map's tile provider off Esri's legacy free layer.**
+    The admin worker-map / shift-route map (`web/src/pages/admin/Calendar.tsx`)
+    used `server.arcgisonline.com/.../World_Light_Gray_Base` — Esri's older
+    anonymous-access tile service. Reported as "blank screen"; actual cause
+    (confirmed via a user screenshot) was the tile images themselves coming
+    back with "Map data not yet available" baked in as a placeholder — Esri
+    degrading/sunsetting free anonymous access to that legacy layer, not a
+    code bug. Pins, route lines, popups, and the Leaflet container itself
+    were all rendering correctly the whole time; only the basemap imagery
+    was broken. Replaced both `TileLayer` instances (live map + shift-route
+    map) with CARTO's free Positron basemap
+    (`{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png`, no API key) —
+    closest aesthetic match to the light-gray minimal look DESIGN.md calls
+    for, and the standard reliable free choice for this exact use case.
+    Could not get a rendered screenshot confirming real map tiles paint,
+    since this session's own sandbox network policy blocks third-party
+    tile hosts generally (reproduced the *same* class of failure against
+    both the old Esri host and the new CARTO one) — verified instead that
+    the browser requests the correct CARTO URLs with correct tile math
+    (subdomain round-robin, sane z/x/y for the given center/zoom). Confirm
+    the map actually paints on a real network before considering this closed.
