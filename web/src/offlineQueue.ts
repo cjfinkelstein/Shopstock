@@ -1,7 +1,12 @@
-/** Offline action queue for tech-facing writes (clock in/out today; material
- * sign-out is a planned follow-up). When a write fails because the device
- * has no connection -- not because the server rejected it -- the action is
- * stored here and replayed in the same order once connectivity returns.
+/** Offline action queue for tech-facing writes: clock in/out and the
+ * while-clocked-in GPS ping (material sign-out has its own separate queue,
+ * see outbox.ts). When a write fails because the device has no connection
+ * -- not because the server rejected it -- the action is stored here and
+ * replayed in the same order once connectivity returns. A single shared
+ * queue (rather than a per-type one) matters for gps_ping specifically:
+ * /time/ping requires an open clock event server-side, so a ping queued
+ * while offline must replay after its clock_in and before its clock_out,
+ * which a unified oldest-first queue guarantees for free.
  * Uses IndexedDB rather than localStorage since it's async and safe to grow
  * without blocking the main thread. */
 
@@ -9,7 +14,7 @@ const DB_NAME = "shopstock-offline";
 const DB_VERSION = 1;
 const STORE = "queue";
 
-export type QueuedActionType = "clock_in" | "clock_out";
+export type QueuedActionType = "gps_consent" | "clock_in" | "clock_out" | "gps_ping";
 
 export interface QueuedAction {
   id: string;
