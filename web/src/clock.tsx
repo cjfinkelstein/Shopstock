@@ -12,7 +12,7 @@ import type { ClockStatus, Job } from "./types";
 // couldn't reach the app itself (502/503/504 -- e.g. mid-deploy, container
 // restarting). Any other ApiError (400/401/403/404/500, etc.) is a real
 // rejection from the app and should surface normally, not get queued.
-function isConnectivityError(e: unknown): boolean {
+export function isConnectivityError(e: unknown): boolean {
   if (!(e instanceof ApiError)) return true;
   return e.status === 502 || e.status === 503 || e.status === 504;
 }
@@ -102,7 +102,9 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
       let changed = false;
       for (const action of queue) {
         try {
-          if (action.type === "clock_in") {
+          if (action.type === "gps_consent") {
+            await api("/time/gps-consent", { method: "POST" });
+          } else if (action.type === "clock_in") {
             await api<ClockStatus>("/time/clock-in", { method: "POST", body: action.payload });
           } else if (action.type === "clock_out") {
             await api("/time/clock-out", { method: "POST", body: action.payload });
@@ -117,27 +119,26 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
             // stop here, keep the rest queued, try again later.
             break;
           }
+          if (action.type === "gps_ping" || action.type === "gps_consent") {
+            // A rejected ping (e.g. the clock-out ahead of it in the queue
+            // already closed the shift) is just one missed location point;
+            // a rejected consent replay means it's already recorded (the
+            // endpoint is a no-op once set). Either way, drop it silently
+            // rather than alarming the tech over it.
+            await removeAction(action.id);
+            changed = true;
+            continue;
+          }
           const benign =
             e instanceof ApiError &&
             ((action.type === "clock_in" && /already clocked in/i.test(e.message)) ||
-              (action.type === "clock_out" && /not clocked in/i.test(e.message)) ||
-              // A queued ping from a shift that's since ended (clocked out
-              // while still offline, or synced from another device) --
-              // there's nothing left to attach the point to, and it's not
-              // worth alarming the tech over a dropped position ping.
-              (action.type === "ping" && /not clocked in/i.test(e.message)));
+              (action.type === "clock_out" && /not clocked in/i.test(e.message)));
           await removeAction(action.id);
           changed = true;
           if (!benign) {
-            const what =
-              action.type === "clock_in"
-                ? "A queued clock in"
-                : action.type === "clock_out"
-                  ? "A queued clock out"
-                  : "A queued GPS ping";
             toast(
               "error",
-              `${what} from earlier couldn't go through (${e instanceof Error ? e.message : "unknown error"}). Please check your status.`,
+              `A queued clock ${action.type === "clock_in" ? "in" : "out"} from earlier couldn't go through (${e instanceof Error ? e.message : "unknown error"}). Please check your status.`,
             );
           }
         }
@@ -200,16 +201,17 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
       try {
         await api("/time/ping", { method: "POST", body });
       } catch (e) {
+        // A ping that can't reach the server (no signal) is queued and
+        // replayed in order with any clock in/out -- not just dropped, so a
+        // tech's route still fills in once they're back in range, with the
+        // moment it was actually captured (via recorded_at) rather than
+        // the sync time. A real rejection (clocked out before this ping
+        // synced, etc.) just means one missed point and isn't worth
+        // bothering the tech about.
         if (isConnectivityError(e)) {
-          // No connection right now -- queue it so the shift's route in
-          // the admin map doesn't get a gap, and it'll sync (with the
-          // moment it was actually captured, via recorded_at) once a
-          // connection returns.
-          await enqueueAction("ping", body);
+          await enqueueAction("gps_ping", body);
           setOfflinePending(true);
         }
-        // A real rejection (e.g. clocked out from another device in the
-        // meantime) isn't worth queuing or alarming the tech over.
       }
     };
 

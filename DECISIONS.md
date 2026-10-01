@@ -290,34 +290,84 @@ Each entry: what was decided, and why.
     deploy tonight's fixes," flagged to and approved by the owner before
     proceeding.
 
-## GPS pings now queue offline too (2026-10-01)
+## Offline GPS pings + a first-clock-in-offline bug (2026-10-02)
 
-37. **Clock in/out already queued offline (`web/src/offlineQueue.ts`); the
-    periodic GPS ping while clocked in did not — `clock.tsx`'s `sendPing`
-    just fired the request and swallowed any failure with `.catch(() =>
-    {})`, so a tech working a low-signal job site silently lost every ping
-    taken while offline, leaving gaps in the admin route map for that
-    shift.** Extended the same queue (`QueuedActionType` gained `"ping"`)
-    instead of building a second mechanism: a ping that fails with a
-    connectivity error now enqueues and replays through the existing
-    `syncQueue` loop, same as a queued clock in/out.
-    A ping is different from clock in/out in one way: the server used to
-    always timestamp it on receipt (`recorded_at` defaulted to the insert
-    moment), which is wrong for a ping that was actually captured hours
-    earlier and only just synced — it would show up on the route out of
-    order and with the wrong time. Fixed by having the client capture
-    `recorded_at` itself at the moment of the GPS fix and send it through;
-    the server accepts it when present, defaulting to its own clock only
-    when omitted (live, online pings still don't bother sending it since
-    the server's receipt time is correct for those). Also added a
-    `client_ref` to `location_pings` (migration 0024, same nullable+unique
-    pattern as `transactions.client_ref` from #33) so a retried replay of
-    the same queued ping — e.g. the request actually succeeded but the
-    response never reached the device — replays as a no-op instead of
-    writing a duplicate point into the shift's route, mirroring the
-    sign-out/return/transfer idempotency from #34.
-    Verified: full backend suite (36/36, including a new idempotent-replay
-    test asserting a repeated ping writes exactly one route point with the
-    captured `recorded_at`, not the sync time) and `check_consistency.py`
-    pass against a fresh migrate-then-seed; `tsc --noEmit` and the
-    production build are clean.
+37. **GPS pings now queue offline too, not just clock in/out.** `offlineQueue.ts`
+    (an IndexedDB queue already built for clock in/out, #36) gained a
+    `gps_ping` action type: a failed `/time/ping` due to connectivity (not a
+    real rejection) is queued instead of silently dropped, and replays in
+    the same oldest-first queue as clock in/out -- which matters because
+    `/time/ping` requires an open clock event server-side, so a queued ping
+    has to land after its clock-in and before its clock-out, which the
+    single shared queue guarantees for free.
+    **Found and fixed a real bug along the way**: a tech's very *first*
+    offline clock-in (never given GPS consent before) was silently failing
+    end-to-end. `/time/clock-in` requires `gps_consent_at` to already be
+    set server-side; `giveGpsConsent()` isn't itself queue-aware, and the
+    existing code only skipped it when consent was already given -- so a
+    first-time offline attempt called it, it threw (no connection), and
+    the catch simply swallowed the failure and proceeded to `clockIn()`
+    anyway. That let the clock-in queue locally and show success in the
+    UI, but the *server* never got consent recorded, so when the queued
+    clock-in replayed on reconnect it was rejected with a 403 the tech
+    never saw -- transient toasts are easy to miss when a test isn't
+    watching for them; the real tell was the UI silently reverting to
+    "not clocked in" after sync. Added a `gps_consent` action type so a
+    first-time offline consent call queues instead of being dropped, and
+    replays before the clock-in behind it in the same queue.
+    Caught this via an actual Playwright run against a real backend with
+    Chromium's virtual clock fast-forwarding the real 2-minute ping
+    interval -- not just code review -- and it's good that it did: the bug
+    was invisible from reading the diff, only showed up as "nothing landed
+    server-side" after a real offline-then-reconnect cycle. Verified via
+    the real API afterward: `gps_consent_given: true`, correct clock-in,
+    and a 3-point route (clock-in + both queued pings) all recorded in
+    order after sync.
+
+## Admin can now read clock-out notes in Login Hours (2026-10-02)
+
+38. **A tech's clock-out note now shows in the admin "Login Hours" (Calendar)
+    page for every shift in the "All techs" list, not only inside the
+    day-detail sheet.** `clock_out_note` was already captured and already
+    rendered in the day-detail Sheet's per-shift view, but the flatter
+    "All techs" shift list (the view used when scanning one tech's whole
+    history, which is what triggered this request) left it out entirely --
+    an admin had no way to see what a tech wrote about their day without
+    separately opening each day on the calendar. Added `note` to the
+    `timesheet()` response in `api/app/routers/reports.py` (both the flat
+    `rows` list and the per-tech grouped `shifts` list it's built from) and
+    rendered it under the job/time line in the "All techs" row in
+    `Calendar.tsx`, mirroring the existing italic quote styling from the
+    day-detail sheet. No schema change -- `clock_out_note` already existed
+    on the `TimeEntry` model; this only exposes it through the admin-facing
+    report endpoint, which already stripped it before (admin endpoints need
+    no cost-stripping concerns here, since notes aren't cost data).
+
+## GPS ping idempotency + accurate capture time (2026-10-01)
+
+39. **Extended the `gps_ping` offline-queue entry from #37 with the same
+    write-idempotency `apply_transaction` already has (#33/#34), plus an
+    accurate timestamp.** Two gaps in the #37 queueing: (1) a retried
+    sync of the same queued ping — the request actually reached the server
+    but the response never reached the device, so the client retries —
+    wrote a second, duplicate point into the shift's route; (2) a ping
+    that was captured hours earlier while offline and only just replayed
+    got stamped with the *sync* time, not the time it was actually taken,
+    so a late-syncing ping would show up on the route out of order and at
+    the wrong time.
+    Fixed both server-side: `location_pings` gained a nullable+unique
+    `client_ref` column (migration `0024`, same pattern as
+    `transactions.client_ref`), and `/time/ping` now checks it before
+    inserting, so a replay with the same `client_ref` is a no-op instead
+    of a duplicate row — mirroring `apply_transaction`'s idempotency
+    check. `LocationPingIn` also gained an optional `recorded_at`; the
+    client now captures it at the moment of the GPS fix and sends it
+    through, and the server uses it when present, falling back to its own
+    clock only when it's omitted (a live, online ping still doesn't
+    bother sending it, since the server's receipt time is already
+    correct for those).
+    Verified: full backend suite (incl. a new test asserting a repeated
+    ping with the same `client_ref` writes exactly one route point, with
+    the captured `recorded_at` rather than the sync time) and
+    `check_consistency.py` pass against a fresh migrate-then-seed;
+    `tsc --noEmit` and the production build are clean.

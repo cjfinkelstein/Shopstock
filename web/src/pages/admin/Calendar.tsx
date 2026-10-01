@@ -88,6 +88,7 @@ interface Shift {
   job_number: string | null;
   job_name: string | null;
   approval_status: string;
+  note: string | null;
 }
 
 interface TechTimesheet {
@@ -690,6 +691,11 @@ export default function Calendar() {
                                     `out ${fmtWhen(s.clock_out_at!)}`
                                   )}
                                 </p>
+                                {s.note && (
+                                  <p className="mt-0.5 text-[12px] italic text-slate-600 dark:text-slate-300">
+                                    "{s.note}"
+                                  </p>
+                                )}
                               </div>
                               <div className="flex shrink-0 items-center gap-2.5">
                                 <span className="text-[12.5px] font-bold tabular-nums">{hoursLabel(s.hours)}</span>
