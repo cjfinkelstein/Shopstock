@@ -38,6 +38,36 @@ class TokenOut(BaseModel):
     user: "UserOut"
 
 
+class ForgotPasswordIn(BaseModel):
+    email: str
+
+
+class SmtpSettingsIn(BaseModel):
+    host: str = ""
+    port: int = 587
+    use_tls: bool = True
+    username: str = ""
+    from_address: str = ""
+    from_name: str = ""
+    password: str | None = None  # blank/omitted = leave the stored password unchanged
+
+
+class SmtpSettingsOut(BaseModel):
+    host: str
+    port: int
+    use_tls: bool
+    username: str
+    from_address: str
+    from_name: str
+    has_password: bool
+    configured: bool
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8)
+
+
 # ---------- Users ----------
 
 class UserBase(BaseModel):
@@ -901,6 +931,61 @@ class CalendarEventOut(TimestampedOut):
     done: bool
     created_by_name: str | None = None
     edits: list[CalendarEventEditOut] = []
+
+
+# ---------- PTO ----------
+
+class PtoEntryCreate(BaseModel):
+    user_id: int
+    entry_date: date
+    category: str = Field(pattern="^(vacation|personal)$")
+    days: Decimal = Decimal("1")
+    notes: str | None = None
+
+
+class PtoRequestIn(BaseModel):
+    start_date: date
+    end_date: date
+    category: str = Field(pattern="^(vacation|personal)$")
+    notes: str | None = None
+
+
+class PtoEntryOut(TimestampedOut):
+    id: int
+    user_id: int
+    user_name: str
+    entry_date: date
+    end_date: date | None
+    category: str
+    days: Decimal
+    status: str
+    notes: str | None
+    created_by_name: str | None = None
+    decided_by_name: str | None = None
+    decided_at: datetime | None = None
+
+    @field_serializer("decided_at")
+    def _ser_decided_at(self, v: datetime | None, _info):
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
+
+
+class PtoBalanceOut(BaseModel):
+    user_id: int
+    user_name: str
+    year: int
+    vacation_allotted: Decimal
+    vacation_used: Decimal
+    vacation_remaining: Decimal
+    vacation_pending: Decimal
+    personal_allotted: Decimal
+    personal_used: Decimal
+    personal_remaining: Decimal
+    personal_pending: Decimal
+    entries: list[PtoEntryOut] = []
 
 
 # ---------- Labels ----------

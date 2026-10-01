@@ -5,9 +5,9 @@ import { api, fmtMoney } from "../../api";
 import { catTint } from "../../catcolor";
 import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
-import { Avatar, Empty } from "../../components/ui";
+import { Avatar, Empty, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { Truck, User, Vendor } from "../../types";
+import type { PtoBalance, PtoEntry, SmtpSettings, Truck, User, Vendor } from "../../types";
 
 type AddKind = "tech" | "truck" | "vendor";
 
@@ -63,18 +63,85 @@ export default function Settings() {
   const [pin, setPin] = useState("");
   const [rateFor, setRateFor] = useState<User | null>(null);
   const [rate, setRate] = useState("");
+  const [ptoFor, setPtoFor] = useState<User | null>(null);
+  const [ptoBalance, setPtoBalance] = useState<PtoBalance | null>(null);
+  const [newPtoDate, setNewPtoDate] = useState("");
+  const [newPtoCategory, setNewPtoCategory] = useState<"vacation" | "personal">("vacation");
+  const [newPtoDays, setNewPtoDays] = useState("1");
+  const [newPtoNotes, setNewPtoNotes] = useState("");
+  const [ptoSaving, setPtoSaving] = useState(false);
+  const [pendingPto, setPendingPto] = useState<PtoEntry[] | null>(null);
+  const [decidingPto, setDecidingPto] = useState<number | null>(null);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [addName, setAddName] = useState("");
+
+  const [smtp, setSmtp] = useState<SmtpSettings | null>(null);
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUseTls, setSmtpUseTls] = useState(true);
+  const [smtpUsername, setSmtpUsername] = useState("");
+  const [smtpFromAddress, setSmtpFromAddress] = useState("");
+  const [smtpFromName, setSmtpFromName] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpSaving, setSmtpSaving] = useState(false);
 
   const load = useCallback(() => {
     api<User[]>("/users?include_inactive=true").then(setUsers).catch(() => {});
     api<Truck[]>("/trucks?include_inactive=true").then(setTrucks).catch(() => {});
     api<Vendor[]>("/vendors?include_inactive=true").then(setVendors).catch(() => {});
     api<string[]>("/items/categories").then(setCategories).catch(() => {});
+    api<SmtpSettings>("/settings/smtp").then((s) => {
+      setSmtp(s);
+      setSmtpHost(s.host);
+      setSmtpPort(String(s.port));
+      setSmtpUseTls(s.use_tls);
+      setSmtpUsername(s.username);
+      setSmtpFromAddress(s.from_address);
+      setSmtpFromName(s.from_name);
+    }).catch(() => {});
+    api<PtoEntry[]>("/pto/pending").then(setPendingPto).catch(() => setPendingPto([]));
   }, []);
 
+  const decidePto = async (entryId: number, decision: "approve" | "deny") => {
+    setDecidingPto(entryId);
+    try {
+      await api(`/pto/${entryId}/${decision}`, { method: "POST" });
+      setPendingPto((prev) => (prev ?? []).filter((e) => e.id !== entryId));
+      toast("success", decision === "approve" ? "Request approved" : "Request denied");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not update request");
+    } finally {
+      setDecidingPto(null);
+    }
+  };
+
   useEffect(load, [load]);
+
+  const saveSmtp = async () => {
+    setSmtpSaving(true);
+    try {
+      const s = await api<SmtpSettings>("/settings/smtp", {
+        method: "PUT",
+        body: {
+          host: smtpHost,
+          port: Number(smtpPort) || 587,
+          use_tls: smtpUseTls,
+          username: smtpUsername,
+          from_address: smtpFromAddress,
+          from_name: smtpFromName,
+          password: smtpPassword || null,
+        },
+      });
+      setSmtp(s);
+      setSmtpPassword("");
+      toast("success", "Email settings saved");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not save email settings");
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
 
   const techs = users.filter((u) => u.role === "tech");
 
@@ -122,6 +189,73 @@ export default function Settings() {
     load();
   };
 
+  const openPto = (u: User) => {
+    setPtoFor(u);
+    setPtoBalance(null);
+    setNewPtoDate("");
+    setNewPtoCategory("vacation");
+    setNewPtoDays("1");
+    setNewPtoNotes("");
+    api<PtoBalance[]>(`/pto?year=${new Date().getFullYear()}`)
+      .then((rows) => {
+        const mine = rows.find((b) => b.user_id === u.id);
+        if (mine) setPtoBalance(mine);
+      })
+      .catch(() => {});
+  };
+
+  const closePto = () => {
+    setPtoFor(null);
+    setPtoBalance(null);
+  };
+
+  const addPto = async () => {
+    if (!ptoFor || !newPtoDate || !newPtoDays || Number(newPtoDays) <= 0) return;
+    setPtoSaving(true);
+    try {
+      const updated = await api<PtoBalance>("/pto", {
+        method: "POST",
+        body: {
+          user_id: ptoFor.id,
+          entry_date: newPtoDate,
+          category: newPtoCategory,
+          days: newPtoDays,
+          notes: newPtoNotes.trim() || null,
+        },
+      });
+      setPtoBalance(updated);
+      setNewPtoDate("");
+      setNewPtoDays("1");
+      setNewPtoNotes("");
+      toast("success", `Logged ${newPtoDays} ${newPtoCategory} day(s) for ${ptoFor.name}`);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not log PTO");
+    } finally {
+      setPtoSaving(false);
+    }
+  };
+
+  const deletePto = async (entryId: number) => {
+    if (!ptoFor) return;
+    try {
+      await api(`/pto/${entryId}`, { method: "DELETE" });
+      openPto(ptoFor);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not remove entry");
+    }
+  };
+
+  const decidePtoInSheet = async (entryId: number, decision: "approve" | "deny") => {
+    if (!ptoFor) return;
+    try {
+      await api(`/pto/${entryId}/${decision}`, { method: "POST" });
+      openPto(ptoFor);
+      setPendingPto((prev) => (prev ?? []).filter((e) => e.id !== entryId));
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not update request");
+    }
+  };
+
   const clearPin = async (u: User) => {
     await api(`/users/${u.id}`, { method: "PATCH", body: { clear_pin: true } });
     toast("success", `PIN removed for ${u.name}`);
@@ -160,6 +294,49 @@ export default function Settings() {
         <h1 className="page-title">Settings</h1>
       </div>
 
+      {/* PTO requests */}
+      {pendingPto && pendingPto.length > 0 && (
+        <Section
+          icon="calendar"
+          tint="bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400"
+          title="PTO Requests"
+          caption={`${plural(pendingPto.length, "request")} waiting on you`}
+        >
+          <div className="divide-list">
+            {pendingPto.map((e) => (
+              <div key={e.id} className="flex flex-wrap items-center gap-2.5 px-4 py-3">
+                <Avatar name={e.user_name} index={e.user_id} size={36} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold">{e.user_name}</p>
+                  <p className="truncate text-[12.5px] text-slate-500 dark:text-slate-400">
+                    {e.entry_date}
+                    {e.end_date && e.end_date !== e.entry_date ? ` – ${e.end_date}` : ""} · {e.days}d{" "}
+                    <span className="capitalize">{e.category}</span>
+                    {e.notes ? ` · ${e.notes}` : ""}
+                  </p>
+                </div>
+                <button
+                  className="btn-secondary !min-h-[40px] px-3.5 text-[13px] text-emerald-700 dark:text-emerald-300"
+                  disabled={decidingPto === e.id}
+                  onClick={() => decidePto(e.id, "approve")}
+                >
+                  {decidingPto === e.id ? <Spinner /> : <Icon name="check" size={15} />}
+                  Approve
+                </button>
+                <button
+                  className="btn-ghost !min-h-[40px] px-3.5 text-[13px]"
+                  disabled={decidingPto === e.id}
+                  onClick={() => decidePto(e.id, "deny")}
+                >
+                  <Icon name="x" size={15} />
+                  Deny
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* Techs */}
       <Section
         icon="users"
@@ -194,6 +371,10 @@ export default function Settings() {
               >
                 <Icon name="dollar-sign" size={15} />
                 {u.hourly_rate ? `${fmtMoney(u.hourly_rate)}/hr` : "Set rate"}
+              </button>
+              <button className="chip !min-h-[40px] px-3.5" onClick={() => openPto(u)} title="View/log PTO">
+                <Icon name="calendar" size={15} />
+                PTO
               </button>
               {u.has_pin ? (
                 <span className="flex items-center gap-1.5">
@@ -351,6 +532,102 @@ export default function Settings() {
         </p>
       </Section>
 
+      {/* Email (SMTP) */}
+      <Section
+        icon="mail"
+        tint="bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400"
+        title="Email"
+        caption={smtp?.configured ? `Sending as ${smtp.from_address}` : "Not connected yet"}
+      >
+        <div className="space-y-4 p-4">
+          <p className="text-sm text-slate-400 dark:text-slate-500">
+            Connects a mailbox for estimate-ready emails and admin password resets. For Gmail or
+            Outlook, use an <span className="font-semibold">app password</span> here, not your
+            regular sign-in password — your provider's account settings can generate one.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="label">SMTP host</span>
+              <input
+                className="input"
+                placeholder="smtp.gmail.com"
+                value={smtpHost}
+                onChange={(e) => setSmtpHost(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="label">Port</span>
+              <input
+                className="input"
+                inputMode="numeric"
+                placeholder="587"
+                value={smtpPort}
+                onChange={(e) => setSmtpPort(e.target.value.replace(/\D/g, ""))}
+              />
+            </label>
+            <label className="block">
+              <span className="label">Mailbox username</span>
+              <input
+                className="input"
+                placeholder="you@company.com"
+                value={smtpUsername}
+                onChange={(e) => setSmtpUsername(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <label className="block">
+              <span className="label">Password / app password</span>
+              <input
+                className="input"
+                type="password"
+                placeholder={smtp?.has_password ? "•••••••• (saved — leave blank to keep)" : "App password"}
+                value={smtpPassword}
+                onChange={(e) => setSmtpPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </label>
+            <label className="block">
+              <span className="label">From address</span>
+              <input
+                className="input"
+                placeholder="you@company.com"
+                value={smtpFromAddress}
+                onChange={(e) => setSmtpFromAddress(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="label">From name</span>
+              <input
+                className="input"
+                placeholder="APEX Electrical Group"
+                value={smtpFromName}
+                onChange={(e) => setSmtpFromName(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <label className="flex items-center gap-2.5 text-[14px] font-medium">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300"
+              checked={smtpUseTls}
+              onChange={(e) => setSmtpUseTls(e.target.checked)}
+            />
+            Use TLS (leave on unless your provider says otherwise)
+          </label>
+
+          <button
+            className="btn-primary"
+            disabled={smtpSaving || !smtpHost.trim() || !smtpFromAddress.trim()}
+            onClick={saveSmtp}
+          >
+            {smtpSaving ? <Spinner /> : <Icon name="check" size={16} />}
+            Save email settings
+          </button>
+        </div>
+      </Section>
+
       {addKind && (
         <Sheet title={ADD_META[addKind].title} onClose={closeAdd}>
           <div className="space-y-4">
@@ -428,6 +705,166 @@ export default function Settings() {
               Save rate
             </button>
           </div>
+        </Sheet>
+      )}
+
+      {ptoFor && (
+        <Sheet
+          title={`PTO for ${ptoFor.name}`}
+          subtitle={`${ptoBalance?.year ?? new Date().getFullYear()} · resets every January 1st, no carryover`}
+          onClose={closePto}
+        >
+          {!ptoBalance ? (
+            <p className="py-6 text-center text-[13px] text-slate-400">Loading...</p>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-emerald-50 p-3.5 text-center dark:bg-emerald-500/10">
+                  <p className="text-[24px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                    {ptoBalance.vacation_remaining}
+                  </p>
+                  <p className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    of {ptoBalance.vacation_allotted} vacation days left
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-brand-50 p-3.5 text-center dark:bg-brand-500/10">
+                  <p className="text-[24px] font-extrabold text-brand-700 dark:text-brand-300">
+                    {ptoBalance.personal_remaining}
+                  </p>
+                  <p className="text-[11.5px] font-semibold text-brand-600 dark:text-brand-400">
+                    of {ptoBalance.personal_allotted} personal days left
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 rounded-2xl bg-slate-50 p-3.5 dark:bg-slate-800/60">
+                <p className="text-[13px] font-bold uppercase tracking-wider text-slate-400">Log a day</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="block">
+                    <span className="label">Date</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={newPtoDate}
+                      onChange={(e) => setNewPtoDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="label">Days</span>
+                    <input
+                      type="number"
+                      className="input"
+                      min="0.5"
+                      step="0.5"
+                      value={newPtoDays}
+                      onChange={(e) => setNewPtoDays(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="label">Type</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={`chip flex-1 !justify-center ${newPtoCategory === "vacation" ? "chip-active" : ""}`}
+                      onClick={() => setNewPtoCategory("vacation")}
+                    >
+                      Vacation
+                    </button>
+                    <button
+                      type="button"
+                      className={`chip flex-1 !justify-center ${newPtoCategory === "personal" ? "chip-active" : ""}`}
+                      onClick={() => setNewPtoCategory("personal")}
+                    >
+                      Personal
+                    </button>
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="label">Notes (optional)</span>
+                  <input
+                    className="input"
+                    placeholder="e.g. Family trip"
+                    value={newPtoNotes}
+                    onChange={(e) => setNewPtoNotes(e.target.value)}
+                  />
+                </label>
+                <button
+                  className="btn-primary w-full"
+                  disabled={ptoSaving || !newPtoDate || !newPtoDays || Number(newPtoDays) <= 0}
+                  onClick={addPto}
+                >
+                  {ptoSaving ? <Spinner /> : <Icon name="plus" size={16} />}
+                  Log PTO
+                </button>
+              </div>
+
+              <div>
+                <p className="mb-2 text-[13px] font-bold uppercase tracking-wider text-slate-400">
+                  This year's entries ({ptoBalance.entries.length})
+                </p>
+                {ptoBalance.entries.length === 0 ? (
+                  <p className="text-[12.5px] text-slate-400">Nothing logged yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {ptoBalance.entries.map((e) => (
+                      <div
+                        key={e.id}
+                        className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className={`text-[13px] font-semibold ${e.status === "denied" ? "text-slate-400 line-through" : ""}`}>
+                              {e.entry_date}
+                              {e.end_date && e.end_date !== e.entry_date ? ` – ${e.end_date}` : ""} · {e.days}{" "}
+                              {e.category} day{Number(e.days) === 1 ? "" : "s"}
+                            </p>
+                            {e.status !== "approved" && (
+                              <span
+                                className={`badge shrink-0 capitalize ${
+                                  e.status === "pending"
+                                    ? "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+                                    : "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400"
+                                }`}
+                              >
+                                {e.status}
+                              </span>
+                            )}
+                          </div>
+                          {e.notes && (
+                            <p className="truncate text-[12px] text-slate-400 dark:text-slate-500">{e.notes}</p>
+                          )}
+                        </div>
+                        {e.status === "pending" && (
+                          <div className="flex shrink-0 gap-1.5">
+                            <button
+                              className="btn-secondary !min-h-[36px] px-2.5 text-[12px] text-emerald-700 dark:text-emerald-300"
+                              onClick={() => decidePtoInSheet(e.id, "approve")}
+                            >
+                              <Icon name="check" size={14} />
+                            </button>
+                            <button
+                              className="btn-ghost !min-h-[36px] px-2.5 text-[12px]"
+                              onClick={() => decidePtoInSheet(e.id, "deny")}
+                            >
+                              <Icon name="x" size={14} />
+                            </button>
+                          </div>
+                        )}
+                        <button
+                          className="icon-btn shrink-0"
+                          aria-label="Remove entry"
+                          onClick={() => deletePto(e.id)}
+                        >
+                          <Icon name="trash" size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </Sheet>
       )}
 

@@ -30,6 +30,10 @@ class User(TimestampMixin, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     gps_consent_at: Mapped[datetime | None] = mapped_column(DateTime)
     hourly_rate: Mapped[Decimal | None] = mapped_column(Num(10, 2))  # admin-settable; None = not set yet
+    # Forgot-password flow (admin only) -- same one-time-token shape as
+    # Estimate.share_token. Cleared after use or once a new one is issued.
+    reset_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     truck: Mapped["Truck | None"] = relationship(back_populates="assigned_user", uselist=False)
 
@@ -70,6 +74,40 @@ class Location(TimestampMixin, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     truck: Mapped[Truck | None] = relationship(back_populates="location")
+
+
+class PtoEntry(TimestampMixin, Base):
+    """One logged or requested PTO/personal block of days for a tech,
+    deducted from their annual allotment -- 15 vacation days + 5 personal
+    days per the employee handbook. Balances reset every January 1st (no
+    carryover per the handbook), so remaining balance is always computed by
+    summing approved entries within the calendar year, never stored
+    directly.
+
+    A tech's own self-service request (POST /pto/request) is created with
+    status="pending" and doesn't count against their balance until an admin
+    approves it. An admin logging a historical/manual entry directly (POST
+    /pto) is auto-approved -- there's nothing to confirm since the admin is
+    the one entering it."""
+
+    __tablename__ = "pto_entries"
+    __table_args__ = (Index("ix_pto_entries_user", "user_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date)  # None = single-day entry (== entry_date)
+    category: Mapped[str] = mapped_column(String(10), nullable=False)  # vacation | personal
+    days: Mapped[Decimal] = mapped_column(Num(4, 2), default=Decimal("1"), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), default="approved", nullable=False)  # pending|approved|denied
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    creator: Mapped["User | None"] = relationship(foreign_keys=[created_by])
+    decider: Mapped["User | None"] = relationship(foreign_keys=[decided_by])
 
 
 class ClockEvent(TimestampMixin, Base):
@@ -364,6 +402,26 @@ class CalendarEventEdit(Base):
 
     event: Mapped[CalendarEvent] = relationship(back_populates="edits")
     editor: Mapped["User | None"] = relationship()
+
+
+class SmtpSettings(TimestampMixin, Base):
+    """Single-row table (id always 1) holding the outbound-email mailbox an
+    admin connects through the Settings page -- estimate-sending and
+    password-reset emails both send through whatever's configured here.
+    Replaces the old env-var-only SMTP_* config so a non-technical admin can
+    set it up themselves in the app, instead of needing someone to edit the
+    server's .env file (which would mean handling their email password)."""
+
+    __tablename__ = "smtp_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    host: Mapped[str | None] = mapped_column(String(200))
+    port: Mapped[int] = mapped_column(default=587, nullable=False)
+    use_tls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(200))
+    password: Mapped[str | None] = mapped_column(Text)  # plaintext -- never returned by the API, write-only
+    from_address: Mapped[str | None] = mapped_column(String(200))
+    from_name: Mapped[str | None] = mapped_column(String(200))
 
 
 class Transaction(TimestampMixin, Base):

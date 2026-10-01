@@ -12,6 +12,7 @@ import EstimateDetail from "./pages/admin/EstimateDetail";
 import AdminEstimates from "./pages/admin/Estimates";
 import AdminExpenses from "./pages/admin/Expenses";
 import PublicEstimate from "./pages/PublicEstimate";
+import ResetPassword from "./pages/ResetPassword";
 import TeamCalendar from "./pages/TeamCalendar";
 import AdminItems from "./pages/admin/Items";
 import AdminJobs from "./pages/admin/Jobs";
@@ -56,6 +57,17 @@ export default function App() {
     );
   }
 
+  // Same reasoning for the password-reset link -- a locked-out admin has no
+  // valid token in this browser, and resetting takes them straight to
+  // /admin once it succeeds (see ResetPassword's navigate call).
+  if (window.location.pathname.startsWith("/reset-password")) {
+    return (
+      <Routes>
+        <Route path="/reset-password" element={<ResetPassword />} />
+      </Routes>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -76,7 +88,6 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/calendar" element={<TeamCalendar />} />
       <Route element={<TechLayout />}>
         <Route path="/home" element={<Home />} />
         <Route path="/search" element={<Search />} />
@@ -88,6 +99,7 @@ export default function App() {
         <Route path="/item/:id" element={<ItemSheet />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/my-hours" element={<MyHours />} />
+        <Route path="/calendar" element={<TeamCalendar />} />
       </Route>
       {user.role === "admin" && (
         <Route path="/admin" element={<AdminLayout />}>

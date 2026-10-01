@@ -143,7 +143,7 @@ export default function TeamCalendar() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 pb-10 pt-4 animate-fade-up">
+    <div className="mx-auto max-w-3xl space-y-6 animate-fade-up">
       <header className="flex items-center gap-2">
         <button
           type="button"
