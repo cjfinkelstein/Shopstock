@@ -6,16 +6,16 @@ sign-out/return/transfer make a retried request replay the original
 result instead of writing twice. Existing rows get NULL, which is
 correct: they predate this and were never at risk of a retry.
 
-Revision ID: 0019
-Revises: 0018
+Revision ID: 0023
+Revises: 0022
 Create Date: 2026-09-30
 
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0019"
-down_revision = "0018"
+revision = "0023"
+down_revision = "0022"
 branch_labels = None
 depends_on = None
 
