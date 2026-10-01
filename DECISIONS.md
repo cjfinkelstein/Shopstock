@@ -213,24 +213,45 @@ Each entry: what was decided, and why.
 
 ## Bug fix: worker-map tiles (2026-10-01)
 
-35. **Swapped the GPS map's tile provider off Esri's legacy free layer.**
-    The admin worker-map / shift-route map (`web/src/pages/admin/Calendar.tsx`)
-    used `server.arcgisonline.com/.../World_Light_Gray_Base` — Esri's older
+35. **Swapped the GPS map's tile provider off Esri's legacy free layer —
+    twice.** The admin worker-map / shift-route map
+    (`web/src/pages/admin/Calendar.tsx`) used
+    `server.arcgisonline.com/.../World_Light_Gray_Base` — Esri's older
     anonymous-access tile service. Reported as "blank screen"; actual cause
     (confirmed via a user screenshot) was the tile images themselves coming
     back with "Map data not yet available" baked in as a placeholder — Esri
     degrading/sunsetting free anonymous access to that legacy layer, not a
     code bug. Pins, route lines, popups, and the Leaflet container itself
     were all rendering correctly the whole time; only the basemap imagery
-    was broken. Replaced both `TileLayer` instances (live map + shift-route
-    map) with CARTO's free Positron basemap
-    (`{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png`, no API key) —
-    closest aesthetic match to the light-gray minimal look DESIGN.md calls
-    for, and the standard reliable free choice for this exact use case.
-    Could not get a rendered screenshot confirming real map tiles paint,
-    since this session's own sandbox network policy blocks third-party
-    tile hosts generally (reproduced the *same* class of failure against
-    both the old Esri host and the new CARTO one) — verified instead that
-    the browser requests the correct CARTO URLs with correct tile math
-    (subdomain round-robin, sane z/x/y for the given center/zoom). Confirm
-    the map actually paints on a real network before considering this closed.
+    was broken. First swap: CARTO's free Positron basemap
+    (`{s}.basemaps.cartocdn.com/...`) — closest aesthetic match to the
+    light-gray minimal look DESIGN.md calls for. Deployed to production and
+    found CARTO **also** now requires an API key for anonymous use (same
+    "API KEY REQUIRED" placeholder pattern as Esri). Landed on plain
+    OpenStreetMap tiles (`tile.openstreetmap.org/{z}/{x}/{y}.png`) — the one
+    option that's free with no account/key, at the cost of OSM's busier
+    default style instead of a light-gray minimal one. If that aesthetic
+    mismatch bothers the owner later, the real fix is a CARTO (or similar)
+    API key, not another provider swap.
+    **Deployment incident while landing the first swap**: `shop
+    .apexelectricalgroupinc.com` runs from `/opt/shopstock` on a DigitalOcean
+    droplet, deployed by copying files (no git on the server) per
+    GO-LIVE.md — so this fix had to be hand-applied there via `sed`, not a
+    `git pull`. `docker compose up -d --build web` was run to rebuild the
+    frontend, but since `web` depends on `api` in `docker-compose.yml`,
+    `--build` cascaded and also rebuilt `api` from this server's local
+    `./api` copy — which is a *stale* snapshot (this droplet was never kept
+    in sync with the GitHub repo after its initial setup), missing
+    migrations the live database had already been migrated past via the
+    normally-running `ghcr.io/.../shopstock-api:latest` image built by CI.
+    Result: `alembic.util.messaging: Can't locate revision identified by
+    '0022'` on every request, and the tech tap-in list came up empty —
+    **no data was lost** (confirmed directly via `psql`), but logins were
+    blocked until `docker compose pull api && docker compose up -d api`
+    restored the correct image. Lesson for next time: on this droplet,
+    rebuild `web` alone with `docker compose build web && docker compose
+    up -d --no-deps web` — never bare `--build` with a service that has
+    `depends_on`, since it silently rebuilds stale dependencies too. This
+    droplet's `/opt/shopstock/api` should really be brought in sync with
+    (or replaced by) a real git checkout so this class of mismatch can't
+    recur — flagged here, not yet done.
