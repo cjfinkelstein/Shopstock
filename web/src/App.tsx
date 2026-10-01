@@ -103,6 +103,7 @@ export default function App() {
           <Route path="trucks" element={<AdminTrucks />} />
           <Route path="worker-map" element={<Navigate to="/admin/calendar" replace />} />
           <Route path="calendar" element={<AdminCalendar />} />
+          <Route path="team-calendar" element={<TeamCalendar />} />
           <Route path="expenses" element={<AdminExpenses />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="settings" element={<AdminSettings />} />
