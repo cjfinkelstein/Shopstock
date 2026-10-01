@@ -104,8 +104,10 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
         try {
           if (action.type === "clock_in") {
             await api<ClockStatus>("/time/clock-in", { method: "POST", body: action.payload });
-          } else {
+          } else if (action.type === "clock_out") {
             await api("/time/clock-out", { method: "POST", body: action.payload });
+          } else {
+            await api("/time/ping", { method: "POST", body: action.payload });
           }
           await removeAction(action.id);
           changed = true;
@@ -118,13 +120,24 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
           const benign =
             e instanceof ApiError &&
             ((action.type === "clock_in" && /already clocked in/i.test(e.message)) ||
-              (action.type === "clock_out" && /not clocked in/i.test(e.message)));
+              (action.type === "clock_out" && /not clocked in/i.test(e.message)) ||
+              // A queued ping from a shift that's since ended (clocked out
+              // while still offline, or synced from another device) --
+              // there's nothing left to attach the point to, and it's not
+              // worth alarming the tech over a dropped position ping.
+              (action.type === "ping" && /not clocked in/i.test(e.message)));
           await removeAction(action.id);
           changed = true;
           if (!benign) {
+            const what =
+              action.type === "clock_in"
+                ? "A queued clock in"
+                : action.type === "clock_out"
+                  ? "A queued clock out"
+                  : "A queued GPS ping";
             toast(
               "error",
-              `A queued clock ${action.type === "clock_in" ? "in" : "out"} from earlier couldn't go through (${e instanceof Error ? e.message : "unknown error"}). Please check your status.`,
+              `${what} from earlier couldn't go through (${e instanceof Error ? e.message : "unknown error"}). Please check your status.`,
             );
           }
         }
@@ -178,10 +191,26 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     const sendPing = async () => {
       const pos = await getPosition();
       if (!pos) return;
-      api("/time/ping", {
-        method: "POST",
-        body: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-      }).catch(() => {});
+      const body = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        recorded_at: new Date().toISOString(),
+        client_ref: crypto.randomUUID(),
+      };
+      try {
+        await api("/time/ping", { method: "POST", body });
+      } catch (e) {
+        if (isConnectivityError(e)) {
+          // No connection right now -- queue it so the shift's route in
+          // the admin map doesn't get a gap, and it'll sync (with the
+          // moment it was actually captured, via recorded_at) once a
+          // connection returns.
+          await enqueueAction("ping", body);
+          setOfflinePending(true);
+        }
+        // A real rejection (e.g. clocked out from another device in the
+        // meantime) isn't worth queuing or alarming the tech over.
+      }
     };
 
     sendPing();

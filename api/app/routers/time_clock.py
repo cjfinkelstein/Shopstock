@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user, require_admin
@@ -86,10 +88,35 @@ def clock_out(body: ClockOutIn, db: Session = Depends(get_db), user: User = Depe
 
 @router.post("/ping", status_code=204)
 def ping(body: LocationPingIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Idempotency: a retried offline-queued ping (same client_ref) replays as
+    # a no-op instead of writing a duplicate point into the shift's route.
+    if body.client_ref:
+        existing = db.scalars(
+            select(LocationPing).where(LocationPing.client_ref == body.client_ref)
+        ).first()
+        if existing is not None:
+            return
     ev = _open_event(db, user.id)
     if not ev:
         raise HTTPException(status_code=400, detail="Not clocked in")
-    db.add(LocationPing(clock_event_id=ev.id, user_id=user.id, lat=body.lat, lng=body.lng))
+    ping_row = LocationPing(
+        clock_event_id=ev.id,
+        user_id=user.id,
+        lat=body.lat,
+        lng=body.lng,
+        client_ref=body.client_ref,
+        **({"recorded_at": body.recorded_at} if body.recorded_at is not None else {}),
+    )
+    db.add(ping_row)
+    if body.client_ref:
+        # Guards the race where two requests with the same client_ref flush
+        # at once -- the unique index catches it, and we treat the loser as
+        # the no-op replay instead of raising.
+        try:
+            with db.begin_nested():
+                db.flush()
+        except IntegrityError:
+            pass
     db.commit()
 
 

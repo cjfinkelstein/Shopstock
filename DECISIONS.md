@@ -289,3 +289,35 @@ Each entry: what was decided, and why.
     same motion as this session's own fixes — a much bigger jump than "just
     deploy tonight's fixes," flagged to and approved by the owner before
     proceeding.
+
+## GPS pings now queue offline too (2026-10-01)
+
+37. **Clock in/out already queued offline (`web/src/offlineQueue.ts`); the
+    periodic GPS ping while clocked in did not — `clock.tsx`'s `sendPing`
+    just fired the request and swallowed any failure with `.catch(() =>
+    {})`, so a tech working a low-signal job site silently lost every ping
+    taken while offline, leaving gaps in the admin route map for that
+    shift.** Extended the same queue (`QueuedActionType` gained `"ping"`)
+    instead of building a second mechanism: a ping that fails with a
+    connectivity error now enqueues and replays through the existing
+    `syncQueue` loop, same as a queued clock in/out.
+    A ping is different from clock in/out in one way: the server used to
+    always timestamp it on receipt (`recorded_at` defaulted to the insert
+    moment), which is wrong for a ping that was actually captured hours
+    earlier and only just synced — it would show up on the route out of
+    order and with the wrong time. Fixed by having the client capture
+    `recorded_at` itself at the moment of the GPS fix and send it through;
+    the server accepts it when present, defaulting to its own clock only
+    when omitted (live, online pings still don't bother sending it since
+    the server's receipt time is correct for those). Also added a
+    `client_ref` to `location_pings` (migration 0024, same nullable+unique
+    pattern as `transactions.client_ref` from #33) so a retried replay of
+    the same queued ping — e.g. the request actually succeeded but the
+    response never reached the device — replays as a no-op instead of
+    writing a duplicate point into the shift's route, mirroring the
+    sign-out/return/transfer idempotency from #34.
+    Verified: full backend suite (36/36, including a new idempotent-replay
+    test asserting a repeated ping writes exactly one route point with the
+    captured `recorded_at`, not the sync time) and `check_consistency.py`
+    pass against a fresh migrate-then-seed; `tsc --noEmit` and the
+    production build are clean.

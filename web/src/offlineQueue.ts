@@ -1,15 +1,16 @@
-/** Offline action queue for tech-facing writes (clock in/out today; material
- * sign-out is a planned follow-up). When a write fails because the device
- * has no connection -- not because the server rejected it -- the action is
- * stored here and replayed in the same order once connectivity returns.
- * Uses IndexedDB rather than localStorage since it's async and safe to grow
- * without blocking the main thread. */
+/** Offline action queue for tech-facing writes (clock in/out and the
+ * periodic GPS ping while on shift; material sign-out is a planned
+ * follow-up). When a write fails because the device has no connection --
+ * not because the server rejected it -- the action is stored here and
+ * replayed in the same order once connectivity returns. Uses IndexedDB
+ * rather than localStorage since it's async and safe to grow without
+ * blocking the main thread. */
 
 const DB_NAME = "shopstock-offline";
 const DB_VERSION = 1;
 const STORE = "queue";
 
-export type QueuedActionType = "clock_in" | "clock_out";
+export type QueuedActionType = "clock_in" | "clock_out" | "ping";
 
 export interface QueuedAction {
   id: string;
