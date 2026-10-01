@@ -131,6 +131,12 @@ class ClockOutIn(BaseModel):
 class LocationPingIn(BaseModel):
     lat: float
     lng: float
+    # When a ping was queued offline and replayed later, the client sends the
+    # moment it was actually captured (not when it finally synced) so the
+    # shift's route stays accurate, plus a client_ref so a retried replay
+    # doesn't write the same point twice.
+    recorded_at: datetime | None = None
+    client_ref: str | None = Field(default=None, max_length=64)
 
 
 def _utc_iso(v: datetime | None) -> str | None:

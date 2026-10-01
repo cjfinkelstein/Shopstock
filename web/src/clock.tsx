@@ -192,15 +192,22 @@ export function ClockProvider({ children }: { children: React.ReactNode }) {
     const sendPing = async () => {
       const pos = await getPosition();
       if (!pos) return;
-      const body = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      const body = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        recorded_at: new Date().toISOString(),
+        client_ref: crypto.randomUUID(),
+      };
       try {
         await api("/time/ping", { method: "POST", body });
       } catch (e) {
         // A ping that can't reach the server (no signal) is queued and
         // replayed in order with any clock in/out -- not just dropped, so a
-        // tech's route still fills in once they're back in range. A real
-        // rejection (clocked out before this ping synced, etc.) just means
-        // one missed point and isn't worth bothering the tech about.
+        // tech's route still fills in once they're back in range, with the
+        // moment it was actually captured (via recorded_at) rather than
+        // the sync time. A real rejection (clocked out before this ping
+        // synced, etc.) just means one missed point and isn't worth
+        // bothering the tech about.
         if (isConnectivityError(e)) {
           await enqueueAction("gps_ping", body);
           setOfflinePending(true);

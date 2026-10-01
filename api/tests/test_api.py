@@ -156,6 +156,30 @@ class TestIdempotency:
                    and s["location_id"] == seeded["shop"].id)
         assert Decimal(str(row["qty"])) == Decimal("7")  # decremented once, not twice
 
+    def test_repeated_ping_client_ref_replays(self, client, seeded):
+        """Same story for a GPS ping queued offline and replayed on sync --
+        a retry (same client_ref) must not write a duplicate point into the
+        shift's route."""
+        tech = login_tech(client, seeded)
+        r = client.post("/api/v1/time/gps-consent", headers=tech)
+        assert r.status_code == 200, r.text
+        r = client.post("/api/v1/time/clock-in", headers=tech, json={"job_id": seeded["job"].id})
+        assert r.status_code == 200, r.text
+        event_id = r.json()["clock_event_id"]
+
+        body = {"lat": 40.1, "lng": -74.1, "recorded_at": "2026-09-30T12:00:00Z",
+                "client_ref": "offline-ping-1"}
+        r1 = client.post("/api/v1/time/ping", headers=tech, json=body)
+        assert r1.status_code == 204, r1.text
+        r2 = client.post("/api/v1/time/ping", headers=tech, json=body)  # retry
+        assert r2.status_code == 204, r2.text
+
+        admin = login_admin(client)
+        route = client.get(f"/api/v1/time/{event_id}/route", headers=admin).json()
+        pings = [p for p in route["points"] if p["kind"] == "ping"]
+        assert len(pings) == 1  # recorded once, not twice
+        assert pings[0]["at"].startswith("2026-09-30T12:00:00")  # the captured time, not sync time
+
 
 class TestBatchAndReports:
     def test_batch_sign_out_atomic(self, client, seeded):

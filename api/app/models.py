@@ -145,7 +145,10 @@ class LocationPing(Base):
     """One row per periodic GPS ping recorded while a tech is clocked in."""
 
     __tablename__ = "location_pings"
-    __table_args__ = (Index("ix_location_pings_clock_event", "clock_event_id"),)
+    __table_args__ = (
+        Index("ix_location_pings_clock_event", "clock_event_id"),
+        Index("ix_location_pings_client_ref", "client_ref", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     clock_event_id: Mapped[int] = mapped_column(ForeignKey("clock_events.id"), nullable=False)
@@ -153,6 +156,12 @@ class LocationPing(Base):
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lng: Mapped[float] = mapped_column(Float, nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    # Set only for a ping that was queued offline and replayed later -- lets a
+    # retried request (same client_ref) replay instead of writing a duplicate
+    # point into the shift's route. Live pings sent while online leave this
+    # NULL; a unique index allows any number of NULLs on both SQLite and
+    # Postgres.
+    client_ref: Mapped[str | None] = mapped_column(String(64))
 
     clock_event: Mapped[ClockEvent] = relationship(back_populates="pings")
 

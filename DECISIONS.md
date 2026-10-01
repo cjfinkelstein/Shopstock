@@ -342,3 +342,32 @@ Each entry: what was decided, and why.
     on the `TimeEntry` model; this only exposes it through the admin-facing
     report endpoint, which already stripped it before (admin endpoints need
     no cost-stripping concerns here, since notes aren't cost data).
+
+## GPS ping idempotency + accurate capture time (2026-10-01)
+
+39. **Extended the `gps_ping` offline-queue entry from #37 with the same
+    write-idempotency `apply_transaction` already has (#33/#34), plus an
+    accurate timestamp.** Two gaps in the #37 queueing: (1) a retried
+    sync of the same queued ping — the request actually reached the server
+    but the response never reached the device, so the client retries —
+    wrote a second, duplicate point into the shift's route; (2) a ping
+    that was captured hours earlier while offline and only just replayed
+    got stamped with the *sync* time, not the time it was actually taken,
+    so a late-syncing ping would show up on the route out of order and at
+    the wrong time.
+    Fixed both server-side: `location_pings` gained a nullable+unique
+    `client_ref` column (migration `0024`, same pattern as
+    `transactions.client_ref`), and `/time/ping` now checks it before
+    inserting, so a replay with the same `client_ref` is a no-op instead
+    of a duplicate row — mirroring `apply_transaction`'s idempotency
+    check. `LocationPingIn` also gained an optional `recorded_at`; the
+    client now captures it at the moment of the GPS fix and sends it
+    through, and the server uses it when present, falling back to its own
+    clock only when it's omitted (a live, online ping still doesn't
+    bother sending it, since the server's receipt time is already
+    correct for those).
+    Verified: full backend suite (incl. a new test asserting a repeated
+    ping with the same `client_ref` writes exactly one route point, with
+    the captured `recorded_at` rather than the sync time) and
+    `check_consistency.py` pass against a fresh migrate-then-seed;
+    `tsc --noEmit` and the production build are clean.
