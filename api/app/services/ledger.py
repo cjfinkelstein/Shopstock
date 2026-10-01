@@ -10,6 +10,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import HTTPException
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Item, Job, Location, StockLevel, Transaction, User, Vendor
@@ -84,9 +85,19 @@ def apply_transaction(
     ref: str | None = None,
     note: str | None = None,
     reason: str | None = None,
+    client_ref: str | None = None,
 ) -> Transaction:
     if type not in TYPES:
         raise _bad(f"Unknown transaction type {type}")
+
+    # Idempotency: a retried offline-queued write (same client_ref) replays
+    # the original result instead of moving stock twice.
+    if client_ref:
+        existing = db.scalars(
+            select(Transaction).where(Transaction.client_ref == client_ref)
+        ).first()
+        if existing is not None:
+            return existing
 
     item = db.get(Item, item_id)
     if not item or not item.active:
@@ -209,7 +220,26 @@ def apply_transaction(
         note=note,
         reason=reason,
         went_negative=went_negative,
+        client_ref=client_ref,
     )
     db.add(txn)
-    db.flush()
+    if client_ref:
+        # Guards the (unlikely, single-device-so-sequential-in-practice)
+        # race where two requests with the same client_ref flush at once --
+        # the unique index catches it, and we replay the winner's row
+        # instead of raising. A savepoint keeps this rollback scoped to
+        # just this insert, not the caller's whole transaction (batch
+        # endpoints loop apply_transaction() before one shared commit).
+        try:
+            with db.begin_nested():
+                db.flush()
+        except IntegrityError:
+            existing = db.scalars(
+                select(Transaction).where(Transaction.client_ref == client_ref)
+            ).first()
+            if existing is None:
+                raise
+            return existing
+    else:
+        db.flush()
     return txn

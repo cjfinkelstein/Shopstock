@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { useAuth } from "./auth";
 import TechLayout from "./components/TechLayout";
+import { flushOutbox } from "./outbox";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminActivity from "./pages/admin/Activity";
 import AdminCalendar from "./pages/admin/Calendar";
@@ -31,6 +33,18 @@ import Trucks from "./pages/tech/Trucks";
 
 export default function App() {
   const { user, loading } = useAuth();
+
+  // Retry any queued offline sign-out/return/transfer as soon as there's a
+  // user to flush for (tap-in, or reconnecting mid-session) and again on
+  // every reconnect -- flushOutbox() itself only touches entries queued by
+  // the currently logged-in user.
+  useEffect(() => {
+    if (!user) return;
+    void flushOutbox();
+    const onOnline = () => void flushOutbox();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [user]);
 
   // Public, unauthenticated estimate-view link -- must work regardless of
   // login state or session-loading status, since the customer clicking an
@@ -101,6 +115,7 @@ export default function App() {
           <Route path="trucks" element={<AdminTrucks />} />
           <Route path="worker-map" element={<Navigate to="/admin/calendar" replace />} />
           <Route path="calendar" element={<AdminCalendar />} />
+          <Route path="team-calendar" element={<TeamCalendar />} />
           <Route path="expenses" element={<AdminExpenses />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="settings" element={<AdminSettings />} />

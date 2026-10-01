@@ -772,6 +772,9 @@ class SignOutIn(BaseModel):
     from_location_id: int
     job_id: int
     note: str | None = None
+    # Client-generated key for an offline-queued write -- retrying with the
+    # same value replays the original transaction instead of double-signing.
+    client_ref: str | None = Field(default=None, max_length=64)
 
 
 class SignOutBatchIn(BaseModel):
@@ -793,6 +796,7 @@ class ReturnIn(BaseModel):
     job_id: int
     to_location_id: int
     note: str | None = None
+    client_ref: str | None = Field(default=None, max_length=64)
 
 
 class TransferIn(BaseModel):
@@ -801,6 +805,7 @@ class TransferIn(BaseModel):
     from_location_id: int
     to_location_id: int
     note: str | None = None
+    client_ref: str | None = Field(default=None, max_length=64)
 
 
 class TransferBatchIn(BaseModel):

@@ -566,8 +566,8 @@ export default function Calendar() {
               <div className="mb-3 overflow-hidden rounded-2xl border border-slate-200/70 shadow-card dark:border-slate-800">
                 <MapContainer center={center} zoom={11} style={{ height: 380, width: "100%" }}>
                   <TileLayer
-                    attribution='&copy; <a href="https://www.esri.com">Esri</a>'
-                    url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   {clusterWorkers(located).map((c) => (
                     <Marker key={`${c.lat},${c.lng}`} position={[c.lat, c.lng]} icon={pinIcon(c.members.length)}>
@@ -1063,8 +1063,8 @@ export default function Calendar() {
                   style={{ height: 340, width: "100%" }}
                 >
                   <TileLayer
-                    attribution='&copy; <a href="https://www.esri.com">Esri</a>'
-                    url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <FitToRoute points={route.points} />
                   <Polyline

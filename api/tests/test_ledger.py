@@ -159,6 +159,62 @@ class TestNegativeStock:
         assert txn.went_negative is False
 
 
+class TestIdempotency:
+    """client_ref lets a retried offline-queued write replay instead of
+    double-moving stock -- see DECISIONS #33."""
+
+    def test_replayed_client_ref_does_not_double_write(self, db_session, seeded):
+        s = seeded
+        apply_transaction(db_session, type="RECEIVE", item_id=s["box"].id, qty=Decimal("10"),
+                          user=s["admin"], vendor_id=s["vendor"].id, unit_cost=Decimal("2"))
+        db_session.commit()
+
+        first = apply_transaction(
+            db_session, type="SIGN_OUT", item_id=s["box"].id, qty=Decimal("3"), user=s["tech"],
+            from_location_id=s["shop"].id, job_id=s["job"].id, client_ref="offline-abc123",
+        )
+        db_session.commit()
+        assert stock_qty(db_session, s["box"].id, s["shop"].id) == Decimal("7")
+
+        # simulate a retry after a dropped response -- same client_ref, same call
+        replay = apply_transaction(
+            db_session, type="SIGN_OUT", item_id=s["box"].id, qty=Decimal("3"), user=s["tech"],
+            from_location_id=s["shop"].id, job_id=s["job"].id, client_ref="offline-abc123",
+        )
+        db_session.commit()
+
+        assert replay.id == first.id  # same row, not a new one
+        assert stock_qty(db_session, s["box"].id, s["shop"].id) == Decimal("7")  # not decremented again
+        assert ledger_reconciles(db_session)
+
+    def test_different_client_refs_both_apply(self, db_session, seeded):
+        s = seeded
+        apply_transaction(db_session, type="RECEIVE", item_id=s["box"].id, qty=Decimal("10"),
+                          user=s["admin"], vendor_id=s["vendor"].id, unit_cost=Decimal("2"))
+        apply_transaction(db_session, type="SIGN_OUT", item_id=s["box"].id, qty=Decimal("3"),
+                          user=s["tech"], from_location_id=s["shop"].id, job_id=s["job"].id,
+                          client_ref="offline-1")
+        apply_transaction(db_session, type="SIGN_OUT", item_id=s["box"].id, qty=Decimal("3"),
+                          user=s["tech"], from_location_id=s["shop"].id, job_id=s["job"].id,
+                          client_ref="offline-2")
+        db_session.commit()
+        assert stock_qty(db_session, s["box"].id, s["shop"].id) == Decimal("4")
+
+    def test_omitted_client_ref_never_collides(self, db_session, seeded):
+        """Most callers (admin UI, online sign-outs) send no client_ref at
+        all -- the unique index must allow unlimited NULLs, not treat a
+        second write with no key as a duplicate of the first."""
+        s = seeded
+        apply_transaction(db_session, type="RECEIVE", item_id=s["box"].id, qty=Decimal("10"),
+                          user=s["admin"], vendor_id=s["vendor"].id, unit_cost=Decimal("2"))
+        apply_transaction(db_session, type="SIGN_OUT", item_id=s["box"].id, qty=Decimal("3"),
+                          user=s["tech"], from_location_id=s["shop"].id, job_id=s["job"].id)
+        apply_transaction(db_session, type="SIGN_OUT", item_id=s["box"].id, qty=Decimal("3"),
+                          user=s["tech"], from_location_id=s["shop"].id, job_id=s["job"].id)
+        db_session.commit()
+        assert stock_qty(db_session, s["box"].id, s["shop"].id) == Decimal("4")
+
+
 class TestLedgerConsistency:
     def test_full_lifecycle_reconciles(self, db_session, seeded):
         s = seeded

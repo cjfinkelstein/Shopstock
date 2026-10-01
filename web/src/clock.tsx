@@ -37,7 +37,7 @@ interface ClockState {
 const ClockContext = createContext<ClockState>(null!);
 
 // How often we send a GPS ping to the server while a tech is clocked in.
-const PING_INTERVAL_MS = 90_000;
+const PING_INTERVAL_MS = 120_000;
 
 function getPosition(): Promise<GeolocationPosition | null> {
   return new Promise((resolve) => {

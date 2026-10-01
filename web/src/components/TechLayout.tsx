@@ -4,8 +4,10 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { useCart } from "../cart";
+import { discardEntry, retryEntry } from "../outbox";
 import { useToast } from "../toast";
 import { useOnline } from "../useOnline";
+import { useOutbox } from "../useOutbox";
 import Icon from "./Icon";
 import Sheet from "./Sheet";
 import { Avatar } from "./ui";
@@ -64,8 +66,12 @@ export default function TechLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const online = useOnline();
+  const outbox = useOutbox().filter((e) => e.queuedByUserId === user?.id);
+  const pendingCount = outbox.filter((e) => e.status === "pending").length;
+  const failedCount = outbox.filter((e) => e.status === "failed").length;
   const [accountOpen, setAccountOpen] = useState(false);
   const [changePinOpen, setChangePinOpen] = useState(false);
+  const [outboxOpen, setOutboxOpen] = useState(false);
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [savingPin, setSavingPin] = useState(false);
@@ -105,11 +111,24 @@ export default function TechLayout() {
         </button>
       </header>
 
-      {!online && (
-        <div className="sticky top-[53px] z-40 flex items-center justify-center gap-1.5 bg-amber-50 px-3 py-1.5 text-[12px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
-          <Icon name="wifi-off" size={13} />
-          Offline — showing saved data
-        </div>
+      {(!online || outbox.length > 0) && (
+        <button
+          onClick={() => outbox.length > 0 && setOutboxOpen(true)}
+          className={`sticky top-[53px] z-40 flex w-full items-center justify-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold ${
+            failedCount > 0
+              ? "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400"
+              : "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+          }`}
+        >
+          <Icon name={failedCount > 0 ? "alert-triangle" : !online ? "wifi-off" : "upload"} size={13} />
+          {failedCount > 0
+            ? `${failedCount} sync issue${failedCount === 1 ? "" : "s"} — tap to review`
+            : !online && pendingCount > 0
+              ? `Offline — ${pendingCount} queued to sync`
+              : !online
+                ? "Offline — showing saved data"
+                : `Syncing ${pendingCount} queued write${pendingCount === 1 ? "" : "s"}…`}
+        </button>
       )}
 
       <main className="flex-1 overflow-y-auto px-4 pb-32 pt-4">
@@ -204,6 +223,53 @@ export default function TechLayout() {
               <Icon name="logout" size={18} />
               Sign out
             </button>
+          </div>
+        </Sheet>
+      )}
+
+      {outboxOpen && (
+        <Sheet
+          title="Sync queue"
+          subtitle={`${outbox.length} item${outbox.length === 1 ? "" : "s"}`}
+          onClose={() => setOutboxOpen(false)}
+        >
+          <div className="space-y-2.5">
+            {outbox.map((e) => (
+              <div key={e.id} className="card p-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-semibold">{e.summary}</p>
+                    <p className="mt-0.5 text-[12px] text-slate-400 dark:text-slate-500">
+                      {e.status === "failed" ? e.error ?? "Couldn't sync" : "Waiting for connection"}
+                    </p>
+                  </div>
+                  <span
+                    className={`badge shrink-0 ${
+                      e.status === "failed"
+                        ? "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400"
+                        : "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+                    }`}
+                  >
+                    {e.status === "failed" ? "Failed" : "Pending"}
+                  </span>
+                </div>
+                {e.status === "failed" && (
+                  <div className="mt-3 flex gap-2">
+                    <button className="btn-secondary flex-1" onClick={() => retryEntry(e.id)}>
+                      <Icon name="refresh" size={16} />
+                      Retry
+                    </button>
+                    <button
+                      className="btn-ghost flex-1 text-red-600 dark:text-red-400"
+                      onClick={() => discardEntry(e.id)}
+                    >
+                      <Icon name="trash" size={16} />
+                      Discard
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </Sheet>
       )}

@@ -433,6 +433,7 @@ class Transaction(TimestampMixin, Base):
         Index("ix_txn_job", "job_id"),
         Index("ix_txn_user", "user_id"),
         Index("ix_txn_type_created", "type", "created_at"),
+        Index("ix_txn_client_ref", "client_ref", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -450,6 +451,11 @@ class Transaction(TimestampMixin, Base):
     note: Mapped[str | None] = mapped_column(Text)
     reason: Mapped[str | None] = mapped_column(String(30))  # ADJUST only
     went_negative: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Client-generated key (e.g. a UUID from an offline-queued write) so a
+    # retried sign-out/return/transfer replays the original result instead
+    # of writing twice. Nullable -- most callers don't send one, and a
+    # unique index allows any number of NULLs on both SQLite and Postgres.
+    client_ref: Mapped[str | None] = mapped_column(String(64))
 
     item: Mapped[Item] = relationship()
     from_location: Mapped[Location | None] = relationship(foreign_keys=[from_location_id])

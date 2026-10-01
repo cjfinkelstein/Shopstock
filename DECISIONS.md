@@ -122,6 +122,64 @@ Each entry: what was decided, and why.
     OS-level dark mode no longer switches the app to dark. All `dark:`
     variants remain in the source for a future opt-in toggle.
 
+## Write idempotency (2026-09-30) — groundwork for an offline write queue
+
+33. **`client_ref` added to transactions, backend only, nothing calls it yet.**
+    `Transaction.client_ref` (nullable `String(64)`, unique index — SQLite
+    and Postgres both allow unlimited NULLs, so callers that omit it never
+    collide) lets a retried write replay its original result instead of
+    moving stock twice. `apply_transaction()` checks for an existing row
+    with the same `client_ref` before doing anything else, and wraps the
+    insert in a SAVEPOINT (`db.begin_nested()`) to catch the unique-index
+    race without rolling back the caller's whole transaction — relevant
+    because batch endpoints loop `apply_transaction()` before one shared
+    commit. Wired into `SignOutIn`/`ReturnIn`/`TransferIn` and their
+    routers only (not `receive`/`adjust`, which are admin/desktop, or the
+    batch endpoints, which aren't part of the planned offline flow).
+    This exists so a future client-side offline outbox (queued sign-out/
+    return/transfer, replayed on reconnect) can safely retry a write whose
+    response was lost without double-signing material — see the offline
+    gaps noted in `HANDOFF.md` and #32 above. (Update: now consumed by the
+    offline write queue in #34 below.)
+
+## Offline write queue (2026-09-30)
+
+34. **Sign-out/return/transfer now queue instead of failing when offline.**
+    `web/src/outbox.ts` wraps the three writes ItemSheet's Take Out/Return/
+    Transfer flows send: `sendOrQueue()` tries the real request first (with
+    a fresh `client_ref`, #33) and only queues to `localStorage` when the
+    *network itself* is unreachable — a real server rejection (`ApiError`,
+    e.g. blocked oversell) still surfaces immediately as before, unqueued,
+    since retrying an outright-rejected write would just fail again.
+    `App.tsx` flushes the queue on login and on every `online` event;
+    `flushOutbox()` retries each entry independently so one failing at sync
+    time (e.g. the job closed while offline) doesn't block the rest — it's
+    marked "failed" and left for a person to retry or discard from the new
+    "Sync queue" sheet (`TechLayout`'s offline banner extends to show
+    pending/failed counts and opens it) rather than retried forever
+    automatically.
+    **Shared-device caveat**: each queued entry records the JWT `sub` of
+    whoever queued it (decoded client-side, unverified — a UX safeguard,
+    not a security boundary), and `flushOutbox()` only syncs entries
+    belonging to the currently logged-in user. This stops a phone shared
+    between techs from syncing tech A's queued sign-out under tech B's
+    name after a login switch — but it also means an entry queued by
+    someone who never logs back into that device sits there indefinitely,
+    invisible to anyone else. Acceptable given CLAUDE.md's "techs find
+    items on their phone" (personal devices); would need real handling
+    (server-side queued-write visibility, an admin recovery path) if
+    shared devices ever become a real scenario.
+    ItemSheet's success screen distinguishes the two outcomes so a tech
+    never mistakes a pending sync for a done one: a green checkmark for
+    "confirmed," an amber upload icon + "Queued — will sync" for "queued."
+    `Cart` checkout (batch endpoints) is NOT wired to the outbox — those
+    endpoints don't accept `client_ref` (#33) and weren't in scope.
+    Verified end-to-end with Playwright against a production build: two
+    sign-outs queued while the browser context was offline, both drained
+    and synced automatically on reconnect, stock decremented by exactly
+    the queued quantities (no double-write) and the API shows exactly one
+    transaction per queued entry.
+
 ## Offline browsing (2026-09-30)
 
 32. **Offline browsing added, offline writes still out of scope.** The
@@ -152,3 +210,82 @@ Each entry: what was decided, and why.
     loads via TRANSFERs — the ledger reconciles from the first boot, proven by
     `scripts/check_consistency.py`. Three trucks get starting stock (spec: "2–3").
 25. Seed is guarded: it refuses to run against a database that already has users.
+
+## Bug fix: worker-map tiles (2026-10-01)
+
+35. **Swapped the GPS map's tile provider off Esri's legacy free layer —
+    twice.** The admin worker-map / shift-route map
+    (`web/src/pages/admin/Calendar.tsx`) used
+    `server.arcgisonline.com/.../World_Light_Gray_Base` — Esri's older
+    anonymous-access tile service. Reported as "blank screen"; actual cause
+    (confirmed via a user screenshot) was the tile images themselves coming
+    back with "Map data not yet available" baked in as a placeholder — Esri
+    degrading/sunsetting free anonymous access to that legacy layer, not a
+    code bug. Pins, route lines, popups, and the Leaflet container itself
+    were all rendering correctly the whole time; only the basemap imagery
+    was broken. First swap: CARTO's free Positron basemap
+    (`{s}.basemaps.cartocdn.com/...`) — closest aesthetic match to the
+    light-gray minimal look DESIGN.md calls for. Deployed to production and
+    found CARTO **also** now requires an API key for anonymous use (same
+    "API KEY REQUIRED" placeholder pattern as Esri). Landed on plain
+    OpenStreetMap tiles (`tile.openstreetmap.org/{z}/{x}/{y}.png`) — the one
+    option that's free with no account/key, at the cost of OSM's busier
+    default style instead of a light-gray minimal one. If that aesthetic
+    mismatch bothers the owner later, the real fix is a CARTO (or similar)
+    API key, not another provider swap.
+    **Deployment incident while landing the first swap**: `shop
+    .apexelectricalgroupinc.com` runs from `/opt/shopstock` on a DigitalOcean
+    droplet, deployed by copying files (no git on the server) per
+    GO-LIVE.md — so this fix had to be hand-applied there via `sed`, not a
+    `git pull`. `docker compose up -d --build web` was run to rebuild the
+    frontend, but since `web` depends on `api` in `docker-compose.yml`,
+    `--build` cascaded and also rebuilt `api` from this server's local
+    `./api` copy — which is a *stale* snapshot (this droplet was never kept
+    in sync with the GitHub repo after its initial setup), missing
+    migrations the live database had already been migrated past via the
+    normally-running `ghcr.io/.../shopstock-api:latest` image built by CI.
+    Result: `alembic.util.messaging: Can't locate revision identified by
+    '0022'` on every request, and the tech tap-in list came up empty —
+    **no data was lost** (confirmed directly via `psql`), but logins were
+    blocked until `docker compose pull api && docker compose up -d api`
+    restored the correct image. Lesson for next time: on this droplet,
+    rebuild `web` alone with `docker compose build web && docker compose
+    up -d --no-deps web` — never bare `--build` with a service that has
+    `depends_on`, since it silently rebuilds stale dependencies too. This
+    droplet's `/opt/shopstock/api` should really be brought in sync with
+    (or replaced by) a real git checkout so this class of mismatch can't
+    recur — flagged here, not yet done.
+
+## Branch reconciliation before converting the droplet to git (2026-10-01)
+
+36. **This session's branch forked before `main` gained migrations 0019–0022
+    and a batch of unrelated features.** Investigating the "revision 0022"
+    error (#35) surfaced that `main` already had `0019_password_reset.py`
+    through `0022_pto_requests.py`, plus password reset, admin-configurable
+    SMTP settings, and a PTO request workflow — none of it an ancestor of
+    this branch, all of it already merged to `main` but never deployed to
+    this droplet (which runs a disconnected manual file copy, not git; see
+    #35). This session's own write-idempotency migration (#33) had
+    independently claimed `0019`, colliding with the real one. Renamed it
+    to `0023` (chaining after `0022`, the actual tip) before merging `main`
+    into this branch.
+    The merge itself was clean (no textual conflicts) but needed a semantic
+    check: `main` had independently added `web/src/offlineQueue.ts`, an
+    IndexedDB-backed offline queue for clock-in/out, whose own comment
+    already flagged "material sign-out is a planned follow-up" — exactly
+    what this session's `web/src/outbox.ts` (#34) turned out to be. The two
+    coexist as separate, non-overlapping queues (different write types,
+    different storage) rather than a collision; worth unifying later but
+    not urgent.
+    Verified the merged result properly, not just a clean `git merge`:
+    `alembic heads` shows a single head at `0023`; full backend suite
+    (35/35) and `check_consistency.py` pass against a fresh
+    migrate-then-seed; `tsc`/build clean; and a real browser smoke test
+    (admin login, Settings/SMTP page, the Calendar-sidebar fix from #35,
+    tech tap-in, Home, My Hours' new PTO UI, and Find/Search from #32) hit
+    zero console errors. This is the point: merging into `main` here means
+    the droplet (once converted to a real git clone per #35's closing note)
+    picks up all of that previously-merged-but-never-deployed work in the
+    same motion as this session's own fixes — a much bigger jump than "just
+    deploy tonight's fixes," flagged to and approved by the owner before
+    proceeding.
