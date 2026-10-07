@@ -461,3 +461,23 @@ Each entry: what was decided, and why.
     it shows and the box clears; added a second, confirmed the *first* one
     is still there alongside it; added two more pasted as one multi-line
     block, confirmed all four persist.
+
+## Assignee name chips on the month grid (2026-10-07)
+
+44. **"I want to see the tasks in the right dates" when looking at the
+    whole month, not just a single day's popup.** The month grid already
+    showed each day's item titles (which, for an assignment, is just the
+    assignee's name) -- but that preview list is `hidden` below the `md`
+    breakpoint, i.e. invisible on a phone, where techs actually use this
+    app. A day cell on mobile showed only a bare count badge, no names.
+    Added a small always-visible chip row (not gated by the `md:` prefix)
+    showing exactly which of Adam/Ed/Avigdor have a non-empty task list
+    that date, separate from the existing desktop-only to-do title
+    preview (which now excludes assignee entries, so a name isn't shown
+    twice in two different styles on wider screens).
+    Verified with Playwright at two viewport widths: added a task for
+    Avigdor, confirmed the chip renders on a 1280px desktop view, then
+    opened the same calendar in a fresh 390px-wide (phone-sized) context
+    and confirmed the chip is both present *and* actually visible --
+    catching exactly the kind of bug a type-check or a desktop-only visual
+    check would have missed.

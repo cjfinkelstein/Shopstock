@@ -267,8 +267,16 @@ export default function TeamCalendar() {
                 const items = byDate[iso] ?? [];
                 const isToday = iso === today;
                 const openCount = items.filter((it) => !it.done).length;
-                const shown = items.slice(0, 3);
-                const hiddenCount = items.length - shown.length;
+                // Who has an assigned task this day -- shown as small chips at
+                // every screen size (unlike the to-do title preview below,
+                // which is desktop-only), since "who has tasks today" is the
+                // thing worth seeing at a glance, even on a phone.
+                const assigneesToday = ASSIGNEES.filter(
+                  (name) => notesToBullets(items.find((it) => it.assignee === name)?.notes).length > 0,
+                );
+                const generalForDay = items.filter((it) => !it.assignee);
+                const shown = generalForDay.slice(0, 3);
+                const hiddenCount = generalForDay.length - shown.length;
                 return (
                   <button
                     key={i}
@@ -297,6 +305,18 @@ export default function TeamCalendar() {
                         </span>
                       )}
                     </span>
+                    {assigneesToday.length > 0 && (
+                      <span className="flex w-full flex-wrap gap-1">
+                        {assigneesToday.map((name) => (
+                          <span
+                            key={name}
+                            className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                     {shown.length > 0 && (
                       <span className="hidden w-full min-w-0 flex-col gap-0.5 md:flex">
                         {shown.map((it) => (
