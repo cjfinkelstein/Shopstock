@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     # links) -- the API has no other way to know its own public URL. Overridden
     # to the real production domain via docker-compose.yml/.env in prod.
     public_base_url: str = "http://localhost:5173"
+    # Clock-out photo storage -- a plain directory on disk, not S3/cloud
+    # storage, since this is a 7-tech operation and a mounted Docker volume
+    # is simpler to operate than a cloud credential. Must be a volume in
+    # docker-compose.yml in production or photos vanish on every rebuild.
+    uploads_dir: str = "./uploads"
+    # Rejects anything larger before it's ever written to disk -- a phone
+    # photo is a few MB; this is generous headroom, not a real limit.
+    max_photo_bytes: int = 15 * 1024 * 1024
 
 
 @lru_cache

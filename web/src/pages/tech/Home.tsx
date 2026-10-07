@@ -1,19 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { api } from "../../api";
+import { api, apiUpload } from "../../api";
 import { useAuth } from "../../auth";
 import { isAssignee } from "../../calendarAssignees";
 import { useCart } from "../../cart";
 import { isConnectivityError, useClock } from "../../clock";
 import { enqueueAction } from "../../offlineQueue";
+import AuthedImage from "../../components/AuthedImage";
 import Icon from "../../components/Icon";
 import JobPicker from "../../components/JobPicker";
 import Sheet from "../../components/Sheet";
 import TxnList from "../../components/TxnList";
 import { Empty, ItemThumb, ListSkeleton, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { CalendarEvent, Item, Job, StockRow, TechDashboard } from "../../types";
+import type { CalendarEvent, ClockOutPhoto, Item, Job, StockRow, TechDashboard } from "../../types";
 
 function toISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -53,6 +54,11 @@ export default function Home() {
   const [clockOutNote, setClockOutNote] = useState("");
   const [todaysTasks, setTodaysTasks] = useState<CalendarEvent[] | null>(null);
   const [togglingTaskId, setTogglingTaskId] = useState<number | null>(null);
+  const [clockOutPhotos, setClockOutPhotos] = useState<ClockOutPhoto[]>([]);
+  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [pendingCaption, setPendingCaption] = useState("");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Big ticking clock -- recomputed every second from clockInAt while on shift.
   useEffect(() => {
@@ -78,6 +84,8 @@ export default function Home() {
       setClockOutNoteOpen(false);
       setClockOutNote("");
       setTodaysTasks(null);
+      setClockOutPhotos([]);
+      discardPendingPhoto();
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Couldn't clock out");
     } finally {
@@ -110,6 +118,40 @@ export default function Home() {
       toast("error", e instanceof Error ? e.message : "Couldn't update");
     } finally {
       setTogglingTaskId(null);
+    }
+  };
+
+  const discardPendingPhoto = () => {
+    if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
+    setPendingPhoto(null);
+    setPendingCaption("");
+  };
+
+  const choosePhoto = (file: File | undefined) => {
+    if (!file) return;
+    discardPendingPhoto();
+    setPendingPhoto({ file, previewUrl: URL.createObjectURL(file) });
+  };
+
+  // Uploads right away (not queued offline -- a multipart upload is a much
+  // bigger thing to replay reliably than clock in/out's small JSON body;
+  // this just fails with a clear error if there's no signal, same as any
+  // other action that genuinely needs connectivity).
+  const uploadPendingPhoto = async () => {
+    if (!pendingPhoto) return;
+    setUploadingPhoto(true);
+    try {
+      const form = new FormData();
+      form.append("file", pendingPhoto.file);
+      if (pendingCaption.trim()) form.append("caption", pendingCaption.trim());
+      const photo = await apiUpload<ClockOutPhoto>("/time/clock-out/photos", form);
+      setClockOutPhotos((prev) => [...prev, photo]);
+      discardPendingPhoto();
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't upload photo");
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -279,6 +321,8 @@ export default function Home() {
             if (clockBusy) return;
             setClockOutNoteOpen(false);
             setTodaysTasks(null);
+            setClockOutPhotos([]);
+            discardPendingPhoto();
           }}
         >
           <div className="space-y-4">
@@ -312,6 +356,70 @@ export default function Home() {
               value={clockOutNote}
               onChange={(e) => setClockOutNote(e.target.value)}
             />
+
+            <div>
+              <p className="label mb-1.5">Photos (optional)</p>
+              {clockOutPhotos.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {clockOutPhotos.map((p) => (
+                    <div key={p.id} className="w-16">
+                      <AuthedImage src={p.url} alt={p.caption ?? "Photo"} className="h-16 w-16 rounded-lg object-cover" />
+                      {p.caption && <p className="mt-0.5 truncate text-[10px] text-slate-400">{p.caption}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {pendingPhoto ? (
+                <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+                  <img src={pendingPhoto.previewUrl} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <input
+                      className="input"
+                      placeholder="What's this a photo of? (optional)"
+                      value={pendingCaption}
+                      onChange={(e) => setPendingCaption(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={uploadingPhoto}
+                        onClick={uploadPendingPhoto}
+                        className="btn-secondary !min-h-0 flex-1 py-1.5 text-[13px]"
+                      >
+                        {uploadingPhoto ? <Spinner /> : "Add photo"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={uploadingPhoto}
+                        onClick={discardPendingPhoto}
+                        className="btn-ghost !min-h-0 px-3 py-1.5 text-[13px]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="btn-secondary w-full"
+                >
+                  <Icon name="camera" size={16} />
+                  Add a photo
+                </button>
+              )}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => choosePhoto(e.target.files?.[0])}
+              />
+            </div>
+
             <button
               type="button"
               disabled={clockBusy || !clockOutNote.trim()}

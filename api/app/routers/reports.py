@@ -65,7 +65,7 @@ def calendar(date_from: str, date_to: str, db: Session = Depends(get_db)):
 
     shifts = (
         db.query(ClockEvent)
-        .options(joinedload(ClockEvent.user), joinedload(ClockEvent.job))
+        .options(joinedload(ClockEvent.user), joinedload(ClockEvent.job), joinedload(ClockEvent.photos))
         .filter(ClockEvent.clock_in_at >= day_start_utc(date_from), ClockEvent.clock_in_at < day_end_utc(date_to))
         .all()
     )
@@ -83,6 +83,9 @@ def calendar(date_from: str, date_to: str, db: Session = Depends(get_db)):
             "hours": round(((e.clock_out_at or now) - e.clock_in_at).total_seconds() / 3600, 2),
             "approval_status": e.approval_status,
             "note": e.clock_out_note,
+            "photos": [
+                {"id": p.id, "caption": p.caption, "url": f"/time/photos/{p.id}"} for p in e.photos
+            ],
         })
 
     signouts = (
@@ -324,7 +327,9 @@ def adjustments(date_from: str = "", date_to: str = "", format: str = "",
 @router.get("/timesheet")
 def timesheet(date_from: str = "", date_to: str = "", format: str = "", payroll_item: str = "Regular Pay",
               db: Session = Depends(get_db)):
-    q = db.query(ClockEvent).options(joinedload(ClockEvent.user), joinedload(ClockEvent.job))
+    q = db.query(ClockEvent).options(
+        joinedload(ClockEvent.user), joinedload(ClockEvent.job), joinedload(ClockEvent.photos),
+    )
     if date_from:
         q = q.filter(ClockEvent.clock_in_at >= day_start_utc(date_from))
     if date_to:
@@ -348,6 +353,9 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "", payroll_
             "hours": hours,
             "approval_status": e.approval_status,
             "note": e.clock_out_note,
+            "photos": [
+                {"id": p.id, "caption": p.caption, "url": f"/time/photos/{p.id}"} for p in e.photos
+            ],
         })
 
     if format == "csv":
@@ -401,6 +409,7 @@ def timesheet(date_from: str = "", date_to: str = "", format: str = "", payroll_
             "hours": r["hours"],
             "approval_status": r["approval_status"],
             "note": r["note"],
+            "photos": r["photos"],
         })
         t["total_hours"] += r["hours"]
     for t in techs.values():

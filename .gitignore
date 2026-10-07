@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 api/shopstock.db
 api/.pytest_cache/
+api/uploads/
 
 # node
 web/node_modules/

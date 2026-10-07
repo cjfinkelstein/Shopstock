@@ -384,3 +384,83 @@ class TestSharedCalendarPermissions:
         r = client.post("/api/v1/calendar", headers=admin,
                          json={"event_date": "2026-10-10", "title": "Schedule inspection"})
         assert r.status_code == 201, r.text
+
+
+class TestClockOutPhotos:
+    def _clock_in(self, client, hdrs, seeded):
+        r = client.post("/api/v1/time/gps-consent", headers=hdrs)
+        assert r.status_code == 200, r.text
+        r = client.post("/api/v1/time/clock-in", headers=hdrs, json={"job_id": seeded["job"].id})
+        assert r.status_code == 200, r.text
+
+    def test_upload_and_fetch_own_photo(self, client, seeded, tmp_path, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        self._clock_in(client, tech, seeded)
+
+        fake_jpeg = b"\xff\xd8\xff\xe0" + b"0" * 100
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("site.jpg", fake_jpeg, "image/jpeg")},
+            data={"caption": "Panel before repair"},
+        )
+        assert r.status_code == 201, r.text
+        photo = r.json()
+        assert photo["caption"] == "Panel before repair"
+        assert photo["url"] == f"/time/photos/{photo['id']}"
+
+        r = client.get(f"/api/v1/time/photos/{photo['id']}", headers=tech)
+        assert r.status_code == 200, r.text
+        assert r.content == fake_jpeg
+
+    def test_admin_can_see_any_photo_other_tech_cannot(self, client, seeded, db_session, tmp_path, monkeypatch):
+        from app.config import settings
+        from app.models import User
+
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        self._clock_in(client, tech, seeded)
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("site.jpg", b"fake-bytes", "image/jpeg")},
+        )
+        assert r.status_code == 201, r.text
+        photo_id = r.json()["id"]
+
+        admin = login_admin(client)
+        r = client.get(f"/api/v1/time/photos/{photo_id}", headers=admin)
+        assert r.status_code == 200, r.text
+
+        other = User(name="Sam", role="tech", active=True)
+        db_session.add(other)
+        db_session.commit()
+        r = client.post("/api/v1/auth/tap", json={"user_id": other.id})
+        other_hdrs = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        r = client.get(f"/api/v1/time/photos/{photo_id}", headers=other_hdrs)
+        assert r.status_code == 403, r.text
+
+    def test_rejects_non_image_upload(self, client, seeded, tmp_path, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        self._clock_in(client, tech, seeded)
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("notes.pdf", b"%PDF-fake", "application/pdf")},
+        )
+        assert r.status_code == 400, r.text
+
+    def test_upload_requires_being_clocked_in(self, client, seeded, tmp_path, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("site.jpg", b"fake-bytes", "image/jpeg")},
+        )
+        assert r.status_code == 400, r.text

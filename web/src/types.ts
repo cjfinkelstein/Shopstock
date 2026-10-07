@@ -245,6 +245,16 @@ export interface CalendarEvent {
   edits: CalendarEventEdit[];
 }
 
+/** A photo attached to a tech's own clock-out, with an optional caption.
+ * `url` is an authenticated endpoint (/time/photos/{id}) -- render it with
+ * AuthedImage, not a plain <img src>, since a browser image request can't
+ * carry the Bearer token this API requires. */
+export interface ClockOutPhoto {
+  id: number;
+  caption: string | null;
+  url: string;
+}
+
 export interface JobMaterialsOut {
   job: Job;
   lines: {

@@ -528,3 +528,44 @@ Each entry: what was decided, and why.
     Calendar and confirms the same task shows done there too, proving the
     "marks it done everywhere" requirement actually holds end to end, not
     just that each screen independently renders a checkbox.
+
+## Clock-out photos with captions (2026-10-07)
+
+46. **Second half of the clock-out request: a tech can attach photos (each
+    with an optional caption) to their own clock-out, alongside the
+    existing note.** New `clock_out_photos` table (migration `0027`) --
+    `clock_event_id`, `caption`, `file_path`, `content_type`,
+    `uploaded_by`. The actual bytes live on disk under
+    `settings.uploads_dir`, not in the database, behind a new
+    `uploads` Docker volume (`docker-compose.yml`) -- without that volume
+    a rebuild silently wipes every photo, same failure mode `pgdata`
+    already guards against for the database.
+    Uploaded via a new multipart endpoint, `POST /time/clock-out/photos`,
+    while the clock-out sheet is still open and the shift is still
+    technically open server-side (clock-out itself is a separate, later
+    call) -- that's what gives the upload a stable `clock_event_id` to
+    attach to without any new "pending shift" concept. No offline queueing
+    here, unlike clock in/out/pings: a multipart upload is a much bigger
+    thing to replay reliably than a small JSON body, so a tech with no
+    signal just gets a clear "couldn't upload" error instead of a silent
+    queue that might retry a multi-MB file repeatedly. Rejects non-image
+    content types and anything over 15MB before it touches disk.
+    **Auth gap caught before it shipped**: a plain `<img src="/time/photos/
+    5">` can't carry the Bearer token this API requires for an admin-only
+    resource -- a browser image request never sends custom headers. Fixed
+    with a small `AuthedImage` component (fetches via the existing
+    authenticated-blob helper, hands the browser an object URL instead) --
+    found this by actually reading through how authenticated images would
+    need to load, not by hitting it in testing, since a broken `<img>`
+    doesn't throw, it just silently shows nothing.
+    Visibility matches `clock_out_note` exactly: admin sees any tech's
+    photos (surfaced in both Login Hours views -- the "All techs" list and
+    the day-detail sheet, both already showing the note), a tech can only
+    ever fetch their own.
+    Verified beyond type/build/backend-test checks: a full Playwright run
+    with a real (if minimal) JPEG file -- picked a photo, typed a caption,
+    uploaded it, confirmed the thumbnail and caption appear, finished
+    clocking out, then logged in as admin and confirmed the same photo
+    renders on Login Hours via a real `blob:` URL (proving the
+    authenticated-fetch path actually works end to end, not just that the
+    component compiles) alongside its caption.
