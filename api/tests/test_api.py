@@ -258,3 +258,49 @@ class TestLabels:
         assert "Avery" in r.text or "label" in r.text
         assert "WIRE-122NM" in r.text
         assert "<svg" in r.text  # QR rendered inline
+
+
+class TestSharedCalendarPermissions:
+    """Everyone can read the shared calendar; only admin + a tech named
+    Ray can write to it (owner request -- see require_calendar_editor)."""
+
+    def login_as(self, client, user_id):
+        r = client.post("/api/v1/auth/tap", json={"user_id": user_id})
+        assert r.status_code == 200, r.text
+        return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    def test_regular_tech_can_read_but_not_write(self, client, seeded):
+        tech = login_tech(client, seeded)
+        r = client.get("/api/v1/calendar", headers=tech)
+        assert r.status_code == 200, r.text
+
+        r = client.post("/api/v1/calendar", headers=tech,
+                         json={"event_date": "2026-10-10", "title": "Pick up supplies"})
+        assert r.status_code == 403, r.text
+
+    def test_ray_can_write_other_tech_cannot(self, client, seeded, db_session):
+        from app.models import User
+
+        ray = User(name="Ray", role="tech", active=True)
+        db_session.add(ray)
+        db_session.commit()
+        ray_hdrs = self.login_as(client, ray.id)
+
+        r = client.post("/api/v1/calendar", headers=ray_hdrs,
+                         json={"event_date": "2026-10-10", "title": "Order breakers"})
+        assert r.status_code == 201, r.text
+        event_id = r.json()["id"]
+
+        r = client.patch(f"/api/v1/calendar/{event_id}", headers=ray_hdrs, json={"done": True})
+        assert r.status_code == 200, r.text
+        assert r.json()["done"] is True
+
+        other_tech = login_tech(client, seeded)
+        r = client.patch(f"/api/v1/calendar/{event_id}", headers=other_tech, json={"done": False})
+        assert r.status_code == 403, r.text
+
+    def test_admin_can_still_write(self, client, seeded):
+        admin = login_admin(client)
+        r = client.post("/api/v1/calendar", headers=admin,
+                         json={"event_date": "2026-10-10", "title": "Schedule inspection"})
+        assert r.status_code == 201, r.text

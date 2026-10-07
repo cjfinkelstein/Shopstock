@@ -8,15 +8,30 @@ from app.database import get_db
 from app.models import CalendarEvent, CalendarEventEdit, User
 from app.schemas import CalendarEventCreate, CalendarEventEditOut, CalendarEventOut, CalendarEventUpdate
 
-# Any logged-in user (tech or admin) can read/add/edit -- this is the shared
-# team calendar, not an admin-only tool. Every query here is scoped to
+# Any logged-in user (tech or admin) can read -- this is the shared team
+# calendar, not an admin-only tool. Every query here is scoped to
 # visibility="shared" so a tech can never see or touch an admin's private
-# note, even by guessing an id.
+# note, even by guessing an id. Writing (add/edit) is narrower -- see
+# require_calendar_editor below.
 router = APIRouter(prefix="/calendar", tags=["calendar"], dependencies=[Depends(get_current_user)])
 
 # An admin's own private notes/to-dos on the Login Hours page -- never
 # returned to a tech. Separate prefix, separate admin-only gate.
 admin_router = APIRouter(prefix="/calendar/admin", tags=["calendar"], dependencies=[Depends(require_admin)])
+
+# Everyone can read the shared calendar, but editing it (add/edit/mark done)
+# is admin + Ray only, by owner request -- there's no granular permissions
+# system in this app, so rather than build one for a single named exception,
+# Ray is matched by name. If this needs to extend to more techs later,
+# that's the point to build real per-user permissions instead of adding
+# more names here.
+_CALENDAR_EDITOR_TECH_NAMES = {"ray"}
+
+
+def require_calendar_editor(user: User = Depends(get_current_user)) -> User:
+    if user.role == "admin" or user.name.strip().lower() in _CALENDAR_EDITOR_TECH_NAMES:
+        return user
+    raise HTTPException(status_code=403, detail="Only admin and Ray can edit the calendar")
 
 
 def _out(e: CalendarEvent) -> CalendarEventOut:
@@ -53,7 +68,7 @@ def list_events(date_from: date | None = None, date_to: date | None = None, db: 
 
 
 @router.post("", response_model=CalendarEventOut, status_code=201)
-def create_event(body: CalendarEventCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def create_event(body: CalendarEventCreate, db: Session = Depends(get_db), user: User = Depends(require_calendar_editor)):
     e = CalendarEvent(
         event_date=body.event_date, title=body.title, notes=body.notes, created_by=user.id, visibility="shared",
     )
@@ -65,7 +80,7 @@ def create_event(body: CalendarEventCreate, db: Session = Depends(get_db), user:
 
 @router.patch("/{event_id}", response_model=CalendarEventOut)
 def update_event(event_id: int, body: CalendarEventUpdate, db: Session = Depends(get_db),
-                  user: User = Depends(get_current_user)):
+                  user: User = Depends(require_calendar_editor)):
     e = db.get(CalendarEvent, event_id)
     if not e or e.visibility != "shared":
         raise HTTPException(status_code=404, detail="Not found")
