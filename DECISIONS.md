@@ -446,3 +446,38 @@ Each entry: what was decided, and why.
     same bullets show read-only with no textarea and no "Add a to-do" box.
     Also confirmed directly in the database that the row landed as
     `assignee="Adam"` with the newline-separated notes intact.
+
+## Per-person task boxes now append, not replace (2026-10-07)
+
+43. **#42's Adam/Ed/Avigdor boxes saved the whole textarea as the new
+    `notes` value -- so a second task typed into an already-filled box
+    replaced the first one instead of adding to it. Ray reported "it only
+    lets me write one task."** Fixed by changing the box from an editable
+    full-text field to an add-only one: it always starts empty, and each
+    "Add" appends whatever's typed (one line or several, so a paste still
+    works) onto the existing bullets rather than overwriting them, then
+    clears itself -- same mental model as the "Add a to-do" box elsewhere
+    on this page. Verified with a Playwright run: added a task, confirmed
+    it shows and the box clears; added a second, confirmed the *first* one
+    is still there alongside it; added two more pasted as one multi-line
+    block, confirmed all four persist.
+
+## Assignee name chips on the month grid (2026-10-07)
+
+44. **"I want to see the tasks in the right dates" when looking at the
+    whole month, not just a single day's popup.** The month grid already
+    showed each day's item titles (which, for an assignment, is just the
+    assignee's name) -- but that preview list is `hidden` below the `md`
+    breakpoint, i.e. invisible on a phone, where techs actually use this
+    app. A day cell on mobile showed only a bare count badge, no names.
+    Added a small always-visible chip row (not gated by the `md:` prefix)
+    showing exactly which of Adam/Ed/Avigdor have a non-empty task list
+    that date, separate from the existing desktop-only to-do title
+    preview (which now excludes assignee entries, so a name isn't shown
+    twice in two different styles on wider screens).
+    Verified with Playwright at two viewport widths: added a task for
+    Avigdor, confirmed the chip renders on a 1280px desktop view, then
+    opened the same calendar in a fresh 390px-wide (phone-sized) context
+    and confirmed the chip is both present *and* actually visible --
+    catching exactly the kind of bug a type-check or a desktop-only visual
+    check would have missed.

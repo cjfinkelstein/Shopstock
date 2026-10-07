@@ -103,12 +103,7 @@ export default function TeamCalendar() {
 
   const openDay = (iso: string) => {
     setSelected(iso);
-    const items = byDate[iso] ?? [];
-    const drafts: Record<string, string> = {};
-    for (const name of ASSIGNEES) {
-      drafts[name] = items.find((it) => it.assignee === name)?.notes ?? "";
-    }
-    setAssigneeDrafts(drafts);
+    setAssigneeDrafts({});
   };
 
   const closeDay = () => {
@@ -120,29 +115,34 @@ export default function TeamCalendar() {
     setAssigneeDrafts({});
   };
 
+  // Adds whatever's typed as one or more new bullets, on top of whatever's
+  // already there -- each Save appends, it never replaces the list, so
+  // Ray can come back and add a second (or third) task the same way he
+  // added the first.
   const saveAssignee = async (name: string) => {
     if (!selected) return;
-    const text = (assigneeDrafts[name] ?? "").trim();
+    const newLines = notesToBullets(assigneeDrafts[name]);
+    if (newLines.length === 0) return;
     const existing = selectedItems.find((it) => it.assignee === name);
-    if (!existing && !text) return;
+    const combined = [...notesToBullets(existing?.notes), ...newLines].join("\n");
     setSavingAssignee(name);
     try {
       if (existing) {
         const updated = await api<CalendarEvent>(`/calendar/${existing.id}`, {
           method: "PATCH",
-          body: { notes: text || null },
+          body: { notes: combined },
         });
         setEvents((prev) => (prev ?? []).map((e) => (e.id === updated.id ? updated : e)));
       } else {
         const created = await api<CalendarEvent>("/calendar", {
           method: "POST",
-          body: { event_date: selected, title: name, assignee: name, notes: text || null },
+          body: { event_date: selected, title: name, assignee: name, notes: combined },
         });
         setEvents((prev) => [...(prev ?? []), created]);
       }
-      toast("success", `Saved ${name}'s list`);
+      setAssigneeDrafts((d) => ({ ...d, [name]: "" }));
     } catch (e) {
-      toast("error", e instanceof Error ? e.message : "Could not save");
+      toast("error", e instanceof Error ? e.message : "Could not add");
     } finally {
       setSavingAssignee(null);
     }
@@ -267,8 +267,16 @@ export default function TeamCalendar() {
                 const items = byDate[iso] ?? [];
                 const isToday = iso === today;
                 const openCount = items.filter((it) => !it.done).length;
-                const shown = items.slice(0, 3);
-                const hiddenCount = items.length - shown.length;
+                // Who has an assigned task this day -- shown as small chips at
+                // every screen size (unlike the to-do title preview below,
+                // which is desktop-only), since "who has tasks today" is the
+                // thing worth seeing at a glance, even on a phone.
+                const assigneesToday = ASSIGNEES.filter(
+                  (name) => notesToBullets(items.find((it) => it.assignee === name)?.notes).length > 0,
+                );
+                const generalForDay = items.filter((it) => !it.assignee);
+                const shown = generalForDay.slice(0, 3);
+                const hiddenCount = generalForDay.length - shown.length;
                 return (
                   <button
                     key={i}
@@ -297,6 +305,18 @@ export default function TeamCalendar() {
                         </span>
                       )}
                     </span>
+                    {assigneesToday.length > 0 && (
+                      <span className="flex w-full flex-wrap gap-1">
+                        {assigneesToday.map((name) => (
+                          <span
+                            key={name}
+                            className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                     {shown.length > 0 && (
                       <span className="hidden w-full min-w-0 flex-col gap-0.5 md:flex">
                         {shown.map((it) => (
@@ -356,18 +376,25 @@ export default function TeamCalendar() {
                       {canEdit && (
                         <div className="mt-2 space-y-2">
                           <textarea
-                            className="input min-h-[60px] text-[13px]"
-                            placeholder={`One line per task for ${name}`}
+                            className="input min-h-[44px] text-[13px]"
+                            placeholder={`Add a task for ${name} (one per line is fine too)`}
                             value={assigneeDrafts[name] ?? ""}
                             onChange={(e) => setAssigneeDrafts((d) => ({ ...d, [name]: e.target.value }))}
                           />
                           <button
                             type="button"
                             className="btn-secondary !min-h-0 px-3 py-1.5 text-[12px]"
-                            disabled={savingAssignee === name}
+                            disabled={savingAssignee === name || notesToBullets(assigneeDrafts[name]).length === 0}
                             onClick={() => saveAssignee(name)}
                           >
-                            {savingAssignee === name ? <Spinner /> : "Save"}
+                            {savingAssignee === name ? (
+                              <Spinner />
+                            ) : (
+                              <>
+                                <Icon name="plus" size={14} />
+                                Add
+                              </>
+                            )}
                           </button>
                         </div>
                       )}
