@@ -41,6 +41,7 @@ def require_calendar_editor(user: User = Depends(get_current_user)) -> User:
 def _out(e: CalendarEvent) -> CalendarEventOut:
     return CalendarEventOut(
         id=e.id, event_date=e.event_date, title=e.title, notes=e.notes, done=e.done,
+        assignee=e.assignee,
         created_by_name=e.creator.name if e.creator else None,
         created_at=e.created_at, updated_at=e.updated_at,
         edits=[
@@ -75,6 +76,7 @@ def list_events(date_from: date | None = None, date_to: date | None = None, db: 
 def create_event(body: CalendarEventCreate, db: Session = Depends(get_db), user: User = Depends(require_calendar_editor)):
     e = CalendarEvent(
         event_date=body.event_date, title=body.title, notes=body.notes, created_by=user.id, visibility="shared",
+        assignee=body.assignee,
     )
     db.add(e)
     db.commit()

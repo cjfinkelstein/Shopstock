@@ -11,6 +11,16 @@ import type { CalendarEvent } from "../types";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+// Fixed set of names Ray can leave a per-person task list for, one date at
+// a time -- stored as a plain CalendarEvent with assignee=<name> and the
+// list itself as newline-separated notes (rendered as bullets), rather
+// than a new data model, since it's just these three fixed people today.
+const ASSIGNEES = ["Adam", "Ed", "Avigdor"];
+
+function notesToBullets(notes: string | null | undefined): string[] {
+  return (notes ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+}
+
 function toISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -54,6 +64,8 @@ export default function TeamCalendar() {
   const [newTitle, setNewTitle] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [assigneeDrafts, setAssigneeDrafts] = useState<Record<string, string>>({});
+  const [savingAssignee, setSavingAssignee] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setEvents(null);
@@ -85,6 +97,19 @@ export default function TeamCalendar() {
   const shiftMonth = (delta: number) => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
 
   const selectedItems = selected ? (byDate[selected] ?? []) : [];
+  const generalItems = selectedItems.filter((it) => !it.assignee);
+  const showAssignments =
+    canEdit || ASSIGNEES.some((name) => notesToBullets(selectedItems.find((it) => it.assignee === name)?.notes).length > 0);
+
+  const openDay = (iso: string) => {
+    setSelected(iso);
+    const items = byDate[iso] ?? [];
+    const drafts: Record<string, string> = {};
+    for (const name of ASSIGNEES) {
+      drafts[name] = items.find((it) => it.assignee === name)?.notes ?? "";
+    }
+    setAssigneeDrafts(drafts);
+  };
 
   const closeDay = () => {
     setSelected(null);
@@ -92,6 +117,35 @@ export default function TeamCalendar() {
     setEditDraft(null);
     setNewTitle("");
     setNewNotes("");
+    setAssigneeDrafts({});
+  };
+
+  const saveAssignee = async (name: string) => {
+    if (!selected) return;
+    const text = (assigneeDrafts[name] ?? "").trim();
+    const existing = selectedItems.find((it) => it.assignee === name);
+    if (!existing && !text) return;
+    setSavingAssignee(name);
+    try {
+      if (existing) {
+        const updated = await api<CalendarEvent>(`/calendar/${existing.id}`, {
+          method: "PATCH",
+          body: { notes: text || null },
+        });
+        setEvents((prev) => (prev ?? []).map((e) => (e.id === updated.id ? updated : e)));
+      } else {
+        const created = await api<CalendarEvent>("/calendar", {
+          method: "POST",
+          body: { event_date: selected, title: name, assignee: name, notes: text || null },
+        });
+        setEvents((prev) => [...(prev ?? []), created]);
+      }
+      toast("success", `Saved ${name}'s list`);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSavingAssignee(null);
+    }
   };
 
   const addItem = async () => {
@@ -218,7 +272,7 @@ export default function TeamCalendar() {
                 return (
                   <button
                     key={i}
-                    onClick={() => setSelected(iso)}
+                    onClick={() => openDay(iso)}
                     className={`flex min-h-[92px] cursor-pointer flex-col items-start gap-1 border-b border-r p-2 text-left transition-colors last:border-r-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40 md:min-h-[132px] ${
                       (i + 1) % 7 === 0 ? "border-r-0" : "border-slate-100"
                     }`}
@@ -280,15 +334,58 @@ export default function TeamCalendar() {
           onClose={closeDay}
         >
           <div className="space-y-4">
-            {selectedItems.length === 0 ? (
+            {showAssignments && (
+              <div className="space-y-2.5">
+                <p className="section-title">Assignments</p>
+                {ASSIGNEES.map((name) => {
+                  const existing = selectedItems.find((it) => it.assignee === name);
+                  const bullets = notesToBullets(existing?.notes);
+                  if (!canEdit && bullets.length === 0) return null;
+                  return (
+                    <div key={name} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+                      <p className="text-[13px] font-bold">{name}</p>
+                      {bullets.length > 0 ? (
+                        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[13px] text-slate-600 dark:text-slate-300">
+                          {bullets.map((b, i) => (
+                            <li key={i}>{b}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        !canEdit && <p className="mt-1 text-[12px] text-slate-400">Nothing yet</p>
+                      )}
+                      {canEdit && (
+                        <div className="mt-2 space-y-2">
+                          <textarea
+                            className="input min-h-[60px] text-[13px]"
+                            placeholder={`One line per task for ${name}`}
+                            value={assigneeDrafts[name] ?? ""}
+                            onChange={(e) => setAssigneeDrafts((d) => ({ ...d, [name]: e.target.value }))}
+                          />
+                          <button
+                            type="button"
+                            className="btn-secondary !min-h-0 px-3 py-1.5 text-[12px]"
+                            disabled={savingAssignee === name}
+                            onClick={() => saveAssignee(name)}
+                          >
+                            {savingAssignee === name ? <Spinner /> : "Save"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {generalItems.length === 0 ? (
               <Empty
                 icon="calendar"
-                title="Nothing on this day"
+                title={showAssignments ? "Nothing else on this day" : "Nothing on this day"}
                 hint={canEdit ? "Add a to-do below." : "Nothing scheduled."}
               />
             ) : (
               <div className="space-y-2">
-                {selectedItems.map((item) => {
+                {generalItems.map((item) => {
                   const isOpen = expandedId === item.id;
                   return (
                     <div key={item.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60">

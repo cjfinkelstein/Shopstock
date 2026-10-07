@@ -905,6 +905,7 @@ class CalendarEventCreate(BaseModel):
     event_date: date
     title: str
     notes: str | None = None
+    assignee: str | None = Field(default=None, max_length=50)
 
 
 class CalendarEventUpdate(BaseModel):
@@ -912,6 +913,7 @@ class CalendarEventUpdate(BaseModel):
     title: str | None = None
     notes: str | None = None
     done: bool | None = None
+    assignee: str | None = Field(default=None, max_length=50)
 
 
 class CalendarEventEditOut(ApiModel):
@@ -935,6 +937,7 @@ class CalendarEventOut(TimestampedOut):
     title: str
     notes: str | None
     done: bool
+    assignee: str | None = None
     created_by_name: str | None = None
     edits: list[CalendarEventEditOut] = []
 
