@@ -481,3 +481,50 @@ Each entry: what was decided, and why.
     and confirmed the chip is both present *and* actually visible --
     catching exactly the kind of bug a type-check or a desktop-only visual
     check would have missed.
+
+## Checkable per-task rows + clock-out task review (2026-10-07)
+
+45. **"When techs are logging off show them the tasks they had today and
+    allow them to check off what they completed."** This needed a real
+    data model change: #42-#44's assignee feature stored one
+    `calendar_events` row per (date, assignee) with the whole list as a
+    newline blob in `notes` -- fine for display, but there was no field to
+    mark one line done without touching the rest. Restructured to one row
+    *per task*: `title` = the task text, `assignee` = the person, `done`
+    = whether it's finished -- the exact same shape a general to-do
+    already has, so checking off an assigned task reuses `toggleDone`
+    unchanged, and it shows done (strikethrough) on the Team Calendar too,
+    not just wherever it was checked off from. "Add" now creates one new
+    row per non-blank line typed, instead of merging into a shared blob.
+    **New permission wrinkle**: only admin/Ray can add or retitle tasks,
+    but the *assignee themselves* needs to check off their own task at
+    clock-out, and they're not a calendar editor. Extended
+    `update_event`'s permission check (still admin/Ray for everything
+    else) to allow a narrow exception: a user whose first name matches
+    the task's `assignee` can PATCH *only* `done` on *that* row -- not
+    retitle it, not touch anyone else's task, not touch an unassigned
+    to-do. Covered by a new test asserting all four of those boundaries.
+    Migration `0026` is a pure data migration (no schema change needed --
+    `assignee`/`title`/`done` all already existed from #42): splits any
+    existing blob-style row into one row per non-blank notes line. This
+    matters because the feature had already been used live for a day
+    before this change, so production had real rows in the old shape that
+    needed converting, not just new code that assumes the new one.
+    Verified the migration directly against a simulated pre-this-change
+    SQLite row (multi-line blob) -- confirmed it splits into the right
+    titles, leaves general to-dos alone, and that downgrade folds back
+    into a blob (lossy on done-state, which the old shape had no field
+    for anyway, but not on the task text).
+    The clock-out sheet (`Home.tsx`) now fetches the clocked-in tech's own
+    assigned tasks for today (only meaningful for Adam/Ed/Avigdor; a
+    shared `isAssignee()` helper in a new `calendarAssignees.ts` keeps
+    that name list in one place instead of duplicated across two files)
+    and shows them as a checklist above the existing clock-out note,
+    before the final Clock Out tap.
+    Verified with a full Playwright run end to end, not just each piece
+    in isolation: Ray assigns Ed a task on today's date -> Ed clocks in,
+    opens the clock-out sheet, sees the task, checks it off (confirmed
+    strikethrough) -> Ed finishes clocking out -> Ray reopens the Team
+    Calendar and confirms the same task shows done there too, proving the
+    "marks it done everywhere" requirement actually holds end to end, not
+    just that each screen independently renders a checkbox.

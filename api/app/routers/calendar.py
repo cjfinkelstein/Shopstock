@@ -86,10 +86,22 @@ def create_event(body: CalendarEventCreate, db: Session = Depends(get_db), user:
 
 @router.patch("/{event_id}", response_model=CalendarEventOut)
 def update_event(event_id: int, body: CalendarEventUpdate, db: Session = Depends(get_db),
-                  user: User = Depends(require_calendar_editor)):
+                  user: User = Depends(get_current_user)):
     e = db.get(CalendarEvent, event_id)
     if not e or e.visibility != "shared":
         raise HTTPException(status_code=404, detail="Not found")
+
+    # Normally editing the shared calendar is admin + Ray only (see
+    # require_calendar_editor). One narrow exception: a tech can check off
+    # their OWN assigned task (and only that -- not retitle it, not touch
+    # anyone else's) at clock-out or on the Team Calendar, so "mark what I
+    # finished today" doesn't require asking Ray to do it for them.
+    first_name = user.name.strip().split(" ", 1)[0].lower() if user.name else ""
+    is_editor = user.role == "admin" or first_name in _CALENDAR_EDITOR_TECH_FIRST_NAMES
+    is_own_task = bool(e.assignee) and e.assignee.strip().lower() == first_name
+    only_toggling_done = body.title is None and body.event_date is None and body.notes is None and body.assignee is None
+    if not is_editor and not (is_own_task and only_toggling_done):
+        raise HTTPException(status_code=403, detail="Only admin and Ray can edit the calendar")
 
     def record(field: str, old, new) -> None:
         db.add(CalendarEventEdit(

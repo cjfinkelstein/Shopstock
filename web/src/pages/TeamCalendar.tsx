@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { api, fmtWhen } from "../api";
 import { useAuth } from "../auth";
+import { ASSIGNEES } from "../calendarAssignees";
 import Icon from "../components/Icon";
 import Sheet from "../components/Sheet";
 import { Empty, ListSkeleton, Spinner } from "../components/ui";
@@ -11,14 +12,9 @@ import type { CalendarEvent } from "../types";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// Fixed set of names Ray can leave a per-person task list for, one date at
-// a time -- stored as a plain CalendarEvent with assignee=<name> and the
-// list itself as newline-separated notes (rendered as bullets), rather
-// than a new data model, since it's just these three fixed people today.
-const ASSIGNEES = ["Adam", "Ed", "Avigdor"];
-
-function notesToBullets(notes: string | null | undefined): string[] {
-  return (notes ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+// A paste or multi-line typed entry becomes one task per non-blank line.
+function linesOf(text: string | null | undefined): string[] {
+  return (text ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
 }
 
 function toISODate(d: Date): string {
@@ -98,8 +94,11 @@ export default function TeamCalendar() {
 
   const selectedItems = selected ? (byDate[selected] ?? []) : [];
   const generalItems = selectedItems.filter((it) => !it.assignee);
-  const showAssignments =
-    canEdit || ASSIGNEES.some((name) => notesToBullets(selectedItems.find((it) => it.assignee === name)?.notes).length > 0);
+  const showAssignments = canEdit || ASSIGNEES.some((name) => selectedItems.some((it) => it.assignee === name));
+  // Anyone with an editor role can toggle any task; a tech who isn't an
+  // editor can only toggle their own name's tasks (mirrors the backend's
+  // require_calendar_editor self-complete exception).
+  const canToggleAssignee = (name: string) => canEdit || firstName === name.toLowerCase();
 
   const openDay = (iso: string) => {
     setSelected(iso);
@@ -115,31 +114,25 @@ export default function TeamCalendar() {
     setAssigneeDrafts({});
   };
 
-  // Adds whatever's typed as one or more new bullets, on top of whatever's
-  // already there -- each Save appends, it never replaces the list, so
-  // Ray can come back and add a second (or third) task the same way he
-  // added the first.
+  // Each non-blank line typed becomes its own task row (so it can be
+  // checked off individually later) -- never merged into one blob, and
+  // never replacing what's already there.
   const saveAssignee = async (name: string) => {
     if (!selected) return;
-    const newLines = notesToBullets(assigneeDrafts[name]);
-    if (newLines.length === 0) return;
-    const existing = selectedItems.find((it) => it.assignee === name);
-    const combined = [...notesToBullets(existing?.notes), ...newLines].join("\n");
+    const lines = linesOf(assigneeDrafts[name]);
+    if (lines.length === 0) return;
     setSavingAssignee(name);
     try {
-      if (existing) {
-        const updated = await api<CalendarEvent>(`/calendar/${existing.id}`, {
-          method: "PATCH",
-          body: { notes: combined },
-        });
-        setEvents((prev) => (prev ?? []).map((e) => (e.id === updated.id ? updated : e)));
-      } else {
-        const created = await api<CalendarEvent>("/calendar", {
-          method: "POST",
-          body: { event_date: selected, title: name, assignee: name, notes: combined },
-        });
-        setEvents((prev) => [...(prev ?? []), created]);
+      const created: CalendarEvent[] = [];
+      for (const line of lines) {
+        created.push(
+          await api<CalendarEvent>("/calendar", {
+            method: "POST",
+            body: { event_date: selected, title: line, assignee: name },
+          }),
+        );
       }
+      setEvents((prev) => [...(prev ?? []), ...created]);
       setAssigneeDrafts((d) => ({ ...d, [name]: "" }));
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Could not add");
@@ -271,9 +264,7 @@ export default function TeamCalendar() {
                 // every screen size (unlike the to-do title preview below,
                 // which is desktop-only), since "who has tasks today" is the
                 // thing worth seeing at a glance, even on a phone.
-                const assigneesToday = ASSIGNEES.filter(
-                  (name) => notesToBullets(items.find((it) => it.assignee === name)?.notes).length > 0,
-                );
+                const assigneesToday = ASSIGNEES.filter((name) => items.some((it) => it.assignee === name));
                 const generalForDay = items.filter((it) => !it.assignee);
                 const shown = generalForDay.slice(0, 3);
                 const hiddenCount = generalForDay.length - shown.length;
@@ -358,16 +349,31 @@ export default function TeamCalendar() {
               <div className="space-y-2.5">
                 <p className="section-title">Assignments</p>
                 {ASSIGNEES.map((name) => {
-                  const existing = selectedItems.find((it) => it.assignee === name);
-                  const bullets = notesToBullets(existing?.notes);
-                  if (!canEdit && bullets.length === 0) return null;
+                  const tasks = selectedItems.filter((it) => it.assignee === name);
+                  const canToggle = canToggleAssignee(name);
+                  if (!canEdit && tasks.length === 0) return null;
                   return (
                     <div key={name} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
                       <p className="text-[13px] font-bold">{name}</p>
-                      {bullets.length > 0 ? (
-                        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[13px] text-slate-600 dark:text-slate-300">
-                          {bullets.map((b, i) => (
-                            <li key={i}>{b}</li>
+                      {tasks.length > 0 ? (
+                        <ul className="mt-1.5 space-y-1.5">
+                          {tasks.map((t) => (
+                            <li key={t.id} className="flex items-start gap-2">
+                              <button
+                                type="button"
+                                aria-label={t.done ? "Mark not done" : "Mark done"}
+                                disabled={!canToggle}
+                                onClick={() => toggleDone(t)}
+                                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                                  t.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 dark:border-slate-600"
+                                } ${!canToggle ? "cursor-default opacity-70" : ""}`}
+                              >
+                                {t.done && <Icon name="check" size={10} strokeWidth={3} />}
+                              </button>
+                              <span className={`text-[13px] ${t.done ? "text-slate-400 line-through" : "text-slate-600 dark:text-slate-300"}`}>
+                                {t.title}
+                              </span>
+                            </li>
                           ))}
                         </ul>
                       ) : (
@@ -384,7 +390,7 @@ export default function TeamCalendar() {
                           <button
                             type="button"
                             className="btn-secondary !min-h-0 px-3 py-1.5 text-[12px]"
-                            disabled={savingAssignee === name || notesToBullets(assigneeDrafts[name]).length === 0}
+                            disabled={savingAssignee === name || linesOf(assigneeDrafts[name]).length === 0}
                             onClick={() => saveAssignee(name)}
                           >
                             {savingAssignee === name ? (

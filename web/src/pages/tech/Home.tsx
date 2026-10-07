@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { isAssignee } from "../../calendarAssignees";
 import { useCart } from "../../cart";
 import { isConnectivityError, useClock } from "../../clock";
 import { enqueueAction } from "../../offlineQueue";
@@ -12,7 +13,11 @@ import Sheet from "../../components/Sheet";
 import TxnList from "../../components/TxnList";
 import { Empty, ItemThumb, ListSkeleton, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { Item, Job, StockRow, TechDashboard } from "../../types";
+import type { CalendarEvent, Item, Job, StockRow, TechDashboard } from "../../types";
+
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const IN_STOCK_PREVIEW = 8;
 
@@ -46,6 +51,8 @@ export default function Home() {
   const [jobPickerOpen, setJobPickerOpen] = useState(false);
   const [clockOutNoteOpen, setClockOutNoteOpen] = useState(false);
   const [clockOutNote, setClockOutNote] = useState("");
+  const [todaysTasks, setTodaysTasks] = useState<CalendarEvent[] | null>(null);
+  const [togglingTaskId, setTogglingTaskId] = useState<number | null>(null);
 
   // Big ticking clock -- recomputed every second from clockInAt while on shift.
   useEffect(() => {
@@ -70,10 +77,39 @@ export default function Home() {
       toast("success", "Clocked out");
       setClockOutNoteOpen(false);
       setClockOutNote("");
+      setTodaysTasks(null);
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Couldn't clock out");
     } finally {
       setClockBusy(false);
+    }
+  };
+
+  // Only Adam/Ed/Avigdor can ever have an assigned task (see
+  // calendarAssignees.ts); anyone else never bothers fetching.
+  useEffect(() => {
+    if (!clockOutNoteOpen || !isAssignee(user?.name)) return;
+    const today = toISODate(new Date());
+    api<CalendarEvent[]>(`/calendar?date_from=${today}&date_to=${today}`)
+      .then((events) => {
+        const firstName = user?.name.trim().split(/\s+/)[0]?.toLowerCase();
+        setTodaysTasks(events.filter((e) => e.assignee?.toLowerCase() === firstName));
+      })
+      .catch(() => setTodaysTasks(null));
+  }, [clockOutNoteOpen, user?.name]);
+
+  const toggleTask = async (task: CalendarEvent) => {
+    setTogglingTaskId(task.id);
+    try {
+      const updated = await api<CalendarEvent>(`/calendar/${task.id}`, {
+        method: "PATCH",
+        body: { done: !task.done },
+      });
+      setTodaysTasks((prev) => (prev ?? []).map((t) => (t.id === updated.id ? updated : t)));
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't update");
+    } finally {
+      setTogglingTaskId(null);
     }
   };
 
@@ -242,9 +278,33 @@ export default function Home() {
           onClose={() => {
             if (clockBusy) return;
             setClockOutNoteOpen(false);
+            setTodaysTasks(null);
           }}
         >
           <div className="space-y-4">
+            {todaysTasks && todaysTasks.length > 0 && (
+              <div>
+                <p className="label mb-1.5">Today's tasks — check off what you finished</p>
+                <ul className="space-y-1.5 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+                  {todaysTasks.map((t) => (
+                    <li key={t.id} className="flex items-start gap-2">
+                      <button
+                        type="button"
+                        aria-label={t.done ? "Mark not done" : "Mark done"}
+                        disabled={togglingTaskId === t.id}
+                        onClick={() => toggleTask(t)}
+                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                          t.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 dark:border-slate-600"
+                        }`}
+                      >
+                        {t.done && <Icon name="check" size={12} strokeWidth={3} />}
+                      </button>
+                      <span className={`text-[14px] ${t.done ? "text-slate-400 line-through" : ""}`}>{t.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <textarea
               className="input min-h-[120px]"
               placeholder="e.g. Ran conduit for the panel upgrade, picked up permit from the county office…"

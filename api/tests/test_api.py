@@ -337,6 +337,48 @@ class TestSharedCalendarPermissions:
         r = client.get("/api/v1/calendar", headers=ray_hdrs)
         assert r.status_code == 200, r.text
 
+    def test_assignee_can_complete_own_task_only(self, client, seeded, db_session):
+        """A tech can check off their OWN assigned task (clock-out review),
+        but can't retitle it, touch someone else's task, or touch a
+        general to-do -- only the done flag, only on their own row."""
+        from app.models import User
+
+        ray = User(name="Ray", role="tech", active=True)
+        adam = User(name="Adam", role="tech", active=True)
+        other = User(name="Sam", role="tech", active=True)
+        db_session.add_all([ray, adam, other])
+        db_session.commit()
+        ray_hdrs = self.login_as(client, ray.id)
+        adam_hdrs = self.login_as(client, adam.id)
+        other_hdrs = self.login_as(client, other.id)
+
+        r = client.post("/api/v1/calendar", headers=ray_hdrs, json={
+            "event_date": "2026-10-10", "title": "Clean the truck", "assignee": "Adam",
+        })
+        assert r.status_code == 201, r.text
+        task_id = r.json()["id"]
+
+        # Adam can mark his own task done
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=adam_hdrs, json={"done": True})
+        assert r.status_code == 200, r.text
+        assert r.json()["done"] is True
+
+        # but Adam can't retitle it
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=adam_hdrs, json={"title": "Something else"})
+        assert r.status_code == 403, r.text
+
+        # a different tech can't touch Adam's task at all
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=other_hdrs, json={"done": False})
+        assert r.status_code == 403, r.text
+
+        # Adam can't touch a general (unassigned) to-do either
+        r = client.post("/api/v1/calendar", headers=ray_hdrs,
+                         json={"event_date": "2026-10-10", "title": "Office closed"})
+        assert r.status_code == 201, r.text
+        general_id = r.json()["id"]
+        r = client.patch(f"/api/v1/calendar/{general_id}", headers=adam_hdrs, json={"done": True})
+        assert r.status_code == 403, r.text
+
     def test_admin_can_still_write(self, client, seeded):
         admin = login_admin(client)
         r = client.post("/api/v1/calendar", headers=admin,
