@@ -22,14 +22,18 @@ admin_router = APIRouter(prefix="/calendar/admin", tags=["calendar"], dependenci
 # Everyone can read the shared calendar, but editing it (add/edit/mark done)
 # is admin + Ray only, by owner request -- there's no granular permissions
 # system in this app, so rather than build one for a single named exception,
-# Ray is matched by name. If this needs to extend to more techs later,
+# Ray is matched by his first name. His account is actually stored as the
+# full "Raymond Bailey" (confirmed from the live site), so this matches on
+# the first word of the name rather than the whole string -- covers both
+# "Ray" and "Raymond ...". If this needs to extend to more techs later,
 # that's the point to build real per-user permissions instead of adding
 # more names here.
-_CALENDAR_EDITOR_TECH_NAMES = {"ray"}
+_CALENDAR_EDITOR_TECH_FIRST_NAMES = {"ray", "raymond"}
 
 
 def require_calendar_editor(user: User = Depends(get_current_user)) -> User:
-    if user.role == "admin" or user.name.strip().lower() in _CALENDAR_EDITOR_TECH_NAMES:
+    first_name = user.name.strip().split(" ", 1)[0].lower() if user.name else ""
+    if user.role == "admin" or first_name in _CALENDAR_EDITOR_TECH_FIRST_NAMES:
         return user
     raise HTTPException(status_code=403, detail="Only admin and Ray can edit the calendar")
 
