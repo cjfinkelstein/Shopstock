@@ -299,6 +299,21 @@ class TestSharedCalendarPermissions:
         r = client.patch(f"/api/v1/calendar/{event_id}", headers=other_tech, json={"done": False})
         assert r.status_code == 403, r.text
 
+    def test_ray_matched_by_first_name_only(self, client, seeded, db_session):
+        """Regression test: Ray's real account is stored as the full
+        "Raymond Bailey", not just "Ray" -- the match has to be on his
+        first name, not the whole name field."""
+        from app.models import User
+
+        raymond = User(name="Raymond Bailey", role="tech", active=True)
+        db_session.add(raymond)
+        db_session.commit()
+        raymond_hdrs = self.login_as(client, raymond.id)
+
+        r = client.post("/api/v1/calendar", headers=raymond_hdrs,
+                         json={"event_date": "2026-10-10", "title": "Pick up fixtures"})
+        assert r.status_code == 201, r.text
+
     def test_admin_can_still_write(self, client, seeded):
         admin = login_admin(client)
         r = client.post("/api/v1/calendar", headers=admin,

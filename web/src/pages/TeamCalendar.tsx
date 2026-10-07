@@ -39,8 +39,10 @@ export default function TeamCalendar() {
   // Everyone can see the shared calendar; editing it is admin + Ray only
   // (owner request) -- mirrors require_calendar_editor on the backend, so
   // this is just hiding affordances a non-editor's requests would 403 on
-  // anyway, not the actual enforcement.
-  const canEdit = user?.role === "admin" || user?.name.trim().toLowerCase() === "ray";
+  // anyway, not the actual enforcement. Matched on first name since Ray's
+  // account is actually stored as the full "Raymond Bailey".
+  const firstName = user?.name.trim().split(" ")[0]?.toLowerCase();
+  const canEdit = user?.role === "admin" || firstName === "ray" || firstName === "raymond";
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
