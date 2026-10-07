@@ -371,3 +371,33 @@ Each entry: what was decided, and why.
     the captured `recorded_at` rather than the sync time) and
     `check_consistency.py` pass against a fresh migrate-then-seed;
     `tsc --noEmit` and the production build are clean.
+
+## Shared Calendar editing restricted to admin + Ray (2026-10-07)
+
+40. **The shared "Calendar" to-do board (`/calendar`, tech-visible, labeled
+    "Calendar" in the admin sidebar to distinguish it from the admin-only
+    "Login Hours" page) used to let every tech add/edit/check off items --
+    the header literally said "Everyone can see & edit." By owner request,
+    editing is now admin + one named tech (Ray) only; the other six techs
+    still see it, just read-only.**
+    There's no granular permissions system in this app (`User.role` is
+    just `tech` | `admin`), and building one for a single named exception
+    felt like the wrong size fix. Instead, added a narrow
+    `require_calendar_editor` dependency in `calendar.py` that allows
+    `role == "admin"` or a tech whose name matches "Ray" (case-insensitive),
+    applied only to the shared calendar's `POST`/`PATCH` -- reads stay open
+    to every tech, and nothing else in the app (costs, other admin
+    endpoints, Ray's own tech-app experience) changes; he's still a normal
+    tech everywhere else. If this needs to extend to more techs later,
+    that's the point to build real per-user permissions instead of adding
+    more names to the hardcoded set.
+    Frontend (`TeamCalendar.tsx`) mirrors this by hiding the "Add a to-do"
+    form, the edit affordance, and the done-checkbox for anyone who isn't
+    admin or Ray -- the backend is the actual enforcement (a non-editor's
+    write would 403 either way), this just avoids showing controls that
+    would fail.
+    Verified: new backend tests (a regular tech can read but gets 403 on
+    write; a tech named Ray can write and a different tech still can't
+    touch that event; admin can still write) pass alongside the full
+    existing suite (39/39); `tsc --noEmit` and the production build are
+    clean.

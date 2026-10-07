@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api, fmtWhen } from "../api";
+import { useAuth } from "../auth";
 import Icon from "../components/Icon";
 import Sheet from "../components/Sheet";
 import { Empty, ListSkeleton, Spinner } from "../components/ui";
@@ -34,6 +35,12 @@ function editLine(e: CalendarEvent["edits"][number]): string {
 export default function TeamCalendar() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
+  // Everyone can see the shared calendar; editing it is admin + Ray only
+  // (owner request) -- mirrors require_calendar_editor on the backend, so
+  // this is just hiding affordances a non-editor's requests would 403 on
+  // anyway, not the actual enforcement.
+  const canEdit = user?.role === "admin" || user?.name.trim().toLowerCase() === "ray";
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -154,7 +161,7 @@ export default function TeamCalendar() {
           <Icon name="arrow-left" size={20} />
         </button>
         <div>
-          <p className="page-eyebrow">Everyone can see &amp; edit</p>
+          <p className="page-eyebrow">{canEdit ? "Everyone can see & edit" : "Everyone can see here"}</p>
           <h1 className="page-title mt-1">Team Calendar</h1>
         </div>
       </header>
@@ -272,7 +279,11 @@ export default function TeamCalendar() {
         >
           <div className="space-y-4">
             {selectedItems.length === 0 ? (
-              <Empty icon="calendar" title="Nothing on this day" hint="Add a to-do below." />
+              <Empty
+                icon="calendar"
+                title="Nothing on this day"
+                hint={canEdit ? "Add a to-do below." : "Nothing scheduled."}
+              />
             ) : (
               <div className="space-y-2">
                 {selectedItems.map((item) => {
@@ -283,17 +294,18 @@ export default function TeamCalendar() {
                         <button
                           type="button"
                           aria-label={item.done ? "Mark not done" : "Mark done"}
+                          disabled={!canEdit}
                           onClick={() => toggleDone(item)}
                           className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                             item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 dark:border-slate-600"
-                          }`}
+                          } ${!canEdit ? "cursor-default opacity-70" : ""}`}
                         >
                           {item.done && <Icon name="check" size={12} strokeWidth={3} />}
                         </button>
                         <button
                           type="button"
                           className="min-w-0 flex-1 text-left"
-                          onClick={() => (isOpen ? setExpandedId(null) : startEdit(item))}
+                          onClick={() => canEdit && (isOpen ? setExpandedId(null) : startEdit(item))}
                         >
                           <span className="flex items-center gap-1.5">
                             <span className={`truncate text-[14px] font-semibold ${item.done ? "text-slate-400 line-through" : ""}`}>
@@ -314,11 +326,13 @@ export default function TeamCalendar() {
                             Added by {item.created_by_name ?? "someone"} · {fmtWhen(item.created_at)}
                           </span>
                         </button>
-                        <Icon
-                          name={isOpen ? "chevron-down" : "chevron-right"}
-                          size={16}
-                          className="mt-1 shrink-0 text-slate-300"
-                        />
+                        {canEdit && (
+                          <Icon
+                            name={isOpen ? "chevron-down" : "chevron-right"}
+                            size={16}
+                            className="mt-1 shrink-0 text-slate-300"
+                          />
+                        )}
                       </div>
 
                       {isOpen && editDraft && (
@@ -385,6 +399,7 @@ export default function TeamCalendar() {
               </div>
             )}
 
+            {canEdit && (
             <div className="space-y-2.5 border-t border-slate-100 pt-4 dark:border-slate-800">
               <p className="text-[13px] font-bold uppercase tracking-wider text-slate-400">Add a to-do</p>
               <input
@@ -410,6 +425,7 @@ export default function TeamCalendar() {
                 )}
               </button>
             </div>
+            )}
           </div>
         </Sheet>
       )}
