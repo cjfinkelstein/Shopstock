@@ -238,6 +238,7 @@ export interface CalendarEvent {
   title: string;
   notes: string | null;
   done: boolean;
+  assignee: string | null;
   created_by_name: string | null;
   created_at: string;
   updated_at: string;

@@ -314,6 +314,29 @@ class TestSharedCalendarPermissions:
                          json={"event_date": "2026-10-10", "title": "Pick up fixtures"})
         assert r.status_code == 201, r.text
 
+    def test_assignee_round_trips(self, client, seeded, db_session):
+        """Ray's per-person task list for a date: assignee is a free-text
+        label (not tied to a real User), so it just needs to save and come
+        back unchanged -- no name-matching involved."""
+        from app.models import User
+
+        ray = User(name="Ray", role="tech", active=True)
+        db_session.add(ray)
+        db_session.commit()
+        ray_hdrs = self.login_as(client, ray.id)
+
+        r = client.post("/api/v1/calendar", headers=ray_hdrs, json={
+            "event_date": "2026-10-10", "title": "Adam", "assignee": "Adam",
+            "notes": "Clean truck\nPick up supplies",
+        })
+        assert r.status_code == 201, r.text
+        assert r.json()["assignee"] == "Adam"
+        assert r.json()["notes"] == "Clean truck\nPick up supplies"
+
+        # a regular, unassigned to-do still has assignee == None
+        r = client.get("/api/v1/calendar", headers=ray_hdrs)
+        assert r.status_code == 200, r.text
+
     def test_admin_can_still_write(self, client, seeded):
         admin = login_admin(client)
         r = client.post("/api/v1/calendar", headers=admin,

@@ -401,3 +401,48 @@ Each entry: what was decided, and why.
     touch that event; admin can still write) pass alongside the full
     existing suite (39/39); `tsc --noEmit` and the production build are
     clean.
+
+## Fixed the Ray match -- his account is "Raymond Bailey" (2026-10-07)
+
+41. **#40's `require_calendar_editor` matched the whole `User.name` field
+    against "ray" -- Ray tried it on the live site and was still locked
+    out, because his real account is stored as the full "Raymond Bailey,"
+    not "Ray."** Caught only once the owner actually tested it as Ray,
+    which is exactly why the earlier PR description flagged this as "one
+    assumption worth double-checking" -- it was wrong.
+    Fixed by matching on the first word of the name instead of the whole
+    string ("ray" or "raymond"), on both the backend check and the
+    frontend's mirrored `canEdit`. Added a regression test using the real
+    full name "Raymond Bailey" so this can't silently break the same way
+    again -- a test seeded with just "Ray" (as the original test did)
+    would never have caught it.
+
+## Per-person task lists on the shared Calendar (2026-10-07)
+
+42. **Ray can now write a bullet-point task list for each of three named
+    techs (Adam, Ed, Avigdor) on a given calendar date, visible to
+    everyone read-only -- a dedicated "Assignments" section in the
+    day-detail sheet, separate from the general shared to-do list.**
+    Reused the existing `CalendarEvent` model rather than building a new
+    one: added a nullable `assignee` column (migration `0025`). An
+    assigned entry is just a normal shared-calendar event with
+    `title = assignee` and `notes` as newline-separated lines, rendered as
+    `<li>` bullets instead of a paragraph; an ordinary to-do still has
+    `assignee = null` and renders exactly as before. `require_calendar_editor`
+    from #40/#41 already gates the write endpoints these go through, so no
+    new permission logic was needed -- Ray and admin get a textarea per
+    name to type/save into, everyone else just sees the bullets (or
+    nothing, if empty, so a regular tech's view isn't cluttered with blank
+    sections).
+    `assignee` is deliberately a free-text label, not a `User` foreign key
+    or name match -- #41 is a fresh reminder of how easily a real person's
+    stored name can differ from what they're called day to day. Ray types
+    whatever name he wants for a given box; nothing in the system tries to
+    resolve it to an account.
+    Verified beyond the type/build checks: an actual Playwright run against
+    the dev server and a fresh seed -- tapped in as Ray, typed a two-line
+    list into Adam's box, saved, confirmed both bullets render; then
+    signed out and tapped in as a different tech (Sam) and confirmed the
+    same bullets show read-only with no textarea and no "Add a to-do" box.
+    Also confirmed directly in the database that the row landed as
+    `assignee="Adam"` with the newline-separated notes intact.
