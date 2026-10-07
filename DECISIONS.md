@@ -446,3 +446,18 @@ Each entry: what was decided, and why.
     same bullets show read-only with no textarea and no "Add a to-do" box.
     Also confirmed directly in the database that the row landed as
     `assignee="Adam"` with the newline-separated notes intact.
+
+## Per-person task boxes now append, not replace (2026-10-07)
+
+43. **#42's Adam/Ed/Avigdor boxes saved the whole textarea as the new
+    `notes` value -- so a second task typed into an already-filled box
+    replaced the first one instead of adding to it. Ray reported "it only
+    lets me write one task."** Fixed by changing the box from an editable
+    full-text field to an add-only one: it always starts empty, and each
+    "Add" appends whatever's typed (one line or several, so a paste still
+    works) onto the existing bullets rather than overwriting them, then
+    clears itself -- same mental model as the "Add a to-do" box elsewhere
+    on this page. Verified with a Playwright run: added a task, confirmed
+    it shows and the box clears; added a second, confirmed the *first* one
+    is still there alongside it; added two more pasted as one multi-line
+    block, confirmed all four persist.

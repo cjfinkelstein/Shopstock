@@ -103,12 +103,7 @@ export default function TeamCalendar() {
 
   const openDay = (iso: string) => {
     setSelected(iso);
-    const items = byDate[iso] ?? [];
-    const drafts: Record<string, string> = {};
-    for (const name of ASSIGNEES) {
-      drafts[name] = items.find((it) => it.assignee === name)?.notes ?? "";
-    }
-    setAssigneeDrafts(drafts);
+    setAssigneeDrafts({});
   };
 
   const closeDay = () => {
@@ -120,29 +115,34 @@ export default function TeamCalendar() {
     setAssigneeDrafts({});
   };
 
+  // Adds whatever's typed as one or more new bullets, on top of whatever's
+  // already there -- each Save appends, it never replaces the list, so
+  // Ray can come back and add a second (or third) task the same way he
+  // added the first.
   const saveAssignee = async (name: string) => {
     if (!selected) return;
-    const text = (assigneeDrafts[name] ?? "").trim();
+    const newLines = notesToBullets(assigneeDrafts[name]);
+    if (newLines.length === 0) return;
     const existing = selectedItems.find((it) => it.assignee === name);
-    if (!existing && !text) return;
+    const combined = [...notesToBullets(existing?.notes), ...newLines].join("\n");
     setSavingAssignee(name);
     try {
       if (existing) {
         const updated = await api<CalendarEvent>(`/calendar/${existing.id}`, {
           method: "PATCH",
-          body: { notes: text || null },
+          body: { notes: combined },
         });
         setEvents((prev) => (prev ?? []).map((e) => (e.id === updated.id ? updated : e)));
       } else {
         const created = await api<CalendarEvent>("/calendar", {
           method: "POST",
-          body: { event_date: selected, title: name, assignee: name, notes: text || null },
+          body: { event_date: selected, title: name, assignee: name, notes: combined },
         });
         setEvents((prev) => [...(prev ?? []), created]);
       }
-      toast("success", `Saved ${name}'s list`);
+      setAssigneeDrafts((d) => ({ ...d, [name]: "" }));
     } catch (e) {
-      toast("error", e instanceof Error ? e.message : "Could not save");
+      toast("error", e instanceof Error ? e.message : "Could not add");
     } finally {
       setSavingAssignee(null);
     }
@@ -356,18 +356,25 @@ export default function TeamCalendar() {
                       {canEdit && (
                         <div className="mt-2 space-y-2">
                           <textarea
-                            className="input min-h-[60px] text-[13px]"
-                            placeholder={`One line per task for ${name}`}
+                            className="input min-h-[44px] text-[13px]"
+                            placeholder={`Add a task for ${name} (one per line is fine too)`}
                             value={assigneeDrafts[name] ?? ""}
                             onChange={(e) => setAssigneeDrafts((d) => ({ ...d, [name]: e.target.value }))}
                           />
                           <button
                             type="button"
                             className="btn-secondary !min-h-0 px-3 py-1.5 text-[12px]"
-                            disabled={savingAssignee === name}
+                            disabled={savingAssignee === name || notesToBullets(assigneeDrafts[name]).length === 0}
                             onClick={() => saveAssignee(name)}
                           >
-                            {savingAssignee === name ? <Spinner /> : "Save"}
+                            {savingAssignee === name ? (
+                              <Spinner />
+                            ) : (
+                              <>
+                                <Icon name="plus" size={14} />
+                                Add
+                              </>
+                            )}
                           </button>
                         </div>
                       )}
