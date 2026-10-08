@@ -44,6 +44,11 @@ services:
       # estimates) -- blank = both cleanly fail with a clear error instead
       # of pretending to work
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Clock-out photos live on disk, not in the database -- this volume
+      # must exist or every rebuild wipes uploaded photos. See
+      # api/app/config.py's uploads_dir.
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -59,3 +64,4 @@ services:
 
 volumes:
   pgdata:
+  uploads:

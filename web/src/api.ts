@@ -73,6 +73,34 @@ export async function api<T>(
   return res.json() as Promise<T>;
 }
 
+/** Uploads a file (clock-out photos) as multipart/form-data -- unlike api(),
+ * never sets Content-Type itself, since the browser has to generate the
+ * multipart boundary; setting it manually (or JSON.stringify-ing a File)
+ * breaks the upload. */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(API + path, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (res.status === 401 && token) {
+    setToken(null);
+    onUnauthorized?.();
+    throw new ApiError("Session expired — tap in again", 401);
+  }
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const data = await res.json();
+      if (typeof data.detail === "string") detail = data.detail;
+    } catch {
+      /* not json */
+    }
+    throw new ApiError(detail, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
 /** Calls an authenticated endpoint that streams newline-delimited JSON
  * events back (the AI assistant panel), yielding each parsed event as it
  * arrives. Uses fetch()'s ReadableStream reader instead of EventSource,

@@ -481,3 +481,91 @@ Each entry: what was decided, and why.
     and confirmed the chip is both present *and* actually visible --
     catching exactly the kind of bug a type-check or a desktop-only visual
     check would have missed.
+
+## Checkable per-task rows + clock-out task review (2026-10-07)
+
+45. **"When techs are logging off show them the tasks they had today and
+    allow them to check off what they completed."** This needed a real
+    data model change: #42-#44's assignee feature stored one
+    `calendar_events` row per (date, assignee) with the whole list as a
+    newline blob in `notes` -- fine for display, but there was no field to
+    mark one line done without touching the rest. Restructured to one row
+    *per task*: `title` = the task text, `assignee` = the person, `done`
+    = whether it's finished -- the exact same shape a general to-do
+    already has, so checking off an assigned task reuses `toggleDone`
+    unchanged, and it shows done (strikethrough) on the Team Calendar too,
+    not just wherever it was checked off from. "Add" now creates one new
+    row per non-blank line typed, instead of merging into a shared blob.
+    **New permission wrinkle**: only admin/Ray can add or retitle tasks,
+    but the *assignee themselves* needs to check off their own task at
+    clock-out, and they're not a calendar editor. Extended
+    `update_event`'s permission check (still admin/Ray for everything
+    else) to allow a narrow exception: a user whose first name matches
+    the task's `assignee` can PATCH *only* `done` on *that* row -- not
+    retitle it, not touch anyone else's task, not touch an unassigned
+    to-do. Covered by a new test asserting all four of those boundaries.
+    Migration `0026` is a pure data migration (no schema change needed --
+    `assignee`/`title`/`done` all already existed from #42): splits any
+    existing blob-style row into one row per non-blank notes line. This
+    matters because the feature had already been used live for a day
+    before this change, so production had real rows in the old shape that
+    needed converting, not just new code that assumes the new one.
+    Verified the migration directly against a simulated pre-this-change
+    SQLite row (multi-line blob) -- confirmed it splits into the right
+    titles, leaves general to-dos alone, and that downgrade folds back
+    into a blob (lossy on done-state, which the old shape had no field
+    for anyway, but not on the task text).
+    The clock-out sheet (`Home.tsx`) now fetches the clocked-in tech's own
+    assigned tasks for today (only meaningful for Adam/Ed/Avigdor; a
+    shared `isAssignee()` helper in a new `calendarAssignees.ts` keeps
+    that name list in one place instead of duplicated across two files)
+    and shows them as a checklist above the existing clock-out note,
+    before the final Clock Out tap.
+    Verified with a full Playwright run end to end, not just each piece
+    in isolation: Ray assigns Ed a task on today's date -> Ed clocks in,
+    opens the clock-out sheet, sees the task, checks it off (confirmed
+    strikethrough) -> Ed finishes clocking out -> Ray reopens the Team
+    Calendar and confirms the same task shows done there too, proving the
+    "marks it done everywhere" requirement actually holds end to end, not
+    just that each screen independently renders a checkbox.
+
+## Clock-out photos with captions (2026-10-07)
+
+46. **Second half of the clock-out request: a tech can attach photos (each
+    with an optional caption) to their own clock-out, alongside the
+    existing note.** New `clock_out_photos` table (migration `0027`) --
+    `clock_event_id`, `caption`, `file_path`, `content_type`,
+    `uploaded_by`. The actual bytes live on disk under
+    `settings.uploads_dir`, not in the database, behind a new
+    `uploads` Docker volume (`docker-compose.yml`) -- without that volume
+    a rebuild silently wipes every photo, same failure mode `pgdata`
+    already guards against for the database.
+    Uploaded via a new multipart endpoint, `POST /time/clock-out/photos`,
+    while the clock-out sheet is still open and the shift is still
+    technically open server-side (clock-out itself is a separate, later
+    call) -- that's what gives the upload a stable `clock_event_id` to
+    attach to without any new "pending shift" concept. No offline queueing
+    here, unlike clock in/out/pings: a multipart upload is a much bigger
+    thing to replay reliably than a small JSON body, so a tech with no
+    signal just gets a clear "couldn't upload" error instead of a silent
+    queue that might retry a multi-MB file repeatedly. Rejects non-image
+    content types and anything over 15MB before it touches disk.
+    **Auth gap caught before it shipped**: a plain `<img src="/time/photos/
+    5">` can't carry the Bearer token this API requires for an admin-only
+    resource -- a browser image request never sends custom headers. Fixed
+    with a small `AuthedImage` component (fetches via the existing
+    authenticated-blob helper, hands the browser an object URL instead) --
+    found this by actually reading through how authenticated images would
+    need to load, not by hitting it in testing, since a broken `<img>`
+    doesn't throw, it just silently shows nothing.
+    Visibility matches `clock_out_note` exactly: admin sees any tech's
+    photos (surfaced in both Login Hours views -- the "All techs" list and
+    the day-detail sheet, both already showing the note), a tech can only
+    ever fetch their own.
+    Verified beyond type/build/backend-test checks: a full Playwright run
+    with a real (if minimal) JPEG file -- picked a photo, typed a caption,
+    uploaded it, confirmed the thumbnail and caption appear, finished
+    clocking out, then logged in as admin and confirmed the same photo
+    renders on Login Hours via a real `blob:` URL (proving the
+    authenticated-fetch path actually works end to end, not just that the
+    component compiles) alongside its caption.

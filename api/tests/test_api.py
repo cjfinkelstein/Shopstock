@@ -337,8 +337,130 @@ class TestSharedCalendarPermissions:
         r = client.get("/api/v1/calendar", headers=ray_hdrs)
         assert r.status_code == 200, r.text
 
+    def test_assignee_can_complete_own_task_only(self, client, seeded, db_session):
+        """A tech can check off their OWN assigned task (clock-out review),
+        but can't retitle it, touch someone else's task, or touch a
+        general to-do -- only the done flag, only on their own row."""
+        from app.models import User
+
+        ray = User(name="Ray", role="tech", active=True)
+        adam = User(name="Adam", role="tech", active=True)
+        other = User(name="Sam", role="tech", active=True)
+        db_session.add_all([ray, adam, other])
+        db_session.commit()
+        ray_hdrs = self.login_as(client, ray.id)
+        adam_hdrs = self.login_as(client, adam.id)
+        other_hdrs = self.login_as(client, other.id)
+
+        r = client.post("/api/v1/calendar", headers=ray_hdrs, json={
+            "event_date": "2026-10-10", "title": "Clean the truck", "assignee": "Adam",
+        })
+        assert r.status_code == 201, r.text
+        task_id = r.json()["id"]
+
+        # Adam can mark his own task done
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=adam_hdrs, json={"done": True})
+        assert r.status_code == 200, r.text
+        assert r.json()["done"] is True
+
+        # but Adam can't retitle it
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=adam_hdrs, json={"title": "Something else"})
+        assert r.status_code == 403, r.text
+
+        # a different tech can't touch Adam's task at all
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=other_hdrs, json={"done": False})
+        assert r.status_code == 403, r.text
+
+        # Adam can't touch a general (unassigned) to-do either
+        r = client.post("/api/v1/calendar", headers=ray_hdrs,
+                         json={"event_date": "2026-10-10", "title": "Office closed"})
+        assert r.status_code == 201, r.text
+        general_id = r.json()["id"]
+        r = client.patch(f"/api/v1/calendar/{general_id}", headers=adam_hdrs, json={"done": True})
+        assert r.status_code == 403, r.text
+
     def test_admin_can_still_write(self, client, seeded):
         admin = login_admin(client)
         r = client.post("/api/v1/calendar", headers=admin,
                          json={"event_date": "2026-10-10", "title": "Schedule inspection"})
         assert r.status_code == 201, r.text
+
+
+class TestClockOutPhotos:
+    def _clock_in(self, client, hdrs, seeded):
+        r = client.post("/api/v1/time/gps-consent", headers=hdrs)
+        assert r.status_code == 200, r.text
+        r = client.post("/api/v1/time/clock-in", headers=hdrs, json={"job_id": seeded["job"].id})
+        assert r.status_code == 200, r.text
+
+    def test_upload_and_fetch_own_photo(self, client, seeded, tmp_path, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        self._clock_in(client, tech, seeded)
+
+        fake_jpeg = b"\xff\xd8\xff\xe0" + b"0" * 100
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("site.jpg", fake_jpeg, "image/jpeg")},
+            data={"caption": "Panel before repair"},
+        )
+        assert r.status_code == 201, r.text
+        photo = r.json()
+        assert photo["caption"] == "Panel before repair"
+        assert photo["url"] == f"/time/photos/{photo['id']}"
+
+        r = client.get(f"/api/v1/time/photos/{photo['id']}", headers=tech)
+        assert r.status_code == 200, r.text
+        assert r.content == fake_jpeg
+
+    def test_admin_can_see_any_photo_other_tech_cannot(self, client, seeded, db_session, tmp_path, monkeypatch):
+        from app.config import settings
+        from app.models import User
+
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        self._clock_in(client, tech, seeded)
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("site.jpg", b"fake-bytes", "image/jpeg")},
+        )
+        assert r.status_code == 201, r.text
+        photo_id = r.json()["id"]
+
+        admin = login_admin(client)
+        r = client.get(f"/api/v1/time/photos/{photo_id}", headers=admin)
+        assert r.status_code == 200, r.text
+
+        other = User(name="Sam", role="tech", active=True)
+        db_session.add(other)
+        db_session.commit()
+        r = client.post("/api/v1/auth/tap", json={"user_id": other.id})
+        other_hdrs = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        r = client.get(f"/api/v1/time/photos/{photo_id}", headers=other_hdrs)
+        assert r.status_code == 403, r.text
+
+    def test_rejects_non_image_upload(self, client, seeded, tmp_path, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        self._clock_in(client, tech, seeded)
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("notes.pdf", b"%PDF-fake", "application/pdf")},
+        )
+        assert r.status_code == 400, r.text
+
+    def test_upload_requires_being_clocked_in(self, client, seeded, tmp_path, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("site.jpg", b"fake-bytes", "image/jpeg")},
+        )
+        assert r.status_code == 400, r.text

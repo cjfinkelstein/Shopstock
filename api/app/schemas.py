@@ -164,6 +164,17 @@ class ClockStatusOut(BaseModel):
         return _utc_iso(v)
 
 
+class ClockOutPhotoOut(BaseModel):
+    id: int
+    caption: str | None
+    url: str
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def _ser_created_at(self, v: datetime, _info):
+        return _utc_iso(v)
+
+
 class WorkerLiveOut(BaseModel):
     user_id: int
     user_name: str

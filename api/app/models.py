@@ -139,6 +139,9 @@ class ClockEvent(TimestampMixin, Base):
     pings: Mapped[list["LocationPing"]] = relationship(
         back_populates="clock_event", order_by="LocationPing.recorded_at"
     )
+    photos: Mapped[list["ClockOutPhoto"]] = relationship(
+        back_populates="clock_event", cascade="all, delete-orphan", order_by="ClockOutPhoto.created_at"
+    )
 
 
 class LocationPing(Base):
@@ -164,6 +167,30 @@ class LocationPing(Base):
     client_ref: Mapped[str | None] = mapped_column(String(64))
 
     clock_event: Mapped[ClockEvent] = relationship(back_populates="pings")
+
+
+class ClockOutPhoto(TimestampMixin, Base):
+    """A photo a tech attaches to their own clock-out note, with an optional
+    caption. Uploaded while the shift is still open (the clock-out sheet
+    uploads before the final clock-out call) so there's a stable
+    clock_event_id to attach to. Admin-visible only, same as clock_out_note
+    -- never returned to a tech viewing someone else's shift."""
+
+    __tablename__ = "clock_out_photos"
+    __table_args__ = (Index("ix_clock_out_photos_clock_event", "clock_event_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    clock_event_id: Mapped[int] = mapped_column(ForeignKey("clock_events.id"), nullable=False)
+    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    caption: Mapped[str | None] = mapped_column(String(300))
+    # Path relative to settings.uploads_dir -- never a client-supplied path,
+    # always a server-generated uuid filename, so there's no path-traversal
+    # surface from the original filename.
+    file_path: Mapped[str] = mapped_column(String(300), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    clock_event: Mapped[ClockEvent] = relationship(back_populates="photos")
+    uploader: Mapped["User"] = relationship()
 
 
 class Vendor(TimestampMixin, Base):

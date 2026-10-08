@@ -4,12 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 
 import { api, fmtQty, fmtWhen } from "../../api";
+import AuthedImage from "../../components/AuthedImage";
 import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import { Avatar, Empty, ItemThumb, ListSkeleton, Spinner } from "../../components/ui";
 import { hoursLabel } from "../../hours";
 import { useToast } from "../../toast";
-import type { CalendarEvent, RoutePoint, ShiftRoute, User, WorkerLive } from "../../types";
+import type { CalendarEvent, ClockOutPhoto, RoutePoint, ShiftRoute, User, WorkerLive } from "../../types";
 
 // ---------- Live map helpers (pins, clustering, route line) ----------
 
@@ -89,6 +90,7 @@ interface Shift {
   job_name: string | null;
   approval_status: string;
   note: string | null;
+  photos: ClockOutPhoto[];
 }
 
 interface TechTimesheet {
@@ -129,6 +131,7 @@ interface DayShiftEntry {
   hours: number;
   approval_status: string;
   note: string | null;
+  photos: ClockOutPhoto[];
 }
 
 interface SignOutEntry {
@@ -696,6 +699,24 @@ export default function Calendar() {
                                     "{s.note}"
                                   </p>
                                 )}
+                                {s.photos.length > 0 && (
+                                  <div className="mt-1.5 flex flex-wrap gap-2">
+                                    {s.photos.map((p) => (
+                                      <div key={p.id} className="w-14">
+                                        <AuthedImage
+                                          src={p.url}
+                                          alt={p.caption ?? "Clock-out photo"}
+                                          className="h-14 w-14 rounded-lg object-cover"
+                                        />
+                                        {p.caption && (
+                                          <p className="mt-0.5 truncate text-[10px] text-slate-400" title={p.caption}>
+                                            {p.caption}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                               <div className="flex shrink-0 items-center gap-2.5">
                                 <span className="text-[12.5px] font-bold tabular-nums">{hoursLabel(s.hours)}</span>
@@ -952,6 +973,24 @@ export default function Calendar() {
                       <p className="mt-2 border-t border-slate-200/70 pt-2 text-[12.5px] italic text-slate-600 dark:border-slate-700 dark:text-slate-300">
                         "{s.note}"
                       </p>
+                    )}
+                    {s.photos.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-2">
+                        {s.photos.map((p) => (
+                          <div key={p.id} className="w-14">
+                            <AuthedImage
+                              src={p.url}
+                              alt={p.caption ?? "Clock-out photo"}
+                              className="h-14 w-14 rounded-lg object-cover"
+                            />
+                            {p.caption && (
+                              <p className="mt-0.5 truncate text-[10px] text-slate-400" title={p.caption}>
+                                {p.caption}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                     </div>
                   ))}

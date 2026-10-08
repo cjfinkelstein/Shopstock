@@ -1,16 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import uuid
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user, require_admin
+from app.config import settings
 from app.database import get_db
-from app.models import ClockEvent, Job, LocationPing, User, utcnow
+from app.models import ClockEvent, ClockOutPhoto, Job, LocationPing, User, utcnow
 from app.schemas import (
-    ClockInIn, ClockOutIn, ClockStatusOut, LocationPingIn, MyShiftOut, RoutePoint, ShiftRouteOut, WorkerLiveOut,
+    ClockInIn, ClockOutIn, ClockOutPhotoOut, ClockStatusOut, LocationPingIn, MyShiftOut, RoutePoint, ShiftRouteOut,
+    WorkerLiveOut,
 )
 
 router = APIRouter(prefix="/time", tags=["time"])
+
+# Only real photo types -- rejects anything else (a PDF, a video, a
+# disguised script) before it's ever written to disk.
+_PHOTO_EXTENSIONS = {
+    "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+    "image/heic": ".heic", "image/heif": ".heif",
+}
 
 
 def _open_event(db: Session, user_id: int) -> ClockEvent | None:
@@ -84,6 +97,62 @@ def clock_out(body: ClockOutIn, db: Session = Depends(get_db), user: User = Depe
     ev.clock_out_note = body.note
     db.commit()
     return ClockStatusOut(clocked_in=False)
+
+
+@router.post("/clock-out/photos", response_model=ClockOutPhotoOut, status_code=201)
+async def upload_clock_out_photo(
+    file: UploadFile = File(...),
+    caption: str | None = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Attaches a photo (with an optional caption) to the tech's currently
+    open shift -- uploaded while the clock-out sheet is still open, before
+    the final clock-out call, so there's always a stable clock_event_id to
+    attach to. No offline queueing here (unlike clock in/out/pings): a
+    multipart upload is a much bigger thing to replay reliably than a small
+    JSON body, so this just fails with a clear error if there's no signal
+    rather than silently queuing."""
+    ev = _open_event(db, user.id)
+    if not ev:
+        raise HTTPException(status_code=400, detail="Not clocked in")
+    ext = _PHOTO_EXTENSIONS.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(status_code=400, detail="Only photo uploads are allowed")
+    data = await file.read()
+    if len(data) > settings.max_photo_bytes:
+        raise HTTPException(status_code=400, detail="Photo is too large")
+
+    rel_dir = f"clock_photos/{ev.id}"
+    os.makedirs(os.path.join(settings.uploads_dir, rel_dir), exist_ok=True)
+    rel_path = f"{rel_dir}/{uuid.uuid4().hex}{ext}"
+    with open(os.path.join(settings.uploads_dir, rel_path), "wb") as f:
+        f.write(data)
+
+    photo = ClockOutPhoto(
+        clock_event_id=ev.id, uploaded_by=user.id,
+        caption=(caption or "").strip() or None,
+        file_path=rel_path, content_type=file.content_type,
+    )
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return ClockOutPhotoOut(id=photo.id, caption=photo.caption, url=f"/time/photos/{photo.id}", created_at=photo.created_at)
+
+
+@router.get("/photos/{photo_id}")
+def get_clock_out_photo(photo_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Admin can see any photo (same as clock_out_note); a tech can only
+    ever see their own -- never another tech's clock-out photos."""
+    photo = db.get(ClockOutPhoto, photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Not found")
+    if user.role != "admin" and photo.uploaded_by != user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    full_path = os.path.join(settings.uploads_dir, photo.file_path)
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="Photo file missing")
+    return FileResponse(full_path, media_type=photo.content_type)
 
 
 @router.post("/ping", status_code=204)
