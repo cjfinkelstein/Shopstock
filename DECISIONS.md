@@ -774,3 +774,24 @@ Each entry: what was decided, and why.
     verification**: logged in as a tech who was NOT clocked in, opened
     the Photos tab, tapped Add photo, picked a file, added a caption,
     posted it, confirmed it appears in the shared feed immediately.
+
+## Added an "Add photo" button on Home, under the calendar (2026-10-08)
+
+57. **Follow-up to #56: "place the add photo on the front home screen
+    under the calendar"** -- added a second "Add photo" entry point,
+    this time directly on Home (`tech/Home.tsx`), right below the
+    embedded `<TeamCalendar>` and above the Trucks/Cart stat tiles. Same
+    gallery-picker + caption + upload flow as the Photos page's button,
+    but kept as its own independent state (`homePendingPhoto` etc.) --
+    deliberately not sharing state with the clock-out sheet's existing
+    photo picker, since that one is tied into the clock-out flow
+    (populates `clockOutPhotos`, gets cleared when the clock-out sheet
+    closes) and mixing the two would couple unrelated flows. The Photos
+    tab's own "Add photo" button (added in #56) is unchanged -- this is
+    just a second, more prominent way to reach the same upload.
+    Verified with Playwright: confirmed the button's position on the
+    page is above the stat-tile grid (i.e. right after the calendar, not
+    buried below it), confirmed tapping it, picking a file, captioning
+    it, and posting succeeds and shows a success toast, confirmed the
+    photo then appears in the shared Photos feed. Also `tsc --noEmit`
+    clean, production build succeeds.

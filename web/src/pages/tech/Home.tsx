@@ -57,6 +57,14 @@ export default function Home() {
   const [pendingCaption, setPendingCaption] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // Separate from the clock-out flow's photo state above -- this is the
+  // "Add photo" button under the calendar, usable any time regardless of
+  // clock status, so it shouldn't share state with (or get cleared by) the
+  // clock-out sheet.
+  const [homePendingPhoto, setHomePendingPhoto] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [homePendingCaption, setHomePendingCaption] = useState("");
+  const [homeUploadingPhoto, setHomeUploadingPhoto] = useState(false);
+  const homePhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Big ticking clock -- recomputed every second from clockInAt while on shift.
   useEffect(() => {
@@ -149,6 +157,36 @@ export default function Home() {
       toast("error", e instanceof Error ? e.message : "Couldn't upload photo");
     } finally {
       setUploadingPhoto(false);
+    }
+  };
+
+  const discardHomePendingPhoto = () => {
+    if (homePendingPhoto) URL.revokeObjectURL(homePendingPhoto.previewUrl);
+    setHomePendingPhoto(null);
+    setHomePendingCaption("");
+  };
+
+  const chooseHomePhoto = (file: File | undefined) => {
+    if (!file) return;
+    discardHomePendingPhoto();
+    setHomePendingPhoto({ file, previewUrl: URL.createObjectURL(file) });
+  };
+
+  const uploadHomePendingPhoto = async () => {
+    if (!homePendingPhoto) return;
+    setHomeUploadingPhoto(true);
+    try {
+      const form = new FormData();
+      form.append("file", homePendingPhoto.file);
+      if (homePendingCaption.trim()) form.append("caption", homePendingCaption.trim());
+      await apiUpload("/time/clock-out/photos", form);
+      discardHomePendingPhoto();
+      if (homePhotoInputRef.current) homePhotoInputRef.current.value = "";
+      toast("success", "Photo added");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't upload photo");
+    } finally {
+      setHomeUploadingPhoto(false);
     }
   };
 
@@ -426,6 +464,48 @@ export default function Home() {
       )}
 
       <TeamCalendar embedded />
+
+      <button type="button" onClick={() => homePhotoInputRef.current?.click()} className="btn-secondary w-full">
+        <Icon name="camera" size={16} />
+        Add photo
+      </button>
+      <input
+        ref={homePhotoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => chooseHomePhoto(e.target.files?.[0])}
+      />
+
+      {homePendingPhoto && (
+        <Sheet title="Add photo" subtitle="Visible to everyone" onClose={discardHomePendingPhoto}>
+          <div className="space-y-4">
+            <img
+              src={homePendingPhoto.previewUrl}
+              alt="Selected"
+              className="mx-auto max-h-[45vh] w-full rounded-xl object-contain"
+            />
+            <label className="block">
+              <span className="label">Caption (optional)</span>
+              <input
+                className="input"
+                placeholder="What's this a photo of?"
+                value={homePendingCaption}
+                onChange={(e) => setHomePendingCaption(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn-primary w-full"
+              disabled={homeUploadingPhoto}
+              onClick={uploadHomePendingPhoto}
+            >
+              {homeUploadingPhoto ? <Spinner /> : <Icon name="camera" size={18} />}
+              Post photo
+            </button>
+          </div>
+        </Sheet>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <button
