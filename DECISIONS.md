@@ -795,3 +795,12 @@ Each entry: what was decided, and why.
     it, and posting succeeds and shows a success toast, confirmed the
     photo then appears in the shared Photos feed. Also `tsc --noEmit`
     clean, production build succeeds.
+
+## Moved Home's Add photo button above the calendar (2026-10-08)
+
+58. **Follow-up to #57: moved the Home "Add photo" button from below the
+    embedded calendar to above it** -- a one-line reorder in
+    `tech/Home.tsx`, no logic change. Verified `tsc --noEmit` clean and
+    production build succeeds; skipped a full Playwright re-run since
+    #57 already verified the button's click/upload/feed behavior and
+    this touches nothing but JSX order.
