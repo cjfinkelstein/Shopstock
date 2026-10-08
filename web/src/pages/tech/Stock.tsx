@@ -6,7 +6,7 @@ import Icon from "../../components/Icon";
 import { Empty, ItemThumb, ListSkeleton } from "../../components/ui";
 import type { StockRow } from "../../types";
 
-export default function Trucks() {
+export default function Stock() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<StockRow[] | null>(null);
 
@@ -16,31 +16,36 @@ export default function Trucks() {
 
   if (rows === null) return <ListSkeleton rows={5} />;
 
-  const trucks = rows.filter((r) => r.location_name !== "Shop");
-  const byTruck = new Map<string, StockRow[]>();
-  for (const r of trucks) {
-    const list = byTruck.get(r.location_name) ?? [];
+  const byLocation = new Map<string, StockRow[]>();
+  for (const r of rows) {
+    const list = byLocation.get(r.location_name) ?? [];
     list.push(r);
-    byTruck.set(r.location_name, list);
+    byLocation.set(r.location_name, list);
   }
-  const names = [...byTruck.keys()].sort((a, b) => a.localeCompare(b));
+  // Shop first, then trucks alphabetically -- the shop is the main
+  // inventory location, trucks are everything loaded out of it.
+  const names = [...byLocation.keys()].sort((a, b) => {
+    if (a === "Shop") return -1;
+    if (b === "Shop") return 1;
+    return a.localeCompare(b);
+  });
 
   return (
     <div className="space-y-5 animate-fade-up">
       <header>
-        <p className="page-eyebrow">Shared fleet</p>
-        <h1 className="page-title mt-1">Trucks</h1>
+        <p className="page-eyebrow">Shop &amp; fleet</p>
+        <h1 className="page-title mt-1">Stock</h1>
       </header>
 
       {names.length === 0 ? (
-        <Empty icon="truck" title="Nothing on any truck" hint="Load material from the shop with Take Out or Transfer." />
+        <Empty icon="package" title="Nothing in stock" hint="Nothing is on hand at the shop or on a truck right now." />
       ) : (
         names.map((name) => {
-          const items = byTruck.get(name)!.sort((a, b) => a.name.localeCompare(b.name));
+          const items = byLocation.get(name)!.sort((a, b) => a.name.localeCompare(b.name));
           return (
             <section key={name} className="space-y-2.5">
               <h2 className="section-title">
-                <Icon name="truck" size={14} />
+                <Icon name={name === "Shop" ? "package" : "truck"} size={14} />
                 {name}
                 <span className="ml-auto tabular-nums">{items.length}</span>
               </h2>

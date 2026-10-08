@@ -429,7 +429,7 @@ export default function Home() {
 
       <div className="grid grid-cols-2 gap-3">
         <button
-          onClick={() => navigate("/truck")}
+          onClick={() => navigate("/stock")}
           className="tile-blue flex min-h-[116px] select-none flex-col justify-between text-left transition-all duration-150 active:scale-[0.98] active:brightness-95"
         >
           <span className="relative z-10 flex w-full items-start justify-between gap-2">

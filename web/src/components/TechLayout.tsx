@@ -13,7 +13,7 @@ import { Avatar } from "./ui";
 
 const LEFT_TABS = [
   { to: "/home", label: "Home", icon: "home" },
-  { to: "/truck", label: "Trucks", icon: "truck" },
+  { to: "/stock", label: "Stock", icon: "package" },
 ];
 
 function Tab({
