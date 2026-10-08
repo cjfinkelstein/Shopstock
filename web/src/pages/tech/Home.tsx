@@ -432,6 +432,22 @@ export default function Home() {
         </Sheet>
       )}
 
+      <button
+        onClick={() => navigate("/calendar")}
+        className="card-interactive flex w-full items-center gap-3.5 p-4 text-left"
+      >
+        <span className="icon-tile bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+          <Icon name="calendar" size={22} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15.5px] font-bold">Team Calendar</span>
+          <span className="block text-[13px] text-slate-400 dark:text-slate-500">
+            See what's happening this month, add a to-do
+          </span>
+        </span>
+        <Icon name="chevron-right" size={18} className="text-slate-300 dark:text-slate-600" />
+      </button>
+
       {/* THE hero — Find is the app's front door */}
       <button
         onClick={() => navigate("/search")}
