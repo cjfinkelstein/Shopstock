@@ -45,10 +45,14 @@ function getPosition(): Promise<GeolocationPosition | null> {
       resolve(null);
       return;
     }
+    // Clock in/out blocks on this, so keep the timeout short -- lat/lng is
+    // best-effort for the route map, not required server-side, and isn't
+    // worth making a tech wait on a slow GPS fix (common indoors / at a job
+    // site) just to see the button respond.
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve(pos),
       () => resolve(null),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 30_000 },
+      { enableHighAccuracy: false, timeout: 3000, maximumAge: 30_000 },
     );
   });
 }
