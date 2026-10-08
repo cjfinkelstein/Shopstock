@@ -414,7 +414,6 @@ export default function Home() {
                 ref={photoInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={(e) => choosePhoto(e.target.files?.[0])}
               />
