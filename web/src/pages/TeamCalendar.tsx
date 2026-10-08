@@ -38,7 +38,7 @@ function editLine(e: CalendarEvent["edits"][number]): string {
   return `${who} changed the ${label} from "${from}" to "${to}"`;
 }
 
-export default function TeamCalendar() {
+export default function TeamCalendar({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const toast = useToast();
   const { user } = useAuth();
@@ -199,21 +199,23 @@ export default function TeamCalendar() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 animate-fade-up">
-      <header className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          className="-ml-1.5 rounded-full p-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
-        >
-          <Icon name="arrow-left" size={20} />
-        </button>
-        <div>
-          <p className="page-eyebrow">{canEdit ? "Everyone can see & edit" : "Everyone can see here"}</p>
-          <h1 className="page-title mt-1">Team Calendar</h1>
-        </div>
-      </header>
+    <div className={embedded ? "space-y-6" : "mx-auto max-w-3xl space-y-6 animate-fade-up"}>
+      {!embedded && (
+        <header className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            aria-label="Back"
+            className="-ml-1.5 rounded-full p-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+          >
+            <Icon name="arrow-left" size={20} />
+          </button>
+          <div>
+            <p className="page-eyebrow">{canEdit ? "Everyone can see & edit" : "Everyone can see here"}</p>
+            <h1 className="page-title mt-1">Team Calendar</h1>
+          </div>
+        </header>
+      )}
 
       <div>
         <div className="mb-2.5 flex flex-wrap items-end justify-between gap-3">

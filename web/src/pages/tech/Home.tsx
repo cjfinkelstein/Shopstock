@@ -12,15 +12,14 @@ import Icon from "../../components/Icon";
 import JobPicker from "../../components/JobPicker";
 import Sheet from "../../components/Sheet";
 import TxnList from "../../components/TxnList";
-import { Empty, ItemThumb, ListSkeleton, Spinner } from "../../components/ui";
+import { ListSkeleton, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { CalendarEvent, ClockOutPhoto, Item, Job, StockRow, TechDashboard } from "../../types";
+import TeamCalendar from "../TeamCalendar";
+import type { CalendarEvent, ClockOutPhoto, Job, StockRow, TechDashboard } from "../../types";
 
 function toISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
-const IN_STOCK_PREVIEW = 8;
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -45,7 +44,6 @@ export default function Home() {
   const toast = useToast();
   const navigate = useNavigate();
   const [dash, setDash] = useState<TechDashboard | null>(null);
-  const [inStock, setInStock] = useState<Item[] | null>(null);
   const [truckStock, setTruckStock] = useState<StockRow[] | null>(null);
   const [clockBusy, setClockBusy] = useState(false);
   const [elapsed, setElapsed] = useState("0:00:00");
@@ -187,10 +185,6 @@ export default function Home() {
 
   useEffect(() => {
     api<TechDashboard>("/dashboard/tech").then(setDash).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    api<Item[]>("/items?in_stock=true").then(setInStock).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -431,81 +425,7 @@ export default function Home() {
         </Sheet>
       )}
 
-      <button
-        onClick={() => navigate("/calendar")}
-        className="card-interactive flex w-full items-center gap-3.5 p-4 text-left"
-      >
-        <span className="icon-tile bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
-          <Icon name="calendar" size={22} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15.5px] font-bold">Team Calendar</span>
-          <span className="block text-[13px] text-slate-400 dark:text-slate-500">
-            See what's happening this month, add a to-do
-          </span>
-        </span>
-        <Icon name="chevron-right" size={18} className="text-slate-300 dark:text-slate-600" />
-      </button>
-
-      {/* THE hero — Find is the app's front door */}
-      <button
-        onClick={() => navigate("/search")}
-        className="hero-card flex min-h-[120px] w-full select-none items-center p-5 text-left transition-all duration-150 active:scale-[0.98] active:brightness-95"
-      >
-        <span className="relative z-10 flex w-full items-center gap-4">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-            <Icon name="search" size={28} strokeWidth={2.2} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-display text-[21px] font-extrabold tracking-tight">
-              Find material
-            </span>
-            <span className="mt-0.5 block text-[13px] font-medium leading-snug text-white/75">
-              Search the shop and your truck, sign out in seconds
-            </span>
-          </span>
-          <Icon name="chevron-right" size={20} className="text-white/60" />
-        </span>
-      </button>
-
-      <section>
-        <h2 className="section-title">
-          <Icon name="package" size={14} />
-          In stock now
-        </h2>
-        {inStock === null ? (
-          <ListSkeleton rows={3} />
-        ) : inStock.length === 0 ? (
-          <Empty icon="package" title="Nothing in stock" hint="Nothing is on hand at the shop or on a truck right now." />
-        ) : (
-          <div className="space-y-2.5">
-            {inStock.slice(0, IN_STOCK_PREVIEW).map((i) => {
-              return (
-                <button
-                  key={i.id}
-                  onClick={() => navigate(`/item/${i.id}`)}
-                  className="card-interactive flex w-full items-center gap-3 p-3.5"
-                >
-                  <ItemThumb item={i} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-semibold">{i.name}</span>
-                    <span className="block truncate text-[13px] text-slate-400 dark:text-slate-500">
-                      {i.sku} · {i.category}
-                    </span>
-                  </span>
-                  <Icon name="chevron-right" size={18} className="text-slate-300 dark:text-slate-600" />
-                </button>
-              );
-            })}
-            {inStock.length > IN_STOCK_PREVIEW && (
-              <button className="btn-secondary min-h-[48px] w-full" onClick={() => navigate("/search")}>
-                See all {inStock.length} in stock
-                <Icon name="arrow-right" size={16} />
-              </button>
-            )}
-          </div>
-        )}
-      </section>
+      <TeamCalendar embedded />
 
       <div className="grid grid-cols-2 gap-3">
         <button
