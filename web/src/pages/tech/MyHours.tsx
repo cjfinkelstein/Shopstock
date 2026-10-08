@@ -5,6 +5,7 @@ import { api, fmtWhen } from "../../api";
 import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import { Empty, ListSkeleton, Spinner } from "../../components/ui";
+import { PTO_ENABLED } from "../../featureFlags";
 import { hoursLabel } from "../../hours";
 import { useToast } from "../../toast";
 import type { PtoBalance } from "../../types";
@@ -43,6 +44,7 @@ export default function MyHours() {
   }, []);
 
   const loadPto = useCallback(() => {
+    if (!PTO_ENABLED) return;
     api<PtoBalance>("/pto/balance").then(setPto).catch(() => {});
   }, []);
 

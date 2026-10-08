@@ -6,6 +6,7 @@ import { catTint } from "../../catcolor";
 import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import { Avatar, Empty, Spinner } from "../../components/ui";
+import { PTO_ENABLED } from "../../featureFlags";
 import { useToast } from "../../toast";
 import type { PtoBalance, PtoEntry, SmtpSettings, Truck, User, Vendor } from "../../types";
 
@@ -100,7 +101,7 @@ export default function Settings() {
       setSmtpFromAddress(s.from_address);
       setSmtpFromName(s.from_name);
     }).catch(() => {});
-    api<PtoEntry[]>("/pto/pending").then(setPendingPto).catch(() => setPendingPto([]));
+    if (PTO_ENABLED) api<PtoEntry[]>("/pto/pending").then(setPendingPto).catch(() => setPendingPto([]));
   }, []);
 
   const decidePto = async (entryId: number, decision: "approve" | "deny") => {
@@ -295,7 +296,7 @@ export default function Settings() {
       </div>
 
       {/* PTO requests */}
-      {pendingPto && pendingPto.length > 0 && (
+      {PTO_ENABLED && pendingPto && pendingPto.length > 0 && (
         <Section
           icon="calendar"
           tint="bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400"
@@ -372,10 +373,12 @@ export default function Settings() {
                 <Icon name="dollar-sign" size={15} />
                 {u.hourly_rate ? `${fmtMoney(u.hourly_rate)}/hr` : "Set rate"}
               </button>
-              <button className="chip !min-h-[40px] px-3.5" onClick={() => openPto(u)} title="View/log PTO">
-                <Icon name="calendar" size={15} />
-                PTO
-              </button>
+              {PTO_ENABLED && (
+                <button className="chip !min-h-[40px] px-3.5" onClick={() => openPto(u)} title="View/log PTO">
+                  <Icon name="calendar" size={15} />
+                  PTO
+                </button>
+              )}
               {u.has_pin ? (
                 <span className="flex items-center gap-1.5">
                   <button
