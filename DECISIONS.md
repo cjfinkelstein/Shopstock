@@ -660,3 +660,21 @@ Each entry: what was decided, and why.
     (not a link) renders immediately below the clock card, confirmed
     Find material is still reachable via the center button, and confirmed
     the new Photos tab navigates correctly.
+
+## Dropped the Calendar and Cart bottom-nav tabs (2026-10-08)
+
+51. **Follow-up to #50: removed the standalone "Calendar" tab and the
+    "Cart" tab from the bottom nav -- the calendar should only live
+    embedded on Home now, not also have its own separate destination.**
+    Also removed the "Team Calendar" account-menu link for the same
+    reason (it pointed at the same now-redundant standalone view).
+    Cart wasn't deleted as a destination, just its bottom-nav tab -- it's
+    still one tap away via the existing Cart stat tile on Home (shows the
+    pending-item count the same way the tab's badge used to), so nothing
+    was actually lost, just a second nav affordance for a page Home
+    already links to. Bottom nav is now Home / Trucks / [Search FAB] /
+    Timesheet / Photos -- a cleaner 2-and-2 balance around the center
+    button, down from 3-and-3.
+    Verified interactively: confirmed both tabs are gone from the nav,
+    confirmed the calendar still renders embedded on Home, and confirmed
+    Cart is still reachable via its Home stat tile.

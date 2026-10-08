@@ -3,7 +3,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { useCart } from "../cart";
 import { discardEntry, retryEntry } from "../outbox";
 import { useToast } from "../toast";
 import { useOnline } from "../useOnline";
@@ -15,7 +14,6 @@ import { Avatar } from "./ui";
 const LEFT_TABS = [
   { to: "/home", label: "Home", icon: "home" },
   { to: "/truck", label: "Trucks", icon: "truck" },
-  { to: "/calendar", label: "Calendar", icon: "calendar" },
 ];
 
 function Tab({
@@ -61,7 +59,6 @@ function Tab({
 
 export default function TechLayout() {
   const { user, myTruck, logout } = useAuth();
-  const { lines } = useCart();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -155,7 +152,6 @@ export default function TechLayout() {
               <Icon name="search" size={25} strokeWidth={2.3} />
             </button>
           </div>
-          <Tab to="/cart" label="Cart" icon="cart" badge={lines.length} />
           <Tab to="/my-hours" label="Timesheet" icon="clock" />
           <Tab to="/photos" label="Photos" icon="camera" />
         </div>
@@ -197,16 +193,6 @@ export default function TechLayout() {
                 >
                   <Icon name="clock" size={18} />
                   My Hours
-                </button>
-                <button
-                  className="btn-secondary w-full"
-                  onClick={() => {
-                    setAccountOpen(false);
-                    navigate("/calendar");
-                  }}
-                >
-                  <Icon name="calendar" size={18} />
-                  Team Calendar
                 </button>
                 <button
                   className="btn-secondary w-full"
