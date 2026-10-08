@@ -569,3 +569,25 @@ Each entry: what was decided, and why.
     renders on Login Hours via a real `blob:` URL (proving the
     authenticated-fetch path actually works end to end, not just that the
     component compiles) alongside its caption.
+
+## Migration 0026 crashed production on deploy -- fixed (2026-10-08)
+
+47. **Deploying #46's migrations crash-looped the live `api` container.**
+    `0026`'s upgrade deleted each old blob-style row after splitting it,
+    but a real production row (one Ray had already checked done through
+    the app before this deploy) had a `calendar_event_edits` row pointing
+    at it -- `calendar_event_edits.event_id` is a foreign key, so deleting
+    the parent first violated it, and Postgres rolled the whole migration
+    back. No data was lost (Postgres runs each migration in a transaction)
+    but the container couldn't start until this was fixed.
+    My own local test of this migration (added when I first wrote 0026)
+    only simulated a blob row with task text, not one with real edit
+    history attached -- exactly the gap between synthetic test data and
+    the actual shape of live data that bit #41 (Ray's name) too. Fixed by
+    deleting a row's `calendar_event_edits` first (same lossiness already
+    accepted elsewhere here -- the blob's edit history doesn't map onto
+    the new per-task rows anyway), in both `upgrade()` and `downgrade()`.
+    Verified by reproducing the exact failure locally this time: a blob
+    row WITH a `calendar_event_edits` row pointing at it, confirming the
+    old migration code fails the same way, then confirming the fix splits
+    it cleanly with no orphaned edit rows left behind.
