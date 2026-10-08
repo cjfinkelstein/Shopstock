@@ -30,7 +30,7 @@ import Home from "./pages/tech/Home";
 import ItemSheet from "./pages/tech/ItemSheet";
 import MyHours from "./pages/tech/MyHours";
 import Search from "./pages/tech/Search";
-import Trucks from "./pages/tech/Trucks";
+import Stock from "./pages/tech/Stock";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -94,7 +94,9 @@ export default function App() {
         <Route path="/search" element={<Search />} />
         {/* scanner flow retired — old links land on Find */}
         <Route path="/scan" element={<Navigate to="/search" replace />} />
-        <Route path="/truck" element={<Trucks />} />
+        <Route path="/stock" element={<Stock />} />
+        {/* tab renamed from Trucks to Stock (now also shows the shop) — old links */}
+        <Route path="/truck" element={<Navigate to="/stock" replace />} />
         {/* Activity merged into the Cart page's History tab */}
         <Route path="/activity" element={<Navigate to="/cart" replace />} />
         <Route path="/item/:id" element={<ItemSheet />} />

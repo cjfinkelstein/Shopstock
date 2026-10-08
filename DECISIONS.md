@@ -693,3 +693,23 @@ Each entry: what was decided, and why.
     Verified with Playwright: uploaded a real photo at clock-out, opened
     `/photos`, tapped the thumbnail, confirmed the full-size image and
     close button render, confirmed closing it removes the overlay.
+
+## Renamed Trucks tab to Stock, now shows the shop too (2026-10-08)
+
+53. **The "Trucks" tab explicitly filtered out the Shop location
+    (`location_name !== "Shop"`), even though `/stock` already returns
+    every location in one call.** Techs had no way to check what's on
+    hand at the shop from their phone -- only their own truck and
+    whatever truck tabs they clicked into. Renamed the tab/page/route to
+    Stock (`Trucks.tsx` -> `Stock.tsx`, `/truck` -> `/stock`, old `/truck`
+    links redirect) and stopped filtering Shop out: it now renders as its
+    own section, sorted first, ahead of the truck sections (which stay
+    alphabetical). No backend change needed -- the data was already
+    there. The nav icon changed from `truck` to `package` since the tab
+    is no longer truck-only; the Home dashboard's "Trucks" stat tile
+    (which shows the tech's own truck's item count, a different, narrower
+    number) was left as-is and just points at the new route.
+    Verified with Playwright: logged in as a tech, opened the renamed
+    Stock tab, confirmed a Shop section with its own item count renders
+    above the truck sections, confirmed existing truck sections (Truck 1,
+    Truck 3, Truck 5 in demo data) still render correctly.
