@@ -463,8 +463,6 @@ export default function Home() {
         </Sheet>
       )}
 
-      <TeamCalendar embedded />
-
       <button type="button" onClick={() => homePhotoInputRef.current?.click()} className="btn-secondary w-full">
         <Icon name="camera" size={16} />
         Add photo
@@ -476,6 +474,8 @@ export default function Home() {
         className="hidden"
         onChange={(e) => chooseHomePhoto(e.target.files?.[0])}
       />
+
+      <TeamCalendar embedded />
 
       {homePendingPhoto && (
         <Sheet title="Add photo" subtitle="Visible to everyone" onClose={discardHomePendingPhoto}>
