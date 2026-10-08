@@ -713,3 +713,21 @@ Each entry: what was decided, and why.
     Stock tab, confirmed a Shop section with its own item count renders
     above the truck sections, confirmed existing truck sections (Truck 1,
     Truck 3, Truck 5 in demo data) still render correctly.
+
+## Shortened the GPS timeout that was stalling clock in/out (2026-10-08)
+
+54. **"Clock in and out is not so smooth, sometimes it takes awhile to
+    load" -- both `clockIn` and `clockOut` in `clock.tsx` wait on
+    `getPosition()` before sending the request at all, and that call's
+    `getCurrentPosition` timeout was 8 seconds.** On a weak/no GPS signal
+    (indoors, at some job sites) the button would sit there for the full
+    8 seconds before giving up and sending anyway -- lat/lng is optional
+    and only used for the route map (confirmed in `time_clock.py`:
+    `ClockInIn`/`ClockOutIn` never require it), so there was no reason to
+    make a tech wait that long for it. Shortened the timeout to 3
+    seconds. A fast/cached GPS fix (the common case, `maximumAge: 30_000`
+    already lets a recent fix return instantly) is unaffected; only the
+    slow-or-no-signal case gets noticeably faster.
+    Verified: `tsc --noEmit` clean, production build succeeds. No backend
+    change, no new test needed -- this just lowers one client-side
+    timeout value.
