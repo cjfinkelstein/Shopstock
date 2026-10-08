@@ -731,3 +731,46 @@ Each entry: what was decided, and why.
     Verified: `tsc --noEmit` clean, production build succeeds. No backend
     change, no new test needed -- this just lowers one client-side
     timeout value.
+
+## Hid vacation/personal days behind a feature flag (2026-10-08)
+
+55. **"Hide the whole vacation days and personal days off for now"** --
+    added `web/src/featureFlags.ts` with a single `PTO_ENABLED = false`
+    switch and gated every bit of PTO UI behind it: the tech Timesheet's
+    balance cards, "Request time off" button, and request history list
+    (`MyHours.tsx` -- simplest form of hiding, since all of it already
+    lived inside `{pto && (...)}`, so just not fetching the balance hides
+    the whole block); and, on the admin side, the "PTO Requests" pending
+    section, the per-tech "PTO" button, and (by extension, since nothing
+    can open it anymore) the per-tech PTO sheet (`admin/Settings.tsx`).
+    Backend (`/pto/*` routes, `pto_entries` table, approval workflow) is
+    completely untouched -- this is a pure UI hide, "for now" as asked,
+    not a removal. Flipping `PTO_ENABLED` back to `true` brings all of it
+    back with no other changes needed.
+    Verified with Playwright: logged in as a tech, confirmed no
+    vacation/personal/PTO text anywhere on the Timesheet page; logged in
+    as admin (fresh session), confirmed no "PTO" text anywhere on
+    Settings. Also `tsc --noEmit` clean, production build succeeds.
+
+## Let a tech add a photo any time, not just at clock-out (2026-10-08)
+
+56. **"Allow a tech to add pictures whenever he wants even when he is
+    clocked in and out"** -- photo upload was previously only reachable
+    from the clock-out sheet and required an open shift server-side
+    (`clock_event_id` was a NOT NULL FK). Made `clock_event_id` nullable
+    (migration 0028) and relaxed `POST /time/clock-out/photos` to attach
+    to the tech's open shift if one exists, or leave it NULL otherwise --
+    the shared feed (`GET /time/photos`) falls back to the upload
+    timestamp for its date when there's no shift to date it by. Added an
+    "Add photo" button directly on the shared Photos page/tab (always
+    reachable regardless of clock state) with the same gallery-picker +
+    caption flow the clock-out sheet already used; the clock-out sheet's
+    own upload still works exactly as before (unchanged).
+    Updated `test_upload_requires_being_clocked_in` (no longer true) to
+    `test_upload_allowed_while_clocked_out`, asserting the photo uploads,
+    is fetchable, and appears in the feed with a fallback date. Verified:
+    `tsc --noEmit` clean, production build succeeds, full backend suite
+    passes (48/48), `check_consistency.py` passes. **Playwright
+    verification**: logged in as a tech who was NOT clocked in, opened
+    the Photos tab, tapped Add photo, picked a file, added a caption,
+    posted it, confirmed it appears in the shared feed immediately.
