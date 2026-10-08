@@ -41,6 +41,23 @@ calendar_events = sa.table(
     sa.column("updated_at", sa.DateTime),
 )
 
+calendar_event_edits = sa.table(
+    "calendar_event_edits",
+    sa.column("id", sa.Integer),
+    sa.column("event_id", sa.Integer),
+)
+
+
+def _delete_event(conn, event_id) -> None:
+    # A row being replaced here may have edit-history rows pointing at it
+    # (calendar_event_edits.event_id is a foreign key) -- deleting the
+    # parent first violates that constraint. The old blob row's edit
+    # history doesn't map onto the new per-task rows anyway (it was about
+    # the whole list, not one task), so it's dropped along with the row,
+    # same lossiness already accepted for downgrade's done-state.
+    conn.execute(calendar_event_edits.delete().where(calendar_event_edits.c.event_id == event_id))
+    conn.execute(calendar_events.delete().where(calendar_events.c.id == event_id))
+
 
 def upgrade() -> None:
     conn = op.get_bind()
@@ -58,7 +75,7 @@ def upgrade() -> None:
                     created_at=row.created_at or now, updated_at=now,
                 )
             )
-        conn.execute(calendar_events.delete().where(calendar_events.c.id == row.id))
+        _delete_event(conn, row.id)
 
 
 def downgrade() -> None:
@@ -84,4 +101,4 @@ def downgrade() -> None:
             .values(title=assignee, notes=combined, done=False)
         )
         for r in group_rows[1:]:
-            conn.execute(calendar_events.delete().where(calendar_events.c.id == r.id))
+            _delete_event(conn, r.id)
