@@ -631,3 +631,32 @@ Each entry: what was decided, and why.
     real authenticated `blob:` URL) all render -- proving a tech who isn't
     admin and isn't the uploader can now see it, which is the actual
     change here.
+
+## Home shows the full calendar; stock stuff and photos become tabs (2026-10-08)
+
+50. **Tech Home page restructured again, by owner request: the whole
+    calendar grid shows immediately (not just a link to it), Find
+    material + In stock now move off Home entirely, and Photos becomes
+    its own bottom-nav tab.** Clock in/out stays first, as established in
+    #46.
+    `TeamCalendar` gained an `embedded` prop that hides its own header
+    (back button, "Team Calendar" title) when rendered inline elsewhere --
+    reused as-is on Home rather than duplicating the grid/day-sheet logic
+    a second time, so there's exactly one place that code lives and no
+    risk of the two views drifting apart.
+    Find material and "In stock now" weren't actually deleted as a
+    feature -- the center floating-action button already went to
+    `/search` before this change (it's effectively already its own "tab"),
+    so Home just stopped *also* showing a duplicate hero card and item
+    preview for the exact same destination. Removing the preview meant
+    the `inStock` fetch, state, and the now-unused `Item`/`ItemThumb`
+    imports came out too.
+    Added Photos as a proper bottom-nav tab (it was a one-off addition to
+    the account menu in #49) and removed the now-redundant account-menu
+    entry, since the tab is the more discoverable path for something
+    meant to be seen, not buried two taps deep.
+    Verified interactively: confirmed "Find material" and "In stock now"
+    no longer appear anywhere on Home, confirmed the actual month grid
+    (not a link) renders immediately below the clock card, confirmed
+    Find material is still reachable via the center button, and confirmed
+    the new Photos tab navigates correctly.

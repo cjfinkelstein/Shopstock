@@ -157,6 +157,7 @@ export default function TechLayout() {
           </div>
           <Tab to="/cart" label="Cart" icon="cart" badge={lines.length} />
           <Tab to="/my-hours" label="Timesheet" icon="clock" />
+          <Tab to="/photos" label="Photos" icon="camera" />
         </div>
       </nav>
 
@@ -206,16 +207,6 @@ export default function TechLayout() {
                 >
                   <Icon name="calendar" size={18} />
                   Team Calendar
-                </button>
-                <button
-                  className="btn-secondary w-full"
-                  onClick={() => {
-                    setAccountOpen(false);
-                    navigate("/photos");
-                  }}
-                >
-                  <Icon name="camera" size={18} />
-                  Photos
                 </button>
                 <button
                   className="btn-secondary w-full"
