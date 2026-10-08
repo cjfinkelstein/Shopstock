@@ -125,7 +125,7 @@ class ClockInIn(BaseModel):
 class ClockOutIn(BaseModel):
     lat: float | None = None
     lng: float | None = None
-    note: str = Field(min_length=1)
+    note: str | None = None
 
 
 class LocationPingIn(BaseModel):
@@ -168,6 +168,23 @@ class ClockOutPhotoOut(BaseModel):
     id: int
     caption: str | None
     url: str
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def _ser_created_at(self, v: datetime, _info):
+        return _utc_iso(v)
+
+
+class ClockOutPhotoFeedOut(BaseModel):
+    """A photo in the shared, everyone-can-see photo feed -- unlike
+    ClockOutPhotoOut (admin-only context on Login Hours), this always
+    carries who took it and the shift date, since there's no surrounding
+    shift row to supply that context."""
+    id: int
+    caption: str | None
+    url: str
+    uploaded_by_name: str
+    shift_date: date
     created_at: datetime
 
     @field_serializer("created_at")

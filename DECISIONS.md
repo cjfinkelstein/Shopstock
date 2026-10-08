@@ -591,3 +591,43 @@ Each entry: what was decided, and why.
     row WITH a `calendar_event_edits` row pointing at it, confirming the
     old migration code fails the same way, then confirming the fix splits
     it cleanly with no orphaned edit rows left behind.
+
+## Clock-out note is optional; photos pick from gallery (2026-10-08)
+
+48. **Two small clock-out tweaks, by owner request: the note no longer
+    blocks clocking out if left blank, and the photo picker no longer
+    forces the camera open.** `ClockOutIn.note` dropped its
+    `Field(min_length=1)` (now `str | None`); the frontend's Clock Out
+    button is no longer disabled on an empty note, and the sheet's
+    subtitle says "Optional" now. Separately, the photo `<input>` had
+    `capture="environment"`, which on mobile skips straight to the camera
+    -- removed so Android/iOS show the normal camera/gallery/files choice,
+    letting a tech attach an existing photo instead of only a fresh one.
+
+## Shared, everyone-can-see photo feed (2026-10-08)
+
+49. **Clock-out photos are no longer admin-only -- any logged-in user
+    (tech or admin) can now see any photo, on a new dedicated "Photos"
+    page showing who took it, the shift's date, and the caption they
+    wrote.** `clock_out_note` (the text note) stays admin-only and
+    unchanged -- this is specifically about the photos, by explicit owner
+    request ("allow anyone to see it").
+    `GET /time/photos/{id}` dropped its admin-or-uploader check (now any
+    authenticated user); added `GET /time/photos`, a new list endpoint
+    returning every photo across every tech with `uploaded_by_name` and
+    `shift_date` (the clock event's date) joined in, since a standalone
+    feed item has no surrounding shift row to supply that context the way
+    the Login Hours view does.
+    New `Photos.tsx` page (route `/photos`, and `/admin/photos` for
+    symmetry with the Team Calendar pattern), linked from the tech account
+    sheet and the admin sidebar -- deliberately not added as a third hero
+    card on tech Home, which already gained the Team Calendar card in #46;
+    two taps via the account menu (matching "My Hours") felt like enough
+    for something browsed occasionally rather than used every shift.
+    Verified end to end: Al clocks out with a photo and caption but no
+    note (exercising #48 at the same time) -- then a *different* tech
+    (Shui, who never touched that shift) opens `/photos` and confirms
+    Al's name, the shift date, the caption, and the photo itself (via a
+    real authenticated `blob:` URL) all render -- proving a tech who isn't
+    admin and isn't the uploader can now see it, which is the actual
+    change here.

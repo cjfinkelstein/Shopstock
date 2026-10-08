@@ -76,7 +76,6 @@ export default function Home() {
   }, [clockedIn, clockInAt]);
 
   const handleClockOut = async () => {
-    if (!clockOutNote.trim()) return;
     setClockBusy(true);
     try {
       await clockOut(clockOutNote.trim());
@@ -316,7 +315,7 @@ export default function Home() {
       {clockOutNoteOpen && (
         <Sheet
           title="What did you do today?"
-          subtitle="Only your admin can see this"
+          subtitle="Optional — only your admin can see this"
           onClose={() => {
             if (clockBusy) return;
             setClockOutNoteOpen(false);
@@ -421,7 +420,7 @@ export default function Home() {
 
             <button
               type="button"
-              disabled={clockBusy || !clockOutNote.trim()}
+              disabled={clockBusy}
               onClick={handleClockOut}
               className="btn-primary w-full"
             >

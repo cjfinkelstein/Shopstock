@@ -211,6 +211,16 @@ export default function TechLayout() {
                   className="btn-secondary w-full"
                   onClick={() => {
                     setAccountOpen(false);
+                    navigate("/photos");
+                  }}
+                >
+                  <Icon name="camera" size={18} />
+                  Photos
+                </button>
+                <button
+                  className="btn-secondary w-full"
+                  onClick={() => {
+                    setAccountOpen(false);
                     setChangePinOpen(true);
                   }}
                 >

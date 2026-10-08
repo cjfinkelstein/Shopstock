@@ -12,8 +12,8 @@ from app.config import settings
 from app.database import get_db
 from app.models import ClockEvent, ClockOutPhoto, Job, LocationPing, User, utcnow
 from app.schemas import (
-    ClockInIn, ClockOutIn, ClockOutPhotoOut, ClockStatusOut, LocationPingIn, MyShiftOut, RoutePoint, ShiftRouteOut,
-    WorkerLiveOut,
+    ClockInIn, ClockOutIn, ClockOutPhotoFeedOut, ClockOutPhotoOut, ClockStatusOut, LocationPingIn, MyShiftOut,
+    RoutePoint, ShiftRouteOut, WorkerLiveOut,
 )
 
 router = APIRouter(prefix="/time", tags=["time"])
@@ -141,18 +141,40 @@ async def upload_clock_out_photo(
 
 
 @router.get("/photos/{photo_id}")
-def get_clock_out_photo(photo_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Admin can see any photo (same as clock_out_note); a tech can only
-    ever see their own -- never another tech's clock-out photos."""
+def get_clock_out_photo(photo_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Any logged-in user can see any clock-out photo -- unlike
+    clock_out_note (still admin-only), photos are a shared, everyone-can-see
+    feed (see /photos below) by owner request."""
     photo = db.get(ClockOutPhoto, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="Not found")
-    if user.role != "admin" and photo.uploaded_by != user.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
     full_path = os.path.join(settings.uploads_dir, photo.file_path)
     if not os.path.isfile(full_path):
         raise HTTPException(status_code=404, detail="Photo file missing")
     return FileResponse(full_path, media_type=photo.content_type)
+
+
+@router.get("/photos", response_model=list[ClockOutPhotoFeedOut])
+def list_clock_out_photos(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """The shared photo feed everyone can browse -- every tech's clock-out
+    photos, newest first, with who took it, the shift's date, and the
+    caption they wrote. Unlike clock_out_note, which stays admin-only,
+    photos are visible to the whole crew by owner request."""
+    photos = (
+        db.query(ClockOutPhoto)
+        .options(joinedload(ClockOutPhoto.uploader), joinedload(ClockOutPhoto.clock_event))
+        .order_by(ClockOutPhoto.created_at.desc())
+        .all()
+    )
+    return [
+        ClockOutPhotoFeedOut(
+            id=p.id, caption=p.caption, url=f"/time/photos/{p.id}",
+            uploaded_by_name=p.uploader.name if p.uploader else "?",
+            shift_date=p.clock_event.clock_in_at.date(),
+            created_at=p.created_at,
+        )
+        for p in photos
+    ]
 
 
 @router.post("/ping", status_code=204)

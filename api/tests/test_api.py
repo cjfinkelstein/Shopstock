@@ -386,6 +386,19 @@ class TestSharedCalendarPermissions:
         assert r.status_code == 201, r.text
 
 
+class TestClockOut:
+    def test_clock_out_without_a_note_succeeds(self, client, seeded):
+        """A tech can clock out without writing anything -- the note is
+        optional, not required."""
+        tech = login_tech(client, seeded)
+        r = client.post("/api/v1/time/gps-consent", headers=tech)
+        assert r.status_code == 200, r.text
+        r = client.post("/api/v1/time/clock-in", headers=tech, json={"job_id": seeded["job"].id})
+        assert r.status_code == 200, r.text
+        r = client.post("/api/v1/time/clock-out", headers=tech, json={})
+        assert r.status_code == 200, r.text
+
+
 class TestClockOutPhotos:
     def _clock_in(self, client, hdrs, seeded):
         r = client.post("/api/v1/time/gps-consent", headers=hdrs)
@@ -415,7 +428,9 @@ class TestClockOutPhotos:
         assert r.status_code == 200, r.text
         assert r.content == fake_jpeg
 
-    def test_admin_can_see_any_photo_other_tech_cannot(self, client, seeded, db_session, tmp_path, monkeypatch):
+    def test_admin_and_any_tech_can_see_a_photo(self, client, seeded, db_session, tmp_path, monkeypatch):
+        """Photos are a shared feed -- unlike clock_out_note (admin-only),
+        any logged-in user can view any tech's clock-out photo."""
         from app.config import settings
         from app.models import User
 
@@ -440,7 +455,36 @@ class TestClockOutPhotos:
         r = client.post("/api/v1/auth/tap", json={"user_id": other.id})
         other_hdrs = {"Authorization": f"Bearer {r.json()['access_token']}"}
         r = client.get(f"/api/v1/time/photos/{photo_id}", headers=other_hdrs)
-        assert r.status_code == 403, r.text
+        assert r.status_code == 200, r.text
+
+    def test_photo_feed_lists_uploader_date_and_caption(self, client, seeded, db_session, tmp_path, monkeypatch):
+        from app.config import settings
+        from app.models import User
+
+        monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+
+        tech = login_tech(client, seeded)
+        self._clock_in(client, tech, seeded)
+        r = client.post(
+            "/api/v1/time/clock-out/photos", headers=tech,
+            files={"file": ("site.jpg", b"fake-bytes", "image/jpeg")},
+            data={"caption": "Panel before repair"},
+        )
+        assert r.status_code == 201, r.text
+
+        other = User(name="Sam", role="tech", active=True)
+        db_session.add(other)
+        db_session.commit()
+        r = client.post("/api/v1/auth/tap", json={"user_id": other.id})
+        other_hdrs = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+        r = client.get("/api/v1/time/photos", headers=other_hdrs)
+        assert r.status_code == 200, r.text
+        feed = r.json()
+        assert len(feed) == 1
+        assert feed[0]["caption"] == "Panel before repair"
+        assert feed[0]["uploaded_by_name"] == seeded["tech"].name
+        assert feed[0]["shift_date"]
 
     def test_rejects_non_image_upload(self, client, seeded, tmp_path, monkeypatch):
         from app.config import settings
