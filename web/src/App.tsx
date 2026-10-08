@@ -11,6 +11,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import EstimateDetail from "./pages/admin/EstimateDetail";
 import AdminEstimates from "./pages/admin/Estimates";
 import AdminExpenses from "./pages/admin/Expenses";
+import Photos from "./pages/Photos";
 import PublicEstimate from "./pages/PublicEstimate";
 import ResetPassword from "./pages/ResetPassword";
 import TeamCalendar from "./pages/TeamCalendar";
@@ -100,6 +101,7 @@ export default function App() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/my-hours" element={<MyHours />} />
         <Route path="/calendar" element={<TeamCalendar />} />
+        <Route path="/photos" element={<Photos />} />
       </Route>
       {user.role === "admin" && (
         <Route path="/admin" element={<AdminLayout />}>
@@ -116,6 +118,7 @@ export default function App() {
           <Route path="worker-map" element={<Navigate to="/admin/calendar" replace />} />
           <Route path="calendar" element={<AdminCalendar />} />
           <Route path="team-calendar" element={<TeamCalendar />} />
+          <Route path="photos" element={<Photos />} />
           <Route path="expenses" element={<AdminExpenses />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="settings" element={<AdminSettings />} />

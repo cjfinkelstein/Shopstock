@@ -255,6 +255,18 @@ export interface ClockOutPhoto {
   url: string;
 }
 
+/** One photo in the shared, everyone-can-see photo feed (GET /time/photos)
+ * -- unlike ClockOutPhoto (shown in admin-only context on Login Hours),
+ * this carries who took it and the shift date since it stands alone. */
+export interface ClockOutPhotoFeedItem {
+  id: number;
+  caption: string | null;
+  url: string;
+  uploaded_by_name: string;
+  shift_date: string;
+  created_at: string;
+}
+
 export interface JobMaterialsOut {
   job: Job;
   lines: {

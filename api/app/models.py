@@ -128,9 +128,8 @@ class ClockEvent(TimestampMixin, Base):
     approval_status: Mapped[str] = mapped_column(String(10), default="pending", nullable=False)  # pending | approved
     approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime)
-    # Required at clock-out going forward; nullable only because shifts
-    # closed before this field existed have none. Admin-only -- never shown
-    # on the shared team calendar.
+    # Optional -- a tech can clock out without writing anything. Admin-only
+    # -- never shown on the shared team calendar.
     clock_out_note: Mapped[str | None] = mapped_column(Text)
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
@@ -170,11 +169,11 @@ class LocationPing(Base):
 
 
 class ClockOutPhoto(TimestampMixin, Base):
-    """A photo a tech attaches to their own clock-out note, with an optional
+    """A photo a tech attaches to their own clock-out, with an optional
     caption. Uploaded while the shift is still open (the clock-out sheet
     uploads before the final clock-out call) so there's a stable
-    clock_event_id to attach to. Admin-visible only, same as clock_out_note
-    -- never returned to a tech viewing someone else's shift."""
+    clock_event_id to attach to. Visible to everyone (any logged-in user),
+    unlike clock_out_note which stays admin-only -- see /time/photos."""
 
     __tablename__ = "clock_out_photos"
     __table_args__ = (Index("ix_clock_out_photos_clock_event", "clock_event_id"),)
