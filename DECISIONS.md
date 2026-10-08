@@ -678,3 +678,18 @@ Each entry: what was decided, and why.
     Verified interactively: confirmed both tabs are gone from the nav,
     confirmed the calendar still renders embedded on Home, and confirmed
     Cart is still reachable via its Home stat tile.
+
+## Tap a photo to see it full size (2026-10-08)
+
+52. **"Doesn't let me view it" on the Photos page turned out to mean the
+    thumbnail (96x96px) is too small to actually read a photographed
+    document -- there was no way to see it bigger.** Added a lightbox:
+    tapping a thumbnail opens a full-screen view (the same `AuthedImage`,
+    just larger, `object-contain` so it isn't cropped) with the uploader,
+    date, and caption repeated underneath; tap the backdrop, the X, or
+    Escape to close. Built as its own overlay (not the existing `Sheet`
+    component, which is bottom-anchored and sized for form content, not a
+    full-bleed image).
+    Verified with Playwright: uploaded a real photo at clock-out, opened
+    `/photos`, tapped the thumbnail, confirmed the full-size image and
+    close button render, confirmed closing it removes the overlay.
