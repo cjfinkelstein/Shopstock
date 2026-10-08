@@ -169,17 +169,17 @@ class LocationPing(Base):
 
 
 class ClockOutPhoto(TimestampMixin, Base):
-    """A photo a tech attaches to their own clock-out, with an optional
-    caption. Uploaded while the shift is still open (the clock-out sheet
-    uploads before the final clock-out call) so there's a stable
-    clock_event_id to attach to. Visible to everyone (any logged-in user),
-    unlike clock_out_note which stays admin-only -- see /time/photos."""
+    """A photo a tech uploads, with an optional caption -- originally only
+    at clock-out, now allowed any time (clocked in or out), so
+    clock_event_id attaches to whatever shift is open at upload time and is
+    NULL otherwise. Visible to everyone (any logged-in user), unlike
+    clock_out_note which stays admin-only -- see /time/photos."""
 
     __tablename__ = "clock_out_photos"
     __table_args__ = (Index("ix_clock_out_photos_clock_event", "clock_event_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    clock_event_id: Mapped[int] = mapped_column(ForeignKey("clock_events.id"), nullable=False)
+    clock_event_id: Mapped[int | None] = mapped_column(ForeignKey("clock_events.id"), nullable=True)
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     caption: Mapped[str | None] = mapped_column(String(300))
     # Path relative to settings.uploads_dir -- never a client-supplied path,
@@ -188,7 +188,7 @@ class ClockOutPhoto(TimestampMixin, Base):
     file_path: Mapped[str] = mapped_column(String(300), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    clock_event: Mapped[ClockEvent] = relationship(back_populates="photos")
+    clock_event: Mapped[ClockEvent | None] = relationship(back_populates="photos")
     uploader: Mapped["User"] = relationship()
 
 

@@ -106,16 +106,14 @@ async def upload_clock_out_photo(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Attaches a photo (with an optional caption) to the tech's currently
-    open shift -- uploaded while the clock-out sheet is still open, before
-    the final clock-out call, so there's always a stable clock_event_id to
-    attach to. No offline queueing here (unlike clock in/out/pings): a
-    multipart upload is a much bigger thing to replay reliably than a small
-    JSON body, so this just fails with a clear error if there's no signal
-    rather than silently queuing."""
+    """A tech can add a photo any time, clocked in or out -- not just at
+    clock-out. If a shift is currently open it's attached to that shift
+    (clock_event_id); otherwise clock_event_id is left NULL and the photo
+    just belongs to the uploader. No offline queueing here (unlike clock
+    in/out/pings): a multipart upload is a much bigger thing to replay
+    reliably than a small JSON body, so this just fails with a clear error
+    if there's no signal rather than silently queuing."""
     ev = _open_event(db, user.id)
-    if not ev:
-        raise HTTPException(status_code=400, detail="Not clocked in")
     ext = _PHOTO_EXTENSIONS.get(file.content_type or "")
     if not ext:
         raise HTTPException(status_code=400, detail="Only photo uploads are allowed")
@@ -123,14 +121,14 @@ async def upload_clock_out_photo(
     if len(data) > settings.max_photo_bytes:
         raise HTTPException(status_code=400, detail="Photo is too large")
 
-    rel_dir = f"clock_photos/{ev.id}"
+    rel_dir = f"clock_photos/{ev.id if ev else f'standalone_{user.id}'}"
     os.makedirs(os.path.join(settings.uploads_dir, rel_dir), exist_ok=True)
     rel_path = f"{rel_dir}/{uuid.uuid4().hex}{ext}"
     with open(os.path.join(settings.uploads_dir, rel_path), "wb") as f:
         f.write(data)
 
     photo = ClockOutPhoto(
-        clock_event_id=ev.id, uploaded_by=user.id,
+        clock_event_id=ev.id if ev else None, uploaded_by=user.id,
         caption=(caption or "").strip() or None,
         file_path=rel_path, content_type=file.content_type,
     )
@@ -156,10 +154,10 @@ def get_clock_out_photo(photo_id: int, db: Session = Depends(get_db), _: User = 
 
 @router.get("/photos", response_model=list[ClockOutPhotoFeedOut])
 def list_clock_out_photos(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """The shared photo feed everyone can browse -- every tech's clock-out
-    photos, newest first, with who took it, the shift's date, and the
-    caption they wrote. Unlike clock_out_note, which stays admin-only,
-    photos are visible to the whole crew by owner request."""
+    """The shared photo feed everyone can browse -- every tech's photos,
+    newest first, with who took it, a date, and the caption they wrote.
+    Unlike clock_out_note, which stays admin-only, photos are visible to
+    the whole crew by owner request."""
     photos = (
         db.query(ClockOutPhoto)
         .options(joinedload(ClockOutPhoto.uploader), joinedload(ClockOutPhoto.clock_event))
@@ -170,7 +168,9 @@ def list_clock_out_photos(db: Session = Depends(get_db), _: User = Depends(get_c
         ClockOutPhotoFeedOut(
             id=p.id, caption=p.caption, url=f"/time/photos/{p.id}",
             uploaded_by_name=p.uploader.name if p.uploader else "?",
-            shift_date=p.clock_event.clock_in_at.date(),
+            # A photo uploaded off-shift has no clock_event to date itself
+            # by -- fall back to when it was uploaded.
+            shift_date=p.clock_event.clock_in_at.date() if p.clock_event else p.created_at.date(),
             created_at=p.created_at,
         )
         for p in photos

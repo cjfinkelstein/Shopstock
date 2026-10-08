@@ -498,7 +498,10 @@ class TestClockOutPhotos:
         )
         assert r.status_code == 400, r.text
 
-    def test_upload_requires_being_clocked_in(self, client, seeded, tmp_path, monkeypatch):
+    def test_upload_allowed_while_clocked_out(self, client, seeded, tmp_path, monkeypatch):
+        """A tech can add a photo any time, not just during a shift -- it
+        just has no clock_event_id, and the feed falls back to the upload
+        date instead of a shift date."""
         from app.config import settings
         monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
 
@@ -506,5 +509,17 @@ class TestClockOutPhotos:
         r = client.post(
             "/api/v1/time/clock-out/photos", headers=tech,
             files={"file": ("site.jpg", b"fake-bytes", "image/jpeg")},
+            data={"caption": "Spare parts in the van"},
         )
-        assert r.status_code == 400, r.text
+        assert r.status_code == 201, r.text
+        photo_id = r.json()["id"]
+
+        r = client.get(f"/api/v1/time/photos/{photo_id}", headers=tech)
+        assert r.status_code == 200, r.text
+
+        r = client.get("/api/v1/time/photos", headers=tech)
+        assert r.status_code == 200, r.text
+        feed = [p for p in r.json() if p["id"] == photo_id]
+        assert len(feed) == 1
+        assert feed[0]["caption"] == "Spare parts in the van"
+        assert feed[0]["shift_date"]

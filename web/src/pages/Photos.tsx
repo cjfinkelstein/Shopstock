@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 
-import { api, fmtWhen } from "../api";
+import { api, apiUpload, fmtWhen } from "../api";
 import AuthedImage from "../components/AuthedImage";
 import Icon from "../components/Icon";
-import { Empty, ListSkeleton } from "../components/ui";
+import Sheet from "../components/Sheet";
+import { Empty, ListSkeleton, Spinner } from "../components/ui";
+import { useToast } from "../toast";
 import type { ClockOutPhotoFeedItem } from "../types";
 
 function fmtShiftDate(iso: string): string {
@@ -18,14 +20,53 @@ function fmtShiftDate(iso: string): string {
 
 export default function Photos() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [photos, setPhotos] = useState<ClockOutPhotoFeedItem[] | null>(null);
   const [zoomed, setZoomed] = useState<ClockOutPhotoFeedItem | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [pendingCaption, setPendingCaption] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  const loadPhotos = () =>
     api<ClockOutPhotoFeedItem[]>("/time/photos")
       .then(setPhotos)
       .catch(() => setPhotos([]));
+
+  useEffect(() => {
+    loadPhotos();
   }, []);
+
+  const discardPendingPhoto = () => {
+    if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
+    setPendingPhoto(null);
+    setPendingCaption("");
+  };
+
+  const choosePhoto = (file: File | undefined) => {
+    if (!file) return;
+    discardPendingPhoto();
+    setPendingPhoto({ file, previewUrl: URL.createObjectURL(file) });
+  };
+
+  const uploadPendingPhoto = async () => {
+    if (!pendingPhoto) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", pendingPhoto.file);
+      if (pendingCaption.trim()) form.append("caption", pendingCaption.trim());
+      await apiUpload("/time/clock-out/photos", form);
+      discardPendingPhoto();
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await loadPhotos();
+      toast("success", "Photo added");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't upload photo");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (!zoomed) return;
@@ -49,16 +90,27 @@ export default function Photos() {
         >
           <Icon name="arrow-left" size={20} />
         </button>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="page-eyebrow">Everyone can see</p>
           <h1 className="page-title mt-1">Photos</h1>
         </div>
+        <button className="btn-primary !min-h-[40px] px-3.5 text-[13px]" onClick={() => fileInputRef.current?.click()}>
+          <Icon name="camera" size={16} />
+          Add photo
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => choosePhoto(e.target.files?.[0])}
+        />
       </header>
 
       {!photos ? (
         <ListSkeleton rows={4} height={120} />
       ) : photos.length === 0 ? (
-        <Empty icon="camera" title="No photos yet" hint="Photos added at clock-out show up here." />
+        <Empty icon="camera" title="No photos yet" hint="Tap Add photo to post the first one." />
       ) : (
         <div className="space-y-3">
           {photos.map((p) => (
@@ -116,6 +168,31 @@ export default function Photos() {
           </div>,
           document.body,
         )}
+
+      {pendingPhoto && (
+        <Sheet title="Add photo" subtitle="Visible to everyone" onClose={discardPendingPhoto}>
+          <div className="space-y-4">
+            <img
+              src={pendingPhoto.previewUrl}
+              alt="Selected"
+              className="mx-auto max-h-[45vh] w-full rounded-xl object-contain"
+            />
+            <label className="block">
+              <span className="label">Caption (optional)</span>
+              <input
+                className="input"
+                placeholder="What's this a photo of?"
+                value={pendingCaption}
+                onChange={(e) => setPendingCaption(e.target.value)}
+              />
+            </label>
+            <button className="btn-primary w-full" disabled={uploading} onClick={uploadPendingPhoto}>
+              {uploading ? <Spinner /> : <Icon name="camera" size={18} />}
+              Post photo
+            </button>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }
