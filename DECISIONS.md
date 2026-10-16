@@ -940,3 +940,32 @@ Each entry: what was decided, and why.
     from Sam against it both returned 403; Ray's own toggle and delete
     button rendered enabled for Ray. Also reconfirmed edit attribution
     (`edited_by_name`) still records correctly for an ordinary edit.
+
+## Follow-up to #62: only Ray/admin can assign tasks (2026-10-16)
+
+63. **"Please only allow Ray to be able to assign not all techs"** --
+    #62 opened general editing to everyone but left task-assignment
+    (posting a new task for Adam/Ed/Avigdor under Assignments) open to
+    any tech too, since creating an entry was never restricted. Closed
+    that: `create_event` in `calendar.py` now rejects a non-Ray/admin's
+    `assignee` with 403 ("Only Ray or an admin can assign a task"); an
+    unassigned, general to-do from any tech is still unaffected.
+    Frontend: the per-assignee "Add a task for X" textarea+Add form
+    (and the `showAssignments`/empty-row visibility that went with it)
+    now gates on `isRayOrAdmin` instead of the always-true `canEdit` --
+    a regular tech still sees existing assignments (read-only, subject
+    to #62's edit/delete rules) but no longer sees a way to add one.
+    Updated `test_assignee_round_trips` (now uses Ray, who's actually
+    allowed, instead of an arbitrary tech) and
+    `test_any_tech_can_complete_anyones_assigned_task` (renamed/reworked
+    to have *admin* create the assigned task, since a regular tech can
+    no longer create one at all -- the test's actual point, that
+    non-Ray-authored assigned tasks stay open to edit, still holds for
+    admin-authored ones). Added `test_only_ray_or_admin_can_assign_a_task`.
+    Verified: full backend suite passes (50/50), `tsc --noEmit` clean,
+    production build succeeds. **Playwright + direct API**: a regular
+    tech (Sam) no longer sees any "Add a task for ___" form but still
+    sees the general "Add a to-do" one; Ray and admin both still see
+    the assign forms; a direct API POST with an `assignee` from Sam
+    returns 403 ("Only Ray or an admin can assign a task") while the
+    same call from Ray succeeds (201).

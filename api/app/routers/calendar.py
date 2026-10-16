@@ -11,10 +11,11 @@ from app.schemas import CalendarEventCreate, CalendarEventEditOut, CalendarEvent
 # Any logged-in user (tech or admin) can read, add, and generally edit --
 # this is the shared team calendar, not an admin-only tool. Every query
 # here is scoped to visibility="shared" so a tech can never see or touch an
-# admin's private note, even by guessing an id. One carved-out exception:
-# Ray's own entries (he assigns tasks to the other techs) can only be
-# edited or deleted by Ray himself or an admin -- see _is_ray/_protected
-# below. Everyone else's entries, including each other's, stay fully open.
+# admin's private note, even by guessing an id. Two carved-out exceptions,
+# both Ray/admin only -- see _is_ray/_protected below: (1) assigning a task
+# to another tech (create_event rejects a non-Ray/admin's assignee), and
+# (2) editing or deleting Ray's own entries. Everyone else's entries,
+# including each other's, stay fully open.
 router = APIRouter(prefix="/calendar", tags=["calendar"], dependencies=[Depends(get_current_user)])
 
 # An admin's own private notes/to-dos on the Login Hours page -- never
@@ -78,6 +79,10 @@ def list_events(date_from: date | None = None, date_to: date | None = None, db: 
 
 @router.post("", response_model=CalendarEventOut, status_code=201)
 def create_event(body: CalendarEventCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Assigning a task to another tech is Ray/admin only; a plain,
+    # unassigned to-do stays open to everyone.
+    if body.assignee and user.role != "admin" and not _is_ray(user):
+        raise HTTPException(status_code=403, detail="Only Ray or an admin can assign a task")
     e = CalendarEvent(
         event_date=body.event_date, title=body.title, notes=body.notes, created_by=user.id, visibility="shared",
         assignee=body.assignee,

@@ -45,12 +45,13 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
   const navigate = useNavigate();
   const toast = useToast();
   const { user } = useAuth();
-  // Everyone can see, add to, and generally edit the shared calendar.
-  // One exception: Ray's own entries (he assigns tasks to the other
-  // techs) can only be edited/deleted by Ray or an admin -- mirrors the
-  // backend's _protected check in calendar.py, so this is just hiding
-  // affordances a blocked request would 403 on anyway, not the actual
-  // enforcement.
+  // Everyone can see, add general to-dos to, and generally edit the shared
+  // calendar. Two exceptions, both mirroring the backend (calendar.py's
+  // _protected and the assignee check in create_event) -- hiding
+  // affordances a blocked request would reject anyway, not the actual
+  // enforcement: (1) only Ray or an admin can assign a task to another
+  // tech, (2) an entry Ray created (general to-do or an assigned task) can
+  // only be edited/deleted by Ray or an admin.
   const canEdit = true;
   const isRayOrAdmin = user?.role === "admin" || RAY_FIRST_NAMES.has(firstName(user?.name));
   const canEditEntry = (item: CalendarEvent) => isRayOrAdmin || !RAY_FIRST_NAMES.has(firstName(item.created_by_name));
@@ -99,7 +100,7 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
 
   const selectedItems = selected ? (byDate[selected] ?? []) : [];
   const generalItems = selectedItems.filter((it) => !it.assignee);
-  const showAssignments = canEdit || ASSIGNEES.some((name) => selectedItems.some((it) => it.assignee === name));
+  const showAssignments = isRayOrAdmin || ASSIGNEES.some((name) => selectedItems.some((it) => it.assignee === name));
 
   const openDay = (iso: string) => {
     setSelected(iso);
@@ -366,7 +367,7 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
                 <p className="section-title">Assignments</p>
                 {ASSIGNEES.map((name) => {
                   const tasks = selectedItems.filter((it) => it.assignee === name);
-                  if (!canEdit && tasks.length === 0) return null;
+                  if (!isRayOrAdmin && tasks.length === 0) return null;
                   return (
                     <div key={name} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
                       <p className="text-[13px] font-bold">{name}</p>
@@ -404,10 +405,8 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
                             );
                           })}
                         </ul>
-                      ) : (
-                        !canEdit && <p className="mt-1 text-[12px] text-slate-400">Nothing yet</p>
-                      )}
-                      {canEdit && (
+                      ) : null}
+                      {isRayOrAdmin && (
                         <div className="mt-2 space-y-2">
                           <textarea
                             className="input min-h-[44px] text-[13px]"

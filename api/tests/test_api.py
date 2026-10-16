@@ -310,17 +310,18 @@ class TestSharedCalendarPermissions:
         assert r.json()["title"] == "Order breakers (urgent)"
 
     def test_assignee_round_trips(self, client, seeded, db_session):
-        """A per-person task list for a date: assignee is a free-text label
-        (not tied to a real User), so it just needs to save and come back
-        unchanged -- no name-matching involved."""
+        """Ray's per-person task list for a date: assignee is a free-text
+        label (not tied to a real User), so it just needs to save and come
+        back unchanged -- no name-matching involved beyond the Ray/admin
+        gate on assigning in the first place."""
         from app.models import User
 
-        tech = User(name="Ed", role="tech", active=True)
-        db_session.add(tech)
+        ray = User(name="Ray", role="tech", active=True)
+        db_session.add(ray)
         db_session.commit()
-        tech_hdrs = self.login_as(client, tech.id)
+        ray_hdrs = self.login_as(client, ray.id)
 
-        r = client.post("/api/v1/calendar", headers=tech_hdrs, json={
+        r = client.post("/api/v1/calendar", headers=ray_hdrs, json={
             "event_date": "2026-10-10", "title": "Adam", "assignee": "Adam",
             "notes": "Clean truck\nPick up supplies",
         })
@@ -329,23 +330,41 @@ class TestSharedCalendarPermissions:
         assert r.json()["notes"] == "Clean truck\nPick up supplies"
 
         # a regular, unassigned to-do still has assignee == None
-        r = client.get("/api/v1/calendar", headers=tech_hdrs)
+        r = client.get("/api/v1/calendar", headers=ray_hdrs)
         assert r.status_code == 200, r.text
 
-    def test_any_tech_can_complete_anyones_assigned_task(self, client, seeded, db_session):
-        """A tech can check off, retitle, or otherwise edit ANY assigned
-        task, not just their own -- editing is open to everyone now."""
+    def test_only_ray_or_admin_can_assign_a_task(self, client, seeded, db_session):
         from app.models import User
 
-        creator = User(name="Ed", role="tech", active=True)
-        adam = User(name="Adam", role="tech", active=True)
         other = User(name="Sam", role="tech", active=True)
-        db_session.add_all([creator, adam, other])
+        db_session.add(other)
         db_session.commit()
-        creator_hdrs = self.login_as(client, creator.id)
         other_hdrs = self.login_as(client, other.id)
 
-        r = client.post("/api/v1/calendar", headers=creator_hdrs, json={
+        r = client.post("/api/v1/calendar", headers=other_hdrs, json={
+            "event_date": "2026-10-10", "title": "Clean the truck", "assignee": "Adam",
+        })
+        assert r.status_code == 403, r.text
+
+        # an unassigned to-do from the same tech is still fine
+        r = client.post("/api/v1/calendar", headers=other_hdrs,
+                         json={"event_date": "2026-10-10", "title": "Order breakers"})
+        assert r.status_code == 201, r.text
+
+    def test_any_tech_can_complete_an_admin_assigned_task(self, client, seeded, db_session):
+        """A tech can check off, retitle, or otherwise edit an assigned
+        task that admin created -- only Ray's own assigned tasks are
+        protected, not admin's."""
+        from app.models import User
+
+        adam = User(name="Adam", role="tech", active=True)
+        other = User(name="Sam", role="tech", active=True)
+        db_session.add_all([adam, other])
+        db_session.commit()
+        admin = login_admin(client)
+        other_hdrs = self.login_as(client, other.id)
+
+        r = client.post("/api/v1/calendar", headers=admin, json={
             "event_date": "2026-10-10", "title": "Clean the truck", "assignee": "Adam",
         })
         assert r.status_code == 201, r.text
