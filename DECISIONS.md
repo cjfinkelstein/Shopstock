@@ -969,3 +969,74 @@ Each entry: what was decided, and why.
     the assign forms; a direct API POST with an `assignee` from Sam
     returns 403 ("Only Ray or an admin can assign a task") while the
     same call from Ray succeeds (201).
+
+## Fixed ItemSheet's hardcoded "Truck 1/2/3" assumption (2026-10-16)
+
+64. **Renaming the trucks on the live site (to "Ed's Truck", "Ray's
+    Truck", etc. -- a data-only change, no deploy needed) surfaced a
+    real pre-existing bug**: `tech/ItemSheet.tsx` found truck locations
+    by matching the literal names `"Truck 1"`, `"Truck 2"`, `"Truck 3"`
+    (`locations.find((l) => l.name === "Truck N")`), capped at exactly
+    3 slots, with a "Truck N isn't set up yet" placeholder for any
+    missing slot. The moment a truck's name changes, that lookup finds
+    nothing -- which broke the item page's stock-by-truck summary, the
+    Take Out → truck destination picker, and the "which truck is this
+    coming off of" routing step for every tech, not just the renamed
+    ones (since `allTrucks` was always `[truck1, truck2, truck3]`
+    regardless of which or how many real trucks existed). This was
+    already quietly wrong before the rename too -- a fleet of 7 trucks
+    only ever exposed stock for whichever 3 happened to be literally
+    named "Truck 1/2/3" in these flows.
+    Fixed by deriving `allTrucks` from the real location list
+    (`locations.filter((l) => l.type === "truck")`, sorted by name)
+    instead of hardcoded names/count -- works for any number of trucks,
+    however they're named. Simplified the two render sites that used to
+    guard against a possibly-undefined slot (`truck?.id ?? ...`, the
+    ternary with the "isn't set up yet" placeholder) since every entry
+    in the new list is always a real truck now.
+    Verified: `tsc --noEmit` clean, production build succeeds, full
+    backend suite still passes (50/50, untouched -- this was a
+    frontend-only bug). **Playwright**, against a local copy mirroring
+    the live site's current renamed/inactive state: the item detail
+    page's stock-by-location summary now shows all 7 real truck names
+    (including the newly-added "Truck 4", unassigned since the former
+    tech left) instead of the old hardcoded 3; opened Take Out on an
+    item stocked on "Ed's Truck" and confirmed the sheet opens and the
+    real truck name appears throughout.
+
+## Added a Receipts tab for job-tagged photos (2026-10-16)
+
+65. **"Create another option to load photos right under the one that
+    says photos and call it receipts... allow it to either take a pic
+    or access its gallery and then ask for what job this is for."**
+    Added a new tech bottom-nav tab, "Receipts" (`file-text` icon),
+    right after "Photos" -- a deliberately separate flow from the
+    existing Photos feature, since receipts need a job tag and
+    shouldn't land in the shared crew photo feed.
+    Reused existing infrastructure instead of building new: the
+    `JobFile` model/table already existed exactly for this (a photo or
+    document attached to a job, base64-encoded, same convention as
+    `Item.image_data`) but its upload endpoint
+    (`POST /jobs/{job_id}/files`) was admin-only. Opened just that one
+    endpoint to any logged-in user -- list/get/delete stay admin-only,
+    since reviewing and managing job files remains an admin job, only
+    adding one is now open to techs. New page `tech/Receipts.tsx`
+    reuses the exact same `readAsDataUrl` + `JobPicker` + upload pattern
+    already used by the admin Job Detail "Photos & Documents" tab, so a
+    receipt uploaded here shows up in the exact same place an admin
+    already looks for job files -- no new admin UI needed. Flow: tap
+    "Add receipt" -> native file picker (no `capture` attribute, so it
+    offers camera or gallery, same convention as every other photo
+    picker in this app) -> a Sheet titled "What job is this for?" with
+    the preview + the existing JobPicker (search, recent jobs, create
+    new) -> uploads on pick.
+    Added `TestJobReceipts`: a tech can upload; a tech still can't list
+    or delete job files (unaffected, admin-only); upload to a
+    nonexistent job 404s.
+    Verified: full backend suite passes (53/53, +3 new), `tsc --noEmit`
+    clean, production build succeeds. **Playwright end-to-end**:
+    confirmed the Receipts tab sits immediately after Photos in the nav
+    order; tapped Add receipt, picked a file, confirmed the job-picker
+    sheet opened, picked a job, confirmed a success toast; then, as
+    admin, opened that job's "Photos & Documents" tab and confirmed the
+    uploaded file (`test_photo.jpg`) actually appears there.

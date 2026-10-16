@@ -154,6 +154,7 @@ export default function TechLayout() {
           </div>
           <Tab to="/my-hours" label="Timesheet" icon="clock" />
           <Tab to="/photos" label="Photos" icon="camera" />
+          <Tab to="/receipts" label="Receipts" icon="file-text" />
         </div>
       </nav>
 

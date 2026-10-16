@@ -399,9 +399,12 @@ def get_job_file(file_id: int, db: Session = Depends(get_db)):
     return _file_out(f)
 
 
-@router.post("/{job_id}/files", response_model=JobFileOut, status_code=201, dependencies=[Depends(require_admin)])
+@router.post("/{job_id}/files", response_model=JobFileOut, status_code=201)
 def upload_job_file(job_id: int, body: JobFileIn, db: Session = Depends(get_db),
                     user: User = Depends(get_current_user)):
+    # Any logged-in tech can upload here (e.g. a job-site receipt photo),
+    # not just admin -- unlike list/get/delete below, which stay
+    # admin-only (reviewing and managing job files is an admin job).
     if not db.get(Job, job_id):
         raise HTTPException(status_code=404, detail="Job not found")
     f = JobFile(

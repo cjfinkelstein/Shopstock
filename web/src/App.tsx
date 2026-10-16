@@ -29,6 +29,7 @@ import Cart from "./pages/tech/Cart";
 import Home from "./pages/tech/Home";
 import ItemSheet from "./pages/tech/ItemSheet";
 import MyHours from "./pages/tech/MyHours";
+import Receipts from "./pages/tech/Receipts";
 import Search from "./pages/tech/Search";
 import Stock from "./pages/tech/Stock";
 
@@ -104,6 +105,7 @@ export default function App() {
         <Route path="/my-hours" element={<MyHours />} />
         <Route path="/calendar" element={<TeamCalendar />} />
         <Route path="/photos" element={<Photos />} />
+        <Route path="/receipts" element={<Receipts />} />
       </Route>
       {user.role === "admin" && (
         <Route path="/admin" element={<AdminLayout />}>
