@@ -836,3 +836,32 @@ Each entry: what was decided, and why.
     over both the tech and admin sides confirmed every page renders a
     normal empty state instead of crashing (Stock, Timesheet, Photos,
     admin Dashboard/Items/Activity/Team Calendar/Reports).
+
+## Revised #59: reset items instead of deleting them (2026-10-16)
+
+60. **Before running #59 for real, the dry run showed 153 items in the
+    live catalog, not the ~20 originally assumed -- the owner had
+    already been adding real inventory.** Deleting all of them would
+    have destroyed real item records, not just test ones. Asked, and
+    the answer was to keep every item but reset it to a blank slate:
+    keep `name` and `image_data`, reset everything else (sku, barcode,
+    category, reorder_point, reorder_qty, avg_cost, last_cost) back to
+    neutral placeholders, and still wipe all quantity/ledger data
+    (`stock_levels`, `transactions`) same as before. Rewrote
+    `wipe_for_golive.py`: items are no longer deleted -- each gets
+    `sku`/`barcode` set to a fresh unique `ITEM-<id>` placeholder (sku
+    is a required unique column, so it can't just go blank),
+    `category` reset to `"Uncategorized"` (verified `catcolor.ts` hashes
+    any unrecognized category string into a valid color/icon, so this
+    renders fine), and the cost/reorder fields zeroed. Dropped the
+    estimate_lines-detach step from #59 entirely, since items are no
+    longer deleted there's no dangling FK to worry about there.
+    Verified end-to-end again against a local copy: dry run and --yes
+    run both showed correct counts, items kept their original name and
+    image_data with every other field reset as described, SKUs came out
+    unique, the clock-out photo still survived detached,
+    users/jobs/trucks/vendors stayed untouched, `check_consistency.py`
+    and the full backend suite (48/48) still pass, and a live RECEIVE
+    against a reset item (via the real API, admin role) correctly
+    re-established `avg_cost`, `on_hand`, and `total_spent` from zero --
+    confirming the reset state doesn't break normal use going forward.
