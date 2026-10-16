@@ -8,18 +8,38 @@ from app.database import get_db
 from app.models import CalendarEvent, CalendarEventEdit, User
 from app.schemas import CalendarEventCreate, CalendarEventEditOut, CalendarEventOut, CalendarEventUpdate
 
-# Any logged-in user (tech or admin) can read AND write -- this is the
-# shared team calendar, not an admin-only tool. Every query here is scoped
-# to visibility="shared" so a tech can never see or touch an admin's
-# private note, even by guessing an id. Editing used to be restricted to
-# admin + one named tech (Ray); opened up to everyone by owner request --
-# see git history on this file for the old per-name gate if that ever needs
-# reinstating.
+# Any logged-in user (tech or admin) can read, add, and generally edit --
+# this is the shared team calendar, not an admin-only tool. Every query
+# here is scoped to visibility="shared" so a tech can never see or touch an
+# admin's private note, even by guessing an id. One carved-out exception:
+# Ray's own entries (he assigns tasks to the other techs) can only be
+# edited or deleted by Ray himself or an admin -- see _is_ray/_protected
+# below. Everyone else's entries, including each other's, stay fully open.
 router = APIRouter(prefix="/calendar", tags=["calendar"], dependencies=[Depends(get_current_user)])
 
 # An admin's own private notes/to-dos on the Login Hours page -- never
 # returned to a tech. Separate prefix, separate admin-only gate.
 admin_router = APIRouter(prefix="/calendar/admin", tags=["calendar"], dependencies=[Depends(require_admin)])
+
+# Matched on first name since Ray's account is actually stored as the full
+# "Raymond Bailey" (confirmed from the live site).
+_RAY_FIRST_NAMES = {"ray", "raymond"}
+
+
+def _first_name(name: str | None) -> str:
+    return name.strip().split(" ", 1)[0].lower() if name else ""
+
+
+def _is_ray(user: User) -> bool:
+    return _first_name(user.name) in _RAY_FIRST_NAMES
+
+
+def _protected(e: CalendarEvent, user: User) -> bool:
+    """True if this entry is Ray's own and the current user is neither Ray
+    nor an admin -- i.e. they may not edit or delete it."""
+    if user.role == "admin" or _is_ray(user):
+        return False
+    return _first_name(e.creator.name if e.creator else None) in _RAY_FIRST_NAMES
 
 
 def _out(e: CalendarEvent) -> CalendarEventOut:
@@ -74,6 +94,8 @@ def update_event(event_id: int, body: CalendarEventUpdate, db: Session = Depends
     e = db.get(CalendarEvent, event_id)
     if not e or e.visibility != "shared":
         raise HTTPException(status_code=404, detail="Not found")
+    if _protected(e, user):
+        raise HTTPException(status_code=403, detail="Only Ray or an admin can edit this")
 
     def record(field: str, old, new) -> None:
         db.add(CalendarEventEdit(
@@ -97,6 +119,17 @@ def update_event(event_id: int, body: CalendarEventUpdate, db: Session = Depends
     db.commit()
     db.refresh(e)
     return _out(e)
+
+
+@router.delete("/{event_id}", status_code=204)
+def delete_event(event_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    e = db.get(CalendarEvent, event_id)
+    if not e or e.visibility != "shared":
+        raise HTTPException(status_code=404, detail="Not found")
+    if _protected(e, user):
+        raise HTTPException(status_code=403, detail="Only Ray or an admin can delete this")
+    db.delete(e)
+    db.commit()
 
 
 @admin_router.get("", response_model=list[CalendarEventOut])

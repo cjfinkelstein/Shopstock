@@ -2,12 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api, fmtWhen } from "../api";
+import { useAuth } from "../auth";
 import { ASSIGNEES } from "../calendarAssignees";
 import Icon from "../components/Icon";
 import Sheet from "../components/Sheet";
 import { Empty, ListSkeleton, Spinner } from "../components/ui";
 import { useToast } from "../toast";
 import type { CalendarEvent } from "../types";
+
+const RAY_FIRST_NAMES = new Set(["ray", "raymond"]);
+const firstName = (name: string | null | undefined) => (name ?? "").trim().split(" ")[0]?.toLowerCase() ?? "";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -40,11 +44,16 @@ function editLine(e: CalendarEvent["edits"][number]): string {
 export default function TeamCalendar({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const toast = useToast();
-  // Everyone can see AND edit the shared calendar -- editing used to be
-  // admin + one named tech only, opened up to everyone by owner request.
-  // Kept as a named constant (rather than inlining `true`) since it still
-  // reads naturally everywhere below ("canEdit && ...").
+  const { user } = useAuth();
+  // Everyone can see, add to, and generally edit the shared calendar.
+  // One exception: Ray's own entries (he assigns tasks to the other
+  // techs) can only be edited/deleted by Ray or an admin -- mirrors the
+  // backend's _protected check in calendar.py, so this is just hiding
+  // affordances a blocked request would 403 on anyway, not the actual
+  // enforcement.
   const canEdit = true;
+  const isRayOrAdmin = user?.role === "admin" || RAY_FIRST_NAMES.has(firstName(user?.name));
+  const canEditEntry = (item: CalendarEvent) => isRayOrAdmin || !RAY_FIRST_NAMES.has(firstName(item.created_by_name));
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -91,8 +100,6 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
   const selectedItems = selected ? (byDate[selected] ?? []) : [];
   const generalItems = selectedItems.filter((it) => !it.assignee);
   const showAssignments = canEdit || ASSIGNEES.some((name) => selectedItems.some((it) => it.assignee === name));
-  // Everyone can edit now, so anyone can toggle any assignee's task too.
-  const canToggleAssignee = (_name: string) => canEdit;
 
   const openDay = (iso: string) => {
     setSelected(iso);
@@ -162,6 +169,19 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
       setEvents((prev) => (prev ?? []).map((e) => (e.id === updated.id ? updated : e)));
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Could not update");
+    }
+  };
+
+  const deleteItem = async (item: CalendarEvent) => {
+    try {
+      await api(`/calendar/${item.id}`, { method: "DELETE" });
+      setEvents((prev) => (prev ?? []).filter((e) => e.id !== item.id));
+      if (expandedId === item.id) {
+        setExpandedId(null);
+        setEditDraft(null);
+      }
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not delete");
     }
   };
 
@@ -346,31 +366,43 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
                 <p className="section-title">Assignments</p>
                 {ASSIGNEES.map((name) => {
                   const tasks = selectedItems.filter((it) => it.assignee === name);
-                  const canToggle = canToggleAssignee(name);
                   if (!canEdit && tasks.length === 0) return null;
                   return (
                     <div key={name} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
                       <p className="text-[13px] font-bold">{name}</p>
                       {tasks.length > 0 ? (
                         <ul className="mt-1.5 space-y-1.5">
-                          {tasks.map((t) => (
-                            <li key={t.id} className="flex items-start gap-2">
-                              <button
-                                type="button"
-                                aria-label={t.done ? "Mark not done" : "Mark done"}
-                                disabled={!canToggle}
-                                onClick={() => toggleDone(t)}
-                                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                                  t.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 dark:border-slate-600"
-                                } ${!canToggle ? "cursor-default opacity-70" : ""}`}
-                              >
-                                {t.done && <Icon name="check" size={10} strokeWidth={3} />}
-                              </button>
-                              <span className={`text-[13px] ${t.done ? "text-slate-400 line-through" : "text-slate-600 dark:text-slate-300"}`}>
-                                {t.title}
-                              </span>
-                            </li>
-                          ))}
+                          {tasks.map((t) => {
+                            const canTouch = canEditEntry(t);
+                            return (
+                              <li key={t.id} className="flex items-start gap-2">
+                                <button
+                                  type="button"
+                                  aria-label={t.done ? "Mark not done" : "Mark done"}
+                                  disabled={!canTouch}
+                                  onClick={() => toggleDone(t)}
+                                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                                    t.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 dark:border-slate-600"
+                                  } ${!canTouch ? "cursor-default opacity-70" : ""}`}
+                                >
+                                  {t.done && <Icon name="check" size={10} strokeWidth={3} />}
+                                </button>
+                                <span className={`min-w-0 flex-1 text-[13px] ${t.done ? "text-slate-400 line-through" : "text-slate-600 dark:text-slate-300"}`}>
+                                  {t.title}
+                                </span>
+                                {canTouch && (
+                                  <button
+                                    type="button"
+                                    aria-label="Delete task"
+                                    onClick={() => deleteItem(t)}
+                                    className="shrink-0 text-slate-300 hover:text-red-500 dark:text-slate-600"
+                                  >
+                                    <Icon name="trash" size={14} />
+                                  </button>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       ) : (
                         !canEdit && <p className="mt-1 text-[12px] text-slate-400">Nothing yet</p>
@@ -416,24 +448,25 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
               <div className="space-y-2">
                 {generalItems.map((item) => {
                   const isOpen = expandedId === item.id;
+                  const canTouch = canEditEntry(item);
                   return (
                     <div key={item.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60">
                       <div className="flex items-start gap-3 p-3">
                         <button
                           type="button"
                           aria-label={item.done ? "Mark not done" : "Mark done"}
-                          disabled={!canEdit}
+                          disabled={!canTouch}
                           onClick={() => toggleDone(item)}
                           className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                             item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 dark:border-slate-600"
-                          } ${!canEdit ? "cursor-default opacity-70" : ""}`}
+                          } ${!canTouch ? "cursor-default opacity-70" : ""}`}
                         >
                           {item.done && <Icon name="check" size={12} strokeWidth={3} />}
                         </button>
                         <button
                           type="button"
                           className="min-w-0 flex-1 text-left"
-                          onClick={() => canEdit && (isOpen ? setExpandedId(null) : startEdit(item))}
+                          onClick={() => canTouch && (isOpen ? setExpandedId(null) : startEdit(item))}
                         >
                           <span className="flex items-center gap-1.5">
                             <span className={`truncate text-[14px] font-semibold ${item.done ? "text-slate-400 line-through" : ""}`}>
@@ -454,7 +487,17 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
                             Added by {item.created_by_name ?? "someone"} · {fmtWhen(item.created_at)}
                           </span>
                         </button>
-                        {canEdit && (
+                        {canTouch && (
+                          <button
+                            type="button"
+                            aria-label="Delete to-do"
+                            onClick={() => deleteItem(item)}
+                            className="mt-0.5 shrink-0 text-slate-300 hover:text-red-500 dark:text-slate-600"
+                          >
+                            <Icon name="trash" size={14} />
+                          </button>
+                        )}
+                        {canTouch && (
                           <Icon
                             name={isOpen ? "chevron-down" : "chevron-right"}
                             size={16}

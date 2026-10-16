@@ -367,6 +367,68 @@ class TestSharedCalendarPermissions:
                          json={"event_date": "2026-10-10", "title": "Schedule inspection"})
         assert r.status_code == 201, r.text
 
+    def test_any_tech_can_delete_a_non_ray_entry(self, client, seeded, db_session):
+        from app.models import User
+
+        creator = User(name="Ed", role="tech", active=True)
+        other = User(name="Sam", role="tech", active=True)
+        db_session.add_all([creator, other])
+        db_session.commit()
+        creator_hdrs = self.login_as(client, creator.id)
+        other_hdrs = self.login_as(client, other.id)
+
+        r = client.post("/api/v1/calendar", headers=creator_hdrs,
+                         json={"event_date": "2026-10-10", "title": "Clean the shop"})
+        assert r.status_code == 201, r.text
+        event_id = r.json()["id"]
+
+        r = client.delete(f"/api/v1/calendar/{event_id}", headers=other_hdrs)
+        assert r.status_code == 204, r.text
+
+        r = client.get("/api/v1/calendar", headers=other_hdrs,
+                        params={"date_from": "2026-10-10", "date_to": "2026-10-10"})
+        assert all(e["id"] != event_id for e in r.json())
+
+    def test_rays_entries_are_protected_from_other_techs(self, client, seeded, db_session):
+        """Ray assigns tasks to the other techs; only Ray himself or an
+        admin can edit or delete what Ray wrote -- everyone else can only
+        read it (or, for an assigned task, mark their own done -- but
+        that's still blocked here since editing is Ray/admin-only on his
+        own rows)."""
+        from app.models import User
+
+        ray = User(name="Raymond Bailey", role="tech", active=True)
+        other = User(name="Sam", role="tech", active=True)
+        db_session.add_all([ray, other])
+        db_session.commit()
+        ray_hdrs = self.login_as(client, ray.id)
+        other_hdrs = self.login_as(client, other.id)
+        admin = login_admin(client)
+
+        r = client.post("/api/v1/calendar", headers=ray_hdrs, json={
+            "event_date": "2026-10-10", "title": "Clean the truck", "assignee": "Adam",
+        })
+        assert r.status_code == 201, r.text
+        task_id = r.json()["id"]
+
+        # a different tech can't edit it...
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=other_hdrs, json={"done": True})
+        assert r.status_code == 403, r.text
+        # ...or delete it
+        r = client.delete(f"/api/v1/calendar/{task_id}", headers=other_hdrs)
+        assert r.status_code == 403, r.text
+
+        # but Ray himself can edit his own entry
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=ray_hdrs, json={"done": True})
+        assert r.status_code == 200, r.text
+        assert r.json()["done"] is True
+
+        # and an admin can edit and delete it too
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=admin, json={"title": "Clean the truck (urgent)"})
+        assert r.status_code == 200, r.text
+        r = client.delete(f"/api/v1/calendar/{task_id}", headers=admin)
+        assert r.status_code == 204, r.text
+
 
 class TestClockOut:
     def test_clock_out_without_a_note_succeeds(self, client, seeded):
