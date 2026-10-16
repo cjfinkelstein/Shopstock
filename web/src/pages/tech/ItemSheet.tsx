@@ -71,10 +71,9 @@ export default function ItemSheet() {
   const shopRow = stock?.locations.find((l) => l.location_type === "shop");
   const truckRow = stock?.locations.find((l) => l.location_id === myTruck?.location_id);
   const shopLoc = locations.find((l) => l.type === "shop");
-  const truck1 = locations.find((l) => l.name === "Truck 1");
-  const truck2 = locations.find((l) => l.name === "Truck 2");
-  const truck3 = locations.find((l) => l.name === "Truck 3");
-  const allTrucks = [truck1, truck2, truck3];
+  // Every truck location currently configured -- not a fixed "Truck 1/2/3"
+  // slot count, since trucks are renamed/added/removed via admin Settings.
+  const allTrucks = locations.filter((l) => l.type === "truck").sort((a, b) => a.name.localeCompare(b.name));
 
   const stockAt = (locId: number | undefined) =>
     locId ? parseFloat(stock?.locations.find((l) => l.location_id === locId)?.qty ?? "0") : 0;
@@ -295,12 +294,12 @@ export default function ItemSheet() {
 
       <div className="grid grid-cols-2 gap-3">
         <StockCard icon="store" label="Shop" qty={shopRow?.qty} />
-        {allTrucks.map((truck, i) => (
+        {allTrucks.map((truck) => (
           <StockCard
-            key={truck?.id ?? `truck-${i}`}
+            key={truck.id}
             icon="truck"
-            label={truck?.name ?? `Truck ${i + 1}`}
-            qty={truck ? stock?.locations.find((l) => l.location_id === truck.id)?.qty : undefined}
+            label={truck.name}
+            qty={stock?.locations.find((l) => l.location_id === truck.id)?.qty}
           />
         ))}
       </div>
@@ -461,35 +460,29 @@ export default function ItemSheet() {
 
           {step === "destination" && mode === "signout" && (
             <div className="space-y-2.5">
-              {allTrucks.map((truck, i) =>
-                truck ? (
-                  <button
-                    key={truck.id}
-                    onClick={() => {
-                      setSignoutDest("truck");
-                      setSourceId(shopLoc?.id ?? defaultSource(qty));
-                      setDestId(truck.id);
-                      setStep("confirm");
-                    }}
-                    className="card-interactive flex w-full items-center gap-3.5 p-4 text-left"
-                  >
-                    <span className="icon-disc bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400">
-                      <Icon name="truck" size={22} />
+              {allTrucks.map((truck) => (
+                <button
+                  key={truck.id}
+                  onClick={() => {
+                    setSignoutDest("truck");
+                    setSourceId(shopLoc?.id ?? defaultSource(qty));
+                    setDestId(truck.id);
+                    setStep("confirm");
+                  }}
+                  className="card-interactive flex w-full items-center gap-3.5 p-4 text-left"
+                >
+                  <span className="icon-disc bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400">
+                    <Icon name="truck" size={22} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[16px] font-semibold">{truck.name}</span>
+                    <span className="block text-[13px] text-slate-400 dark:text-slate-500">
+                      Load it onto {truck.name}
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[16px] font-semibold">{truck.name}</span>
-                      <span className="block text-[13px] text-slate-400 dark:text-slate-500">
-                        Load it onto {truck.name}
-                      </span>
-                    </span>
-                    <Icon name="chevron-right" size={18} className="text-slate-300 dark:text-slate-600" />
-                  </button>
-                ) : (
-                  <div key={i} className="card p-4 text-[13px] text-slate-400 dark:text-slate-500">
-                    Truck {i + 1} isn't set up yet — ask an admin to add it in Settings.
-                  </div>
-                ),
-              )}
+                  </span>
+                  <Icon name="chevron-right" size={18} className="text-slate-300 dark:text-slate-600" />
+                </button>
+              ))}
               {signoutDest !== "truck" && (
                 <button
                   onClick={() => {
