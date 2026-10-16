@@ -65,6 +65,12 @@ export default function Home() {
   const [homePendingCaption, setHomePendingCaption] = useState("");
   const [homeUploadingPhoto, setHomeUploadingPhoto] = useState(false);
   const homePhotoInputRef = useRef<HTMLInputElement>(null);
+  // Receipts: a separate photo-picker flow from the one above -- this one
+  // tags the photo to a job (via JobFile) instead of posting to the shared
+  // crew photo feed.
+  const [pendingReceipt, setPendingReceipt] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
 
   // Big ticking clock -- recomputed every second from clockInAt while on shift.
   useEffect(() => {
@@ -187,6 +193,49 @@ export default function Home() {
       toast("error", e instanceof Error ? e.message : "Couldn't upload photo");
     } finally {
       setHomeUploadingPhoto(false);
+    }
+  };
+
+  const discardPendingReceipt = () => {
+    if (pendingReceipt) URL.revokeObjectURL(pendingReceipt.previewUrl);
+    setPendingReceipt(null);
+    if (receiptInputRef.current) receiptInputRef.current.value = "";
+  };
+
+  const chooseReceipt = (file: File | undefined) => {
+    if (!file) return;
+    discardPendingReceipt();
+    setPendingReceipt({ file, previewUrl: URL.createObjectURL(file) });
+  };
+
+  const readAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+  const uploadReceiptToJob = async (job: Job) => {
+    if (!pendingReceipt) return;
+    setUploadingReceipt(true);
+    try {
+      const dataUrl = await readAsDataUrl(pendingReceipt.file);
+      await api(`/jobs/${job.id}/files`, {
+        method: "POST",
+        body: {
+          kind: "photo",
+          filename: pendingReceipt.file.name,
+          mime_type: pendingReceipt.file.type || "image/jpeg",
+          data: dataUrl,
+        },
+      });
+      toast("success", `Receipt added to ${job.job_number}`);
+      discardPendingReceipt();
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Couldn't upload receipt");
+    } finally {
+      setUploadingReceipt(false);
     }
   };
 
@@ -475,6 +524,18 @@ export default function Home() {
         onChange={(e) => chooseHomePhoto(e.target.files?.[0])}
       />
 
+      <button type="button" onClick={() => receiptInputRef.current?.click()} className="btn-secondary w-full">
+        <Icon name="file-text" size={16} />
+        Add receipt
+      </button>
+      <input
+        ref={receiptInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => chooseReceipt(e.target.files?.[0])}
+      />
+
       <TeamCalendar embedded />
 
       {homePendingPhoto && (
@@ -503,6 +564,25 @@ export default function Home() {
               {homeUploadingPhoto ? <Spinner /> : <Icon name="camera" size={18} />}
               Post photo
             </button>
+          </div>
+        </Sheet>
+      )}
+
+      {pendingReceipt && (
+        <Sheet title="What job is this for?" onClose={discardPendingReceipt}>
+          <div className="space-y-4">
+            <img
+              src={pendingReceipt.previewUrl}
+              alt="Receipt"
+              className="mx-auto max-h-[30vh] rounded-xl object-contain"
+            />
+            {uploadingReceipt ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner />
+              </div>
+            ) : (
+              <JobPicker onPick={uploadReceiptToJob} allowCreate />
+            )}
           </div>
         </Sheet>
       )}

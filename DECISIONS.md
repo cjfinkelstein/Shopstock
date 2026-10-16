@@ -1040,3 +1040,23 @@ Each entry: what was decided, and why.
     sheet opened, picked a job, confirmed a success toast; then, as
     admin, opened that job's "Photos & Documents" tab and confirmed the
     uploaded file (`test_photo.jpg`) actually appears there.
+
+## Added an Add receipt button on Home too (2026-10-16)
+
+66. **Follow-up to #65: "also add it under the photos here"** (a
+    screenshot of Home showing the "Add photo" button, right above the
+    embedded calendar). Added a second "Add receipt" entry point,
+    directly on Home, right below "Add photo" -- same job-tagging flow
+    as the Receipts tab (pick a file, a Sheet asks "What job is this
+    for?" with the existing `JobPicker`, uploads via the same
+    `/jobs/{id}/files` endpoint opened up in #65). Kept as its own
+    independent state (`pendingReceipt` etc.), not shared with the
+    "Add photo" button's state right above it or the Receipts page's
+    own copy -- same reasoning as #57's `homePendingPhoto`: these are
+    separate flows that shouldn't interfere with each other.
+    Verified: `tsc --noEmit` clean, production build succeeds, full
+    backend suite passes (53/53, untouched -- frontend-only). **Playwright
+    end-to-end**: confirmed "Add receipt" renders directly below "Add
+    photo" and above the embedded calendar on Home; tapped it, picked a
+    file, confirmed the job-picker sheet opened, picked a job, confirmed
+    a success toast.
