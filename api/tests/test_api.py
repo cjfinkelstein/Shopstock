@@ -261,71 +261,66 @@ class TestLabels:
 
 
 class TestSharedCalendarPermissions:
-    """Everyone can read the shared calendar; only admin + a tech named
-    Ray can write to it (owner request -- see require_calendar_editor)."""
+    """Everyone (any logged-in tech or admin) can read AND write the shared
+    calendar -- editing used to be restricted to admin + one named tech,
+    opened up to everyone by owner request."""
 
     def login_as(self, client, user_id):
         r = client.post("/api/v1/auth/tap", json={"user_id": user_id})
         assert r.status_code == 200, r.text
         return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
-    def test_regular_tech_can_read_but_not_write(self, client, seeded):
+    def test_any_tech_can_create_and_edit(self, client, seeded):
         tech = login_tech(client, seeded)
         r = client.get("/api/v1/calendar", headers=tech)
         assert r.status_code == 200, r.text
 
         r = client.post("/api/v1/calendar", headers=tech,
                          json={"event_date": "2026-10-10", "title": "Pick up supplies"})
-        assert r.status_code == 403, r.text
+        assert r.status_code == 201, r.text
+        event_id = r.json()["id"]
 
-    def test_ray_can_write_other_tech_cannot(self, client, seeded, db_session):
+        r = client.patch(f"/api/v1/calendar/{event_id}", headers=tech, json={"title": "Pick up fixtures"})
+        assert r.status_code == 200, r.text
+        assert r.json()["title"] == "Pick up fixtures"
+
+    def test_a_different_tech_can_edit_someone_elses_entry(self, client, seeded, db_session):
         from app.models import User
 
-        ray = User(name="Ray", role="tech", active=True)
-        db_session.add(ray)
+        tech_a = User(name="Ed", role="tech", active=True)
+        tech_b = User(name="Sam", role="tech", active=True)
+        db_session.add_all([tech_a, tech_b])
         db_session.commit()
-        ray_hdrs = self.login_as(client, ray.id)
+        a_hdrs = self.login_as(client, tech_a.id)
+        b_hdrs = self.login_as(client, tech_b.id)
 
-        r = client.post("/api/v1/calendar", headers=ray_hdrs,
+        r = client.post("/api/v1/calendar", headers=a_hdrs,
                          json={"event_date": "2026-10-10", "title": "Order breakers"})
         assert r.status_code == 201, r.text
         event_id = r.json()["id"]
 
-        r = client.patch(f"/api/v1/calendar/{event_id}", headers=ray_hdrs, json={"done": True})
+        # tech_b (not the creator) can toggle it done
+        r = client.patch(f"/api/v1/calendar/{event_id}", headers=b_hdrs, json={"done": True})
         assert r.status_code == 200, r.text
         assert r.json()["done"] is True
 
-        other_tech = login_tech(client, seeded)
-        r = client.patch(f"/api/v1/calendar/{event_id}", headers=other_tech, json={"done": False})
-        assert r.status_code == 403, r.text
-
-    def test_ray_matched_by_first_name_only(self, client, seeded, db_session):
-        """Regression test: Ray's real account is stored as the full
-        "Raymond Bailey", not just "Ray" -- the match has to be on his
-        first name, not the whole name field."""
-        from app.models import User
-
-        raymond = User(name="Raymond Bailey", role="tech", active=True)
-        db_session.add(raymond)
-        db_session.commit()
-        raymond_hdrs = self.login_as(client, raymond.id)
-
-        r = client.post("/api/v1/calendar", headers=raymond_hdrs,
-                         json={"event_date": "2026-10-10", "title": "Pick up fixtures"})
-        assert r.status_code == 201, r.text
+        # ...and retitle it, and touch anyone's assigned task
+        r = client.patch(f"/api/v1/calendar/{event_id}", headers=b_hdrs, json={"title": "Order breakers (urgent)"})
+        assert r.status_code == 200, r.text
+        assert r.json()["title"] == "Order breakers (urgent)"
 
     def test_assignee_round_trips(self, client, seeded, db_session):
-        """Ray's per-person task list for a date: assignee is a free-text
-        label (not tied to a real User), so it just needs to save and come
-        back unchanged -- no name-matching involved."""
+        """A per-person task list for a date: assignee is a free-text label
+        (not tied to a real User), so it just needs to save and come back
+        unchanged -- no name-matching involved."""
         from app.models import User
 
-        ray = User(name="Ray", role="tech", active=True)
-        db_session.add(ray)
+        tech = User(name="Ed", role="tech", active=True)
+        db_session.add(tech)
         db_session.commit()
-        ray_hdrs = self.login_as(client, ray.id)
+        tech_hdrs = self.login_as(client, tech.id)
 
-        r = client.post("/api/v1/calendar", headers=ray_hdrs, json={
+        r = client.post("/api/v1/calendar", headers=tech_hdrs, json={
             "event_date": "2026-10-10", "title": "Adam", "assignee": "Adam",
             "notes": "Clean truck\nPick up supplies",
         })
@@ -334,50 +329,37 @@ class TestSharedCalendarPermissions:
         assert r.json()["notes"] == "Clean truck\nPick up supplies"
 
         # a regular, unassigned to-do still has assignee == None
-        r = client.get("/api/v1/calendar", headers=ray_hdrs)
+        r = client.get("/api/v1/calendar", headers=tech_hdrs)
         assert r.status_code == 200, r.text
 
-    def test_assignee_can_complete_own_task_only(self, client, seeded, db_session):
-        """A tech can check off their OWN assigned task (clock-out review),
-        but can't retitle it, touch someone else's task, or touch a
-        general to-do -- only the done flag, only on their own row."""
+    def test_any_tech_can_complete_anyones_assigned_task(self, client, seeded, db_session):
+        """A tech can check off, retitle, or otherwise edit ANY assigned
+        task, not just their own -- editing is open to everyone now."""
         from app.models import User
 
-        ray = User(name="Ray", role="tech", active=True)
+        creator = User(name="Ed", role="tech", active=True)
         adam = User(name="Adam", role="tech", active=True)
         other = User(name="Sam", role="tech", active=True)
-        db_session.add_all([ray, adam, other])
+        db_session.add_all([creator, adam, other])
         db_session.commit()
-        ray_hdrs = self.login_as(client, ray.id)
-        adam_hdrs = self.login_as(client, adam.id)
+        creator_hdrs = self.login_as(client, creator.id)
         other_hdrs = self.login_as(client, other.id)
 
-        r = client.post("/api/v1/calendar", headers=ray_hdrs, json={
+        r = client.post("/api/v1/calendar", headers=creator_hdrs, json={
             "event_date": "2026-10-10", "title": "Clean the truck", "assignee": "Adam",
         })
         assert r.status_code == 201, r.text
         task_id = r.json()["id"]
 
-        # Adam can mark his own task done
-        r = client.patch(f"/api/v1/calendar/{task_id}", headers=adam_hdrs, json={"done": True})
+        # a tech who is neither the creator nor the assignee can still
+        # mark it done AND retitle it
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=other_hdrs, json={"done": True})
         assert r.status_code == 200, r.text
         assert r.json()["done"] is True
 
-        # but Adam can't retitle it
-        r = client.patch(f"/api/v1/calendar/{task_id}", headers=adam_hdrs, json={"title": "Something else"})
-        assert r.status_code == 403, r.text
-
-        # a different tech can't touch Adam's task at all
-        r = client.patch(f"/api/v1/calendar/{task_id}", headers=other_hdrs, json={"done": False})
-        assert r.status_code == 403, r.text
-
-        # Adam can't touch a general (unassigned) to-do either
-        r = client.post("/api/v1/calendar", headers=ray_hdrs,
-                         json={"event_date": "2026-10-10", "title": "Office closed"})
-        assert r.status_code == 201, r.text
-        general_id = r.json()["id"]
-        r = client.patch(f"/api/v1/calendar/{general_id}", headers=adam_hdrs, json={"done": True})
-        assert r.status_code == 403, r.text
+        r = client.patch(f"/api/v1/calendar/{task_id}", headers=other_hdrs, json={"title": "Something else"})
+        assert r.status_code == 200, r.text
+        assert r.json()["title"] == "Something else"
 
     def test_admin_can_still_write(self, client, seeded):
         admin = login_admin(client)

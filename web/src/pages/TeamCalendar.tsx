@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api, fmtWhen } from "../api";
-import { useAuth } from "../auth";
 import { ASSIGNEES } from "../calendarAssignees";
 import Icon from "../components/Icon";
 import Sheet from "../components/Sheet";
@@ -41,14 +40,11 @@ function editLine(e: CalendarEvent["edits"][number]): string {
 export default function TeamCalendar({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const toast = useToast();
-  const { user } = useAuth();
-  // Everyone can see the shared calendar; editing it is admin + Ray only
-  // (owner request) -- mirrors require_calendar_editor on the backend, so
-  // this is just hiding affordances a non-editor's requests would 403 on
-  // anyway, not the actual enforcement. Matched on first name since Ray's
-  // account is actually stored as the full "Raymond Bailey".
-  const firstName = user?.name.trim().split(" ")[0]?.toLowerCase();
-  const canEdit = user?.role === "admin" || firstName === "ray" || firstName === "raymond";
+  // Everyone can see AND edit the shared calendar -- editing used to be
+  // admin + one named tech only, opened up to everyone by owner request.
+  // Kept as a named constant (rather than inlining `true`) since it still
+  // reads naturally everywhere below ("canEdit && ...").
+  const canEdit = true;
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -95,10 +91,8 @@ export default function TeamCalendar({ embedded = false }: { embedded?: boolean 
   const selectedItems = selected ? (byDate[selected] ?? []) : [];
   const generalItems = selectedItems.filter((it) => !it.assignee);
   const showAssignments = canEdit || ASSIGNEES.some((name) => selectedItems.some((it) => it.assignee === name));
-  // Anyone with an editor role can toggle any task; a tech who isn't an
-  // editor can only toggle their own name's tasks (mirrors the backend's
-  // require_calendar_editor self-complete exception).
-  const canToggleAssignee = (name: string) => canEdit || firstName === name.toLowerCase();
+  // Everyone can edit now, so anyone can toggle any assignee's task too.
+  const canToggleAssignee = (_name: string) => canEdit;
 
   const openDay = (iso: string) => {
     setSelected(iso);

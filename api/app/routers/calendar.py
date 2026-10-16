@@ -8,34 +8,18 @@ from app.database import get_db
 from app.models import CalendarEvent, CalendarEventEdit, User
 from app.schemas import CalendarEventCreate, CalendarEventEditOut, CalendarEventOut, CalendarEventUpdate
 
-# Any logged-in user (tech or admin) can read -- this is the shared team
-# calendar, not an admin-only tool. Every query here is scoped to
-# visibility="shared" so a tech can never see or touch an admin's private
-# note, even by guessing an id. Writing (add/edit) is narrower -- see
-# require_calendar_editor below.
+# Any logged-in user (tech or admin) can read AND write -- this is the
+# shared team calendar, not an admin-only tool. Every query here is scoped
+# to visibility="shared" so a tech can never see or touch an admin's
+# private note, even by guessing an id. Editing used to be restricted to
+# admin + one named tech (Ray); opened up to everyone by owner request --
+# see git history on this file for the old per-name gate if that ever needs
+# reinstating.
 router = APIRouter(prefix="/calendar", tags=["calendar"], dependencies=[Depends(get_current_user)])
 
 # An admin's own private notes/to-dos on the Login Hours page -- never
 # returned to a tech. Separate prefix, separate admin-only gate.
 admin_router = APIRouter(prefix="/calendar/admin", tags=["calendar"], dependencies=[Depends(require_admin)])
-
-# Everyone can read the shared calendar, but editing it (add/edit/mark done)
-# is admin + Ray only, by owner request -- there's no granular permissions
-# system in this app, so rather than build one for a single named exception,
-# Ray is matched by his first name. His account is actually stored as the
-# full "Raymond Bailey" (confirmed from the live site), so this matches on
-# the first word of the name rather than the whole string -- covers both
-# "Ray" and "Raymond ...". If this needs to extend to more techs later,
-# that's the point to build real per-user permissions instead of adding
-# more names here.
-_CALENDAR_EDITOR_TECH_FIRST_NAMES = {"ray", "raymond"}
-
-
-def require_calendar_editor(user: User = Depends(get_current_user)) -> User:
-    first_name = user.name.strip().split(" ", 1)[0].lower() if user.name else ""
-    if user.role == "admin" or first_name in _CALENDAR_EDITOR_TECH_FIRST_NAMES:
-        return user
-    raise HTTPException(status_code=403, detail="Only admin and Ray can edit the calendar")
 
 
 def _out(e: CalendarEvent) -> CalendarEventOut:
@@ -73,7 +57,7 @@ def list_events(date_from: date | None = None, date_to: date | None = None, db: 
 
 
 @router.post("", response_model=CalendarEventOut, status_code=201)
-def create_event(body: CalendarEventCreate, db: Session = Depends(get_db), user: User = Depends(require_calendar_editor)):
+def create_event(body: CalendarEventCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     e = CalendarEvent(
         event_date=body.event_date, title=body.title, notes=body.notes, created_by=user.id, visibility="shared",
         assignee=body.assignee,
@@ -90,18 +74,6 @@ def update_event(event_id: int, body: CalendarEventUpdate, db: Session = Depends
     e = db.get(CalendarEvent, event_id)
     if not e or e.visibility != "shared":
         raise HTTPException(status_code=404, detail="Not found")
-
-    # Normally editing the shared calendar is admin + Ray only (see
-    # require_calendar_editor). One narrow exception: a tech can check off
-    # their OWN assigned task (and only that -- not retitle it, not touch
-    # anyone else's) at clock-out or on the Team Calendar, so "mark what I
-    # finished today" doesn't require asking Ray to do it for them.
-    first_name = user.name.strip().split(" ", 1)[0].lower() if user.name else ""
-    is_editor = user.role == "admin" or first_name in _CALENDAR_EDITOR_TECH_FIRST_NAMES
-    is_own_task = bool(e.assignee) and e.assignee.strip().lower() == first_name
-    only_toggling_done = body.title is None and body.event_date is None and body.notes is None and body.assignee is None
-    if not is_editor and not (is_own_task and only_toggling_done):
-        raise HTTPException(status_code=403, detail="Only admin and Ray can edit the calendar")
 
     def record(field: str, old, new) -> None:
         db.add(CalendarEventEdit(

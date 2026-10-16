@@ -865,3 +865,36 @@ Each entry: what was decided, and why.
     against a reset item (via the real API, admin role) correctly
     re-established `avg_cost`, `on_hand`, and `total_spent` from zero --
     confirming the reset state doesn't break normal use going forward.
+
+## Opened the shared calendar to everyone (2026-10-16)
+
+61. **"Allow anyone to edit the calendar and add or change it"** --
+    editing the shared Team Calendar was previously admin + one named
+    tech (Ray, matched by first name -- see the old
+    `require_calendar_editor` / `_CALENDAR_EDITOR_TECH_FIRST_NAMES` in
+    `calendar.py`) only, with a narrow self-complete exception letting a
+    tech toggle `done` on just their own assigned task. Removed all of
+    it: `create_event` and `update_event` now only require
+    `get_current_user` -- any logged-in tech or admin can add new
+    to-dos/tasks and fully edit (title, date, notes, done) ANY entry,
+    not just their own. Mirrored on the frontend: `TeamCalendar.tsx`'s
+    `canEdit` is now simply `true` (dropped the now-dead first-name
+    matching and the unused `useAuth` import), so the add/edit
+    affordances that were hidden from everyone but admin/Ray now show
+    for every tech. The admin-only private notes router
+    (`/calendar/admin`, shown on the Login Hours page) is untouched --
+    that's a separate feature, not what was asked. Rewrote
+    `TestSharedCalendarPermissions` to match: a regular tech can create
+    and edit, a *different* regular tech can edit someone else's entry
+    (not just toggle done -- retitle it too), admin can still write; the
+    old Ray-specific and self-complete-only tests are gone since there's
+    nothing left to regress-test.
+    Verified: full backend suite passes (47/47 -- was 48, net -1 test
+    since the old permission-boundary tests collapsed into fewer,
+    broader ones), `tsc --noEmit` clean, production build succeeds. Also
+    verified live against the real API: a completely ordinary tech
+    (never special-cased before) created a to-do, and a second, different
+    ordinary tech toggled it done twice AND retitled it entirely, with
+    both edits correctly attributed to them in the edit history --
+    confirming full edit rights for everyone, not just a self-complete
+    exception.
