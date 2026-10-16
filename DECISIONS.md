@@ -1003,3 +1003,40 @@ Each entry: what was decided, and why.
     tech left) instead of the old hardcoded 3; opened Take Out on an
     item stocked on "Ed's Truck" and confirmed the sheet opens and the
     real truck name appears throughout.
+
+## Added a Receipts tab for job-tagged photos (2026-10-16)
+
+65. **"Create another option to load photos right under the one that
+    says photos and call it receipts... allow it to either take a pic
+    or access its gallery and then ask for what job this is for."**
+    Added a new tech bottom-nav tab, "Receipts" (`file-text` icon),
+    right after "Photos" -- a deliberately separate flow from the
+    existing Photos feature, since receipts need a job tag and
+    shouldn't land in the shared crew photo feed.
+    Reused existing infrastructure instead of building new: the
+    `JobFile` model/table already existed exactly for this (a photo or
+    document attached to a job, base64-encoded, same convention as
+    `Item.image_data`) but its upload endpoint
+    (`POST /jobs/{job_id}/files`) was admin-only. Opened just that one
+    endpoint to any logged-in user -- list/get/delete stay admin-only,
+    since reviewing and managing job files remains an admin job, only
+    adding one is now open to techs. New page `tech/Receipts.tsx`
+    reuses the exact same `readAsDataUrl` + `JobPicker` + upload pattern
+    already used by the admin Job Detail "Photos & Documents" tab, so a
+    receipt uploaded here shows up in the exact same place an admin
+    already looks for job files -- no new admin UI needed. Flow: tap
+    "Add receipt" -> native file picker (no `capture` attribute, so it
+    offers camera or gallery, same convention as every other photo
+    picker in this app) -> a Sheet titled "What job is this for?" with
+    the preview + the existing JobPicker (search, recent jobs, create
+    new) -> uploads on pick.
+    Added `TestJobReceipts`: a tech can upload; a tech still can't list
+    or delete job files (unaffected, admin-only); upload to a
+    nonexistent job 404s.
+    Verified: full backend suite passes (53/53, +3 new), `tsc --noEmit`
+    clean, production build succeeds. **Playwright end-to-end**:
+    confirmed the Receipts tab sits immediately after Photos in the nav
+    order; tapped Add receipt, picked a file, confirmed the job-picker
+    sheet opened, picked a job, confirmed a success toast; then, as
+    admin, opened that job's "Photos & Documents" tab and confirmed the
+    uploaded file (`test_photo.jpg`) actually appears there.

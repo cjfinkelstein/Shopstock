@@ -134,6 +134,48 @@ class TestJobCosting:
         assert r.headers["content-type"].startswith("text/csv")
 
 
+class TestJobReceipts:
+    """A tech can upload a receipt photo straight to a job (the Receipts
+    tab); reviewing/managing job files stays admin-only."""
+
+    TINY_DATA_URL = "data:image/jpeg;base64,/9j/2wCEAAM="
+
+    def test_tech_can_upload_a_receipt(self, client, seeded):
+        tech = login_tech(client, seeded)
+        r = client.post(f"/api/v1/jobs/{seeded['job'].id}/files", headers=tech, json={
+            "kind": "photo", "filename": "receipt.jpg", "mime_type": "image/jpeg",
+            "data": self.TINY_DATA_URL,
+        })
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["job_id"] == seeded["job"].id
+        assert body["uploaded_by_name"] == seeded["tech"].name
+
+    def test_tech_cannot_list_or_delete_job_files(self, client, seeded):
+        """Uploading is open to techs; reviewing/managing the file list is
+        still admin-only -- unaffected by opening the upload endpoint."""
+        tech = login_tech(client, seeded)
+        admin = login_admin(client)
+        r = client.post(f"/api/v1/jobs/{seeded['job'].id}/files", headers=admin, json={
+            "kind": "photo", "filename": "receipt.jpg", "mime_type": "image/jpeg",
+            "data": self.TINY_DATA_URL,
+        })
+        file_id = r.json()["id"]
+
+        r = client.get(f"/api/v1/jobs/{seeded['job'].id}/files", headers=tech)
+        assert r.status_code == 403, r.text
+        r = client.delete(f"/api/v1/jobs/files/{file_id}", headers=tech)
+        assert r.status_code == 403, r.text
+
+    def test_upload_requires_a_real_job(self, client, seeded):
+        tech = login_tech(client, seeded)
+        r = client.post("/api/v1/jobs/999999/files", headers=tech, json={
+            "kind": "photo", "filename": "receipt.jpg", "mime_type": "image/jpeg",
+            "data": self.TINY_DATA_URL,
+        })
+        assert r.status_code == 404, r.text
+
+
 class TestIdempotency:
     """A retried sign-out (same client_ref) must replay, not double-write --
     this is what makes a client-side offline write queue safe to retry."""
