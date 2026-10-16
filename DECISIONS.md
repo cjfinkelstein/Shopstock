@@ -898,3 +898,45 @@ Each entry: what was decided, and why.
     both edits correctly attributed to them in the edit history --
     confirming full edit rights for everyone, not just a self-complete
     exception.
+
+## Follow-up to #61: re-protected Ray's own entries, added delete (2026-10-16)
+
+62. **"Make sure it says who edited anything but still allow Ray to
+    assign tasks to the other techs and dont let any other tech be able
+    to edit what ray writes but allow them to add things and delete
+    anything besides the tasks given by ray."** Three things:
+    - "Says who edited anything" was already true (edit history with
+      `edited_by_name`) and needed no change -- confirmed it still
+      works after this PR's changes.
+    - Carved a narrow exception back out of #61's fully-open editing:
+      an entry Ray created (general to-do or an assigned task) can now
+      only be edited or deleted by Ray himself or an admin.
+      `calendar.py` gained `_is_ray`/`_protected` helpers (the same
+      first-name matching convention as the old, fully-removed
+      `require_calendar_editor` -- "ray"/"raymond", since Ray's real
+      account is "Raymond Bailey") and both `update_event` and the new
+      `delete_event` check it. Everyone else's entries, including each
+      other's, stay fully open, same as #61 -- this only protects Ray's
+      own rows.
+    - There was no delete endpoint at all on the shared calendar before
+      this (only the separate admin-private-notes router had one) --
+      added `DELETE /calendar/{event_id}`, same protection check as
+      update, hard-deletes (matching the existing admin-notes delete's
+      precedent, not a new pattern).
+    Frontend (`TeamCalendar.tsx`): replaced the old name-keyed
+    `canToggleAssignee` with a per-entry `canEditEntry(item)` (checks
+    `item.created_by_name` against Ray, unless the viewer is Ray or
+    admin) used for both the done-toggle and a new per-row delete
+    (trash icon) button on both general to-dos and assignee tasks.
+    Rewrote `TestSharedCalendarPermissions` additions: a regular tech
+    can delete a non-Ray entry; a different regular tech can neither
+    edit nor delete one of Ray's entries (403 both ways); Ray can edit
+    his own; admin can edit and delete Ray's.
+    Verified: full backend suite passes (49/49), `tsc --noEmit` clean,
+    production build succeeds. **Playwright + direct API verification**
+    against the real demo tech named Ray: Ray created a to-do; a
+    different tech (Sam) could see it but its toggle rendered disabled
+    and no delete button rendered for it, and a direct API PATCH/DELETE
+    from Sam against it both returned 403; Ray's own toggle and delete
+    button rendered enabled for Ray. Also reconfirmed edit attribution
+    (`edited_by_name`) still records correctly for an ordinary edit.
