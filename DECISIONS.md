@@ -804,3 +804,35 @@ Each entry: what was decided, and why.
     production build succeeds; skipped a full Playwright re-run since
     #57 already verified the button's click/upload/feed behavior and
     this touches nothing but JSX order.
+
+## One-time go-live cleanup script (2026-10-15)
+
+59. **"Wipe all of the test items and all of the logins and all of the
+    calendar stuff"** -- clarified via follow-up that "logins" meant the
+    clock-in/out history shown on the admin page, not user accounts.
+    Added `api/scripts/wipe_for_golive.py`, a one-time maintenance
+    script (not part of the app, not run automatically) that clears:
+    `clock_events`, `location_pings`, and `login_events` (shift/tap-in
+    history); the entire `items` catalog plus everything that hangs off
+    an item (`stock_levels`, `transactions` -- the ledger); and every
+    `calendar_events` row (with `calendar_event_edits` deleted first,
+    same FK order as migration 0026's hotfix, for the same reason).
+    Deliberately leaves user accounts (admin + all techs), trucks, jobs,
+    vendors, estimates, expenses, and PTO records untouched -- none of
+    those were asked for. `clock_out_photos` and any `estimate_lines`
+    referencing a deleted item are *detached* (their now-dangling FK set
+    to NULL) rather than deleted, since photos and estimates are a
+    separate concern from "test items" and "clock-in history."
+    Defaults to a dry run (prints counts, changes nothing) -- requires
+    `--yes` to actually commit, since this is irreversible and runs
+    directly against the production database.
+    Verified end-to-end against a local copy with realistic data (a real
+    clock-in/out cycle with an attached photo, a calendar task with edit
+    history): dry run showed accurate counts, `--yes` run cleared
+    exactly the right tables, the photo survived with `clock_event_id`
+    set to NULL, users/jobs/trucks/vendors were untouched,
+    `check_consistency.py` still passes on the now-empty ledger, the
+    full backend suite still passes (48/48), and a full Playwright pass
+    over both the tech and admin sides confirmed every page renders a
+    normal empty state instead of crashing (Stock, Timesheet, Photos,
+    admin Dashboard/Items/Activity/Team Calendar/Reports).
