@@ -1060,3 +1060,48 @@ Each entry: what was decided, and why.
     photo" and above the embedded calendar on Home; tapped it, picked a
     file, confirmed the job-picker sheet opened, picked a job, confirmed
     a success toast.
+
+## A CLI way to create an estimate from a scope-of-work document (2026-10-23)
+
+67. **User pasted a full written scope of work (36 duplex outlets, dozens
+    of named light fixtures, panels, breakers, a 400A service...) and
+    asked for it to go into the estimator as a real estimate.** The
+    backend's `POST /estimates` already does exactly this --
+    `_draft_sections_from_scope` routes each scope line into one of
+    APEX's standard phases and tries to match it against the real item
+    catalog -- but the only way to reach it was the admin EstimateWizard,
+    a checklist UI built for picking items one at a time, not pasting an
+    already-written paragraph scope. Added
+    `api/scripts/estimate_from_scope.py`, a CLI that calls the exact same
+    drafting function: reads a scope text file, previews every line
+    (which section, matched-catalog or placeholder, qty/material/labor),
+    and only creates the estimate with `--apply`. Reusable going forward
+    for any future scope document, not a one-off -- takes `--customer`,
+    `--address`, `--job-id`, `--profit-pct`, `--discount-pct`.
+    Important caveat surfaced by testing, not introduced by this change:
+    `_draft_sections_from_scope` is explicitly documented as
+    best-effort -- a scope line that shares no significant word with
+    anything in the catalog is silently dropped (no placeholder line at
+    all), not flagged. Confirmed locally: of 16 scope lines, only 7
+    produced a line at all against the (sparse, 20-item) local demo
+    catalog -- named light fixtures, mini-splits, ERVs, and the service
+    panel/breaker items had nothing to match. Surfaced this plainly
+    before running it for real, since a silently incomplete estimate is
+    far worse than an obviously incomplete one.
+    Delivery note: pasting a large multi-line heredoc or an 8KB+
+    single-line base64 blob into the user's terminal both failed
+    (PowerShell vs. bash confusion on the first attempt, then visible
+    truncation of the giant line on the second) -- landed the script and
+    the scope text (`scripts/data/meor_scope.txt`) through a normal git
+    push + pull instead, the same deploy channel already proven reliable
+    all session, rather than fighting more copy-paste edge cases.
+    Verified: full backend suite passes (53/53, untouched -- pure
+    addition, no router/model changes). Ran the script locally end to
+    end, both dry-run and `--apply`; confirmed via the real API and, in
+    the actual admin Estimates UI with Playwright, that every drafted
+    line (description, qty, material cost, labor cost) is present and
+    editable exactly as the wizard's own output would be -- an innerText
+    read initially showed blank cells, which turned out to be because
+    the line fields are `<input>` elements (whose values aren't part of
+    accessible text content); reading `input_value()` instead confirmed
+    all data is there correctly.
