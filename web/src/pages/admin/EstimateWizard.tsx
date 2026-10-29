@@ -342,6 +342,17 @@ const COMMERCIAL_STEPS: WizardStep[] = [
 // so a wizard-built estimate looks the same shape as every other estimate.
 const SILENT_SECTIONS = ["Demolition", "Miscellaneous"];
 
+// A step whose items so often match its rough-in counterpart 1:1 (same
+// fixture/outlet/switch/equipment names show up in both lists) that it's
+// worth offering to copy those selections over instead of re-checking
+// everything a second time. Target section -> source section to copy from.
+const COPY_FROM_SECTION: Record<string, string> = {
+  "Supply and Install": "Rough-In Electrical Work",
+  "Commercial Outlet Installation": "Commercial Rough-In",
+  "Commercial Switch Installation": "Commercial Rough-In",
+  "Commercial Lighting Installation": "Commercial Rough-In",
+};
+
 type Selections = Record<string, { checked: boolean; qty: string }>;
 type CustomItem = { id: number; name: string; qty: string };
 
@@ -701,33 +712,106 @@ const ITEM_SCOPE_NOTES: Record<string, string> = {
     "Price for the service upgrade will vary from $2,000 to $20,000, depending entirely on BGE's requirements.",
 };
 
+// Reconstructs wizard state (job type, checked boxes, custom lines) from an
+// already-created estimate, so "Edit" can reopen the checklist instead of
+// starting over -- EstimateDetail builds this from the estimate it loaded
+// and passes the pieces in as the initial* props below.
+export function estimateToWizardState(estimate: Estimate): {
+  jobType: "residential" | "commercial";
+  selections: Selections;
+  customItems: Record<number, CustomItem[]>;
+} {
+  const commercialSectionNames = new Set(COMMERCIAL_STEPS.map((s) => s.section));
+  const jobType: "residential" | "commercial" = estimate.sections.some((s) => commercialSectionNames.has(s.name))
+    ? "commercial"
+    : "residential";
+  const steps = jobType === "commercial" ? COMMERCIAL_STEPS : WIZARD_STEPS;
+
+  const selections: Selections = {};
+  const customItems: Record<number, CustomItem[]> = {};
+
+  steps.forEach((step, stepIdx) => {
+    const section = estimate.sections.find((s) => s.name === step.section);
+    if (!section) return;
+    const itemGroup = new Map<string, number>();
+    step.groups.forEach((g, gi) => g.items.forEach((it) => itemGroup.set(it.toLowerCase(), gi)));
+
+    for (const line of section.lines) {
+      let desc = line.description;
+      // The wizard appends a customer-facing caveat to some items' descriptions
+      // (ITEM_SCOPE_NOTES) -- strip it back off so the item still matches.
+      for (const [item, note] of Object.entries(ITEM_SCOPE_NOTES)) {
+        if (desc === `${item} -- ${note}`) {
+          desc = item;
+          break;
+        }
+      }
+      // Auto-drafter-only companion lines (from the scope-of-work CLI/redraft,
+      // never from this wizard) aren't a checklist item at all -- skip them
+      // rather than adding them as a stray custom line.
+      if (desc.startsWith("Rough-in wiring for: ")) continue;
+
+      const gi = itemGroup.get(desc.toLowerCase());
+      if (gi !== undefined) {
+        const canonical = step.groups[gi].items.find((it) => it.toLowerCase() === desc.toLowerCase())!;
+        selections[key(stepIdx, gi, canonical)] = { checked: true, qty: line.qty };
+      } else {
+        customItems[stepIdx] = [...(customItems[stepIdx] ?? []), { id: nextCustomId++, name: desc, qty: line.qty }];
+      }
+    }
+  });
+
+  return { jobType, selections, customItems };
+}
+
 export default function EstimateWizard({
   onClose,
   onCreated,
   jobId,
+  estimateId,
   initialCustomer,
   initialAddress,
+  initialCustomerEmail,
+  initialProfitPct,
+  initialDiscountPct,
+  initialJobType,
+  initialSelections,
+  initialCustomItems,
 }: {
   onClose: () => void;
   onCreated: (e: Estimate) => void;
   /** When opened from a job's page, links the new estimate to that job and
    * pre-fills customer/address from it (still editable on the intro step). */
   jobId?: number;
+  /** When set, this is an existing estimate being re-walked through the
+   * wizard ("Edit") rather than a new one -- finish() saves onto it instead
+   * of creating a new estimate. */
+  estimateId?: number;
   initialCustomer?: string;
   initialAddress?: string;
+  initialCustomerEmail?: string;
+  initialProfitPct?: string;
+  initialDiscountPct?: string;
+  initialJobType?: "residential" | "commercial";
+  initialSelections?: Selections;
+  initialCustomItems?: Record<number, CustomItem[]>;
 }) {
   const toast = useToast();
   const [phase, setPhase] = useState<"intro" | number>("intro"); // "intro" = customer/address screen, else step index
-  const [jobType, setJobType] = useState<"residential" | "commercial">("residential");
+  const [jobType, setJobType] = useState<"residential" | "commercial">(initialJobType ?? "residential");
   const [hasPlans, setHasPlans] = useState<boolean | null>(null);
   const activeSteps = jobType === "commercial" ? COMMERCIAL_STEPS : WIZARD_STEPS;
   const [customer, setCustomer] = useState(initialCustomer ?? "");
   const [address, setAddress] = useState(initialAddress ?? "");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [profitPct, setProfitPct] = useState("20");
-  const [discountPct, setDiscountPct] = useState("0");
-  const [selections, setSelections] = useState<Selections>({});
-  const [customItems, setCustomItems] = useState<Record<number, CustomItem[]>>({});
+  const [customerEmail, setCustomerEmail] = useState(initialCustomerEmail ?? "");
+  const [profitPct, setProfitPct] = useState(initialProfitPct ?? "20");
+  const [discountPct, setDiscountPct] = useState(initialDiscountPct ?? "0");
+  const [selections, setSelections] = useState<Selections>(initialSelections ?? {});
+  // Tracks, per target step index, whether the "copy from rough-in" prompt
+  // has already been answered (accepted or dismissed) so it doesn't nag
+  // again every time the step re-renders.
+  const [copyPromptHandled, setCopyPromptHandled] = useState<Record<number, boolean>>({});
+  const [customItems, setCustomItems] = useState<Record<number, CustomItem[]>>(initialCustomItems ?? {});
   const [customName, setCustomName] = useState("");
   const [customQty, setCustomQty] = useState("1");
   const [saving, setSaving] = useState(false);
@@ -753,6 +837,14 @@ export default function EstimateWizard({
     setCustomQty("1");
   }, [phase]);
 
+  // Residential and commercial steps live at different indices, so a
+  // leftover "already handled" flag from one job type could wrongly
+  // suppress (or wrongly show) the copy prompt after switching -- clear it
+  // whenever jobType changes.
+  useEffect(() => {
+    setCopyPromptHandled({});
+  }, [jobType]);
+
   const toggle = (stepIdx: number, groupIdx: number | "saved", item: string) => {
     const k = key(stepIdx, groupIdx, item);
     setSelections((s) => {
@@ -764,6 +856,37 @@ export default function EstimateWizard({
   const setQty = (stepIdx: number, groupIdx: number | "saved", item: string, qty: string) => {
     const k = key(stepIdx, groupIdx, item);
     setSelections((s) => ({ ...s, [k]: { checked: true, qty } }));
+  };
+
+  // Checks off everything in targetStepIdx that's checked in sourceStepIdx
+  // and shares an item name (case-insensitive) -- carries the same qty over.
+  // Built-in checklist items and "previously added" saved items are both
+  // matched by name; custom free-text items aren't, since there's nothing
+  // reliable to match them against in the target step.
+  const copySelectionsFromStep = (targetStepIdx: number, sourceStepIdx: number) => {
+    const sourceStep = activeSteps[sourceStepIdx];
+    const targetStep = activeSteps[targetStepIdx];
+    const targetItemByName = new Map<string, { groupIdx: number; item: string }>();
+    targetStep.groups.forEach((g, gi) => g.items.forEach((it) => targetItemByName.set(it.toLowerCase(), { groupIdx: gi, item: it })));
+
+    setSelections((s) => {
+      const next = { ...s };
+      sourceStep.groups.forEach((g, gi) => {
+        g.items.forEach((item) => {
+          const sel = s[key(sourceStepIdx, gi, item)];
+          if (!sel?.checked) return;
+          const target = targetItemByName.get(item.toLowerCase());
+          if (target) next[key(targetStepIdx, target.groupIdx, target.item)] = { checked: true, qty: sel.qty };
+        });
+      });
+      for (const saved of savedForStep(sourceStepIdx)) {
+        const sel = s[key(sourceStepIdx, "saved", saved.label)];
+        if (!sel?.checked) continue;
+        const targetSaved = savedForStep(targetStepIdx).find((t) => t.label.toLowerCase() === saved.label.toLowerCase());
+        if (targetSaved) next[key(targetStepIdx, "saved", targetSaved.label)] = { checked: true, qty: sel.qty };
+      }
+      return next;
+    });
   };
 
   const setBreakerQty = (delta: number) => {
@@ -1042,6 +1165,18 @@ export default function EstimateWizard({
   const finish = async () => {
     setSaving(true);
     try {
+      if (estimateId) {
+        const full = await api<Estimate>(`/estimates/${estimateId}`, {
+          method: "PATCH",
+          body: {
+            customer, address, customer_email: customerEmail || null,
+            scope_of_work: buildScopeOfWork(), profit_pct: profitPct, discount_pct: discountPct,
+            sections: buildSections(),
+          },
+        });
+        onCreated(full);
+        return;
+      }
       const est = await api<Estimate>("/estimates", {
         method: "POST",
         body: {
@@ -1055,17 +1190,21 @@ export default function EstimateWizard({
       });
       onCreated(full);
     } catch (e) {
-      toast("error", e instanceof Error ? e.message : "Could not create estimate");
+      toast("error", e instanceof Error ? e.message : `Could not ${estimateId ? "save" : "create"} estimate`);
       setSaving(false);
     }
   };
 
   const stepIdx = typeof phase === "number" ? phase : -1;
   const totalSteps = activeSteps.length;
+  const copySourceSection = stepIdx !== -1 ? COPY_FROM_SECTION[activeSteps[stepIdx]?.section] : undefined;
+  const copySourceIdx = copySourceSection ? activeSteps.findIndex((s) => s.section === copySourceSection) : -1;
+  const showCopyPrompt =
+    stepIdx !== -1 && copySourceIdx !== -1 && selectedCount(copySourceIdx) > 0 && !copyPromptHandled[stepIdx];
 
   return (
     <Sheet
-      title={phase === "intro" ? "New estimate" : `${stepIdx + 1}. ${activeSteps[stepIdx].section}`}
+      title={phase === "intro" ? (estimateId ? "Edit estimate" : "New estimate") : `${stepIdx + 1}. ${activeSteps[stepIdx].section}`}
       subtitle={phase === "intro" ? undefined : `Step ${stepIdx + 2} of ${totalSteps + 1}`}
       onClose={onClose}
     >
@@ -1193,6 +1332,39 @@ export default function EstimateWizard({
             <button type="button" className="btn-secondary w-full" onClick={() => toggleAllForStep(phase)}>
               {allCheckedForStep(phase) ? "Clear all" : "Select all"}
             </button>
+
+            {showCopyPrompt && (
+              <div className="card flex items-center justify-between gap-3 border-brand-500/40 bg-brand-500/5 p-3">
+                <div className="min-w-0">
+                  <p className="text-[13.5px] font-medium">
+                    Use the same items you picked for {activeSteps[copySourceIdx].section}?
+                  </p>
+                  <p className="text-[12px] text-slate-500 dark:text-slate-400">
+                    Checks off everything here that matches, with the same quantities.
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary !px-3 !py-1.5 text-[13px]"
+                    onClick={() => setCopyPromptHandled((h) => ({ ...h, [phase]: true }))}
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary !px-3 !py-1.5 text-[13px]"
+                    onClick={() => {
+                      copySelectionsFromStep(phase, copySourceIdx);
+                      setCopyPromptHandled((h) => ({ ...h, [phase]: true }));
+                    }}
+                  >
+                    Yes
+                  </button>
+                </div>
+              </div>
+            )}
+
             {activeSteps[phase].groups.map((group, groupIdx) => (
               <div key={groupIdx} className="space-y-2.5">
                 {group.intro && (
@@ -1391,7 +1563,7 @@ export default function EstimateWizard({
           ) : stepIdx === totalSteps - 1 ? (
             <button className="btn-primary flex-1" disabled={saving} onClick={finish}>
               {saving ? <Spinner /> : null}
-              Create estimate
+              {estimateId ? "Save changes" : "Create estimate"}
             </button>
           ) : (
             <button className="btn-primary flex-1" onClick={() => setPhase(stepIdx + 1)}>
