@@ -7,6 +7,7 @@ import Sheet from "../../components/Sheet";
 import { ItemThumb, PageLoader, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
 import type { Estimate, EstimateLine, EstimateSection, Item } from "../../types";
+import EstimateWizard, { estimateToWizardState } from "./EstimateWizard";
 
 type EditableLine = {
   key: number; // client-side identity, stable across re-renders even before save
@@ -64,6 +65,7 @@ export default function EstimateDetail() {
   const [results, setResults] = useState<Item[]>([]);
   const [sendOpen, setSendOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const load = useCallback(() => {
     api<Estimate>(`/estimates/${id}`)
@@ -284,6 +286,10 @@ export default function EstimateDetail() {
           >
             <Icon name="download" size={18} />
             Export to Excel
+          </button>
+          <button className="btn-secondary" onClick={() => setWizardOpen(true)}>
+            <Icon name="pencil" size={18} />
+            Edit
           </button>
           <button className="btn-secondary" onClick={remove}>
             <Icon name="trash" size={18} />
@@ -561,6 +567,29 @@ export default function EstimateDetail() {
         {saving ? <Spinner /> : <Icon name="check" size={18} />}
         Save changes
       </button>
+
+      {wizardOpen && estimate && (() => {
+        const w = estimateToWizardState(estimate);
+        return (
+          <EstimateWizard
+            estimateId={estimate.id}
+            initialCustomer={customer}
+            initialAddress={address}
+            initialCustomerEmail={customerEmail}
+            initialProfitPct={profitPct}
+            initialDiscountPct={discountPct}
+            initialJobType={w.jobType}
+            initialSelections={w.selections}
+            initialCustomItems={w.customItems}
+            onClose={() => setWizardOpen(false)}
+            onCreated={() => {
+              setWizardOpen(false);
+              toast("success", "Estimate updated");
+              load();
+            }}
+          />
+        );
+      })()}
 
       {sendOpen && (
         <Sheet title="Send estimate" subtitle={estimate.estimate_number} onClose={() => setSendOpen(false)}>

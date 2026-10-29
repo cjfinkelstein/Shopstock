@@ -712,37 +712,106 @@ const ITEM_SCOPE_NOTES: Record<string, string> = {
     "Price for the service upgrade will vary from $2,000 to $20,000, depending entirely on BGE's requirements.",
 };
 
+// Reconstructs wizard state (job type, checked boxes, custom lines) from an
+// already-created estimate, so "Edit" can reopen the checklist instead of
+// starting over -- EstimateDetail builds this from the estimate it loaded
+// and passes the pieces in as the initial* props below.
+export function estimateToWizardState(estimate: Estimate): {
+  jobType: "residential" | "commercial";
+  selections: Selections;
+  customItems: Record<number, CustomItem[]>;
+} {
+  const commercialSectionNames = new Set(COMMERCIAL_STEPS.map((s) => s.section));
+  const jobType: "residential" | "commercial" = estimate.sections.some((s) => commercialSectionNames.has(s.name))
+    ? "commercial"
+    : "residential";
+  const steps = jobType === "commercial" ? COMMERCIAL_STEPS : WIZARD_STEPS;
+
+  const selections: Selections = {};
+  const customItems: Record<number, CustomItem[]> = {};
+
+  steps.forEach((step, stepIdx) => {
+    const section = estimate.sections.find((s) => s.name === step.section);
+    if (!section) return;
+    const itemGroup = new Map<string, number>();
+    step.groups.forEach((g, gi) => g.items.forEach((it) => itemGroup.set(it.toLowerCase(), gi)));
+
+    for (const line of section.lines) {
+      let desc = line.description;
+      // The wizard appends a customer-facing caveat to some items' descriptions
+      // (ITEM_SCOPE_NOTES) -- strip it back off so the item still matches.
+      for (const [item, note] of Object.entries(ITEM_SCOPE_NOTES)) {
+        if (desc === `${item} -- ${note}`) {
+          desc = item;
+          break;
+        }
+      }
+      // Auto-drafter-only companion lines (from the scope-of-work CLI/redraft,
+      // never from this wizard) aren't a checklist item at all -- skip them
+      // rather than adding them as a stray custom line.
+      if (desc.startsWith("Rough-in wiring for: ")) continue;
+
+      const gi = itemGroup.get(desc.toLowerCase());
+      if (gi !== undefined) {
+        const canonical = step.groups[gi].items.find((it) => it.toLowerCase() === desc.toLowerCase())!;
+        selections[key(stepIdx, gi, canonical)] = { checked: true, qty: line.qty };
+      } else {
+        customItems[stepIdx] = [...(customItems[stepIdx] ?? []), { id: nextCustomId++, name: desc, qty: line.qty }];
+      }
+    }
+  });
+
+  return { jobType, selections, customItems };
+}
+
 export default function EstimateWizard({
   onClose,
   onCreated,
   jobId,
+  estimateId,
   initialCustomer,
   initialAddress,
+  initialCustomerEmail,
+  initialProfitPct,
+  initialDiscountPct,
+  initialJobType,
+  initialSelections,
+  initialCustomItems,
 }: {
   onClose: () => void;
   onCreated: (e: Estimate) => void;
   /** When opened from a job's page, links the new estimate to that job and
    * pre-fills customer/address from it (still editable on the intro step). */
   jobId?: number;
+  /** When set, this is an existing estimate being re-walked through the
+   * wizard ("Edit") rather than a new one -- finish() saves onto it instead
+   * of creating a new estimate. */
+  estimateId?: number;
   initialCustomer?: string;
   initialAddress?: string;
+  initialCustomerEmail?: string;
+  initialProfitPct?: string;
+  initialDiscountPct?: string;
+  initialJobType?: "residential" | "commercial";
+  initialSelections?: Selections;
+  initialCustomItems?: Record<number, CustomItem[]>;
 }) {
   const toast = useToast();
   const [phase, setPhase] = useState<"intro" | number>("intro"); // "intro" = customer/address screen, else step index
-  const [jobType, setJobType] = useState<"residential" | "commercial">("residential");
+  const [jobType, setJobType] = useState<"residential" | "commercial">(initialJobType ?? "residential");
   const [hasPlans, setHasPlans] = useState<boolean | null>(null);
   const activeSteps = jobType === "commercial" ? COMMERCIAL_STEPS : WIZARD_STEPS;
   const [customer, setCustomer] = useState(initialCustomer ?? "");
   const [address, setAddress] = useState(initialAddress ?? "");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [profitPct, setProfitPct] = useState("20");
-  const [discountPct, setDiscountPct] = useState("0");
-  const [selections, setSelections] = useState<Selections>({});
+  const [customerEmail, setCustomerEmail] = useState(initialCustomerEmail ?? "");
+  const [profitPct, setProfitPct] = useState(initialProfitPct ?? "20");
+  const [discountPct, setDiscountPct] = useState(initialDiscountPct ?? "0");
+  const [selections, setSelections] = useState<Selections>(initialSelections ?? {});
   // Tracks, per target step index, whether the "copy from rough-in" prompt
   // has already been answered (accepted or dismissed) so it doesn't nag
   // again every time the step re-renders.
   const [copyPromptHandled, setCopyPromptHandled] = useState<Record<number, boolean>>({});
-  const [customItems, setCustomItems] = useState<Record<number, CustomItem[]>>({});
+  const [customItems, setCustomItems] = useState<Record<number, CustomItem[]>>(initialCustomItems ?? {});
   const [customName, setCustomName] = useState("");
   const [customQty, setCustomQty] = useState("1");
   const [saving, setSaving] = useState(false);
@@ -1096,6 +1165,18 @@ export default function EstimateWizard({
   const finish = async () => {
     setSaving(true);
     try {
+      if (estimateId) {
+        const full = await api<Estimate>(`/estimates/${estimateId}`, {
+          method: "PATCH",
+          body: {
+            customer, address, customer_email: customerEmail || null,
+            scope_of_work: buildScopeOfWork(), profit_pct: profitPct, discount_pct: discountPct,
+            sections: buildSections(),
+          },
+        });
+        onCreated(full);
+        return;
+      }
       const est = await api<Estimate>("/estimates", {
         method: "POST",
         body: {
@@ -1109,7 +1190,7 @@ export default function EstimateWizard({
       });
       onCreated(full);
     } catch (e) {
-      toast("error", e instanceof Error ? e.message : "Could not create estimate");
+      toast("error", e instanceof Error ? e.message : `Could not ${estimateId ? "save" : "create"} estimate`);
       setSaving(false);
     }
   };
@@ -1123,7 +1204,7 @@ export default function EstimateWizard({
 
   return (
     <Sheet
-      title={phase === "intro" ? "New estimate" : `${stepIdx + 1}. ${activeSteps[stepIdx].section}`}
+      title={phase === "intro" ? (estimateId ? "Edit estimate" : "New estimate") : `${stepIdx + 1}. ${activeSteps[stepIdx].section}`}
       subtitle={phase === "intro" ? undefined : `Step ${stepIdx + 2} of ${totalSteps + 1}`}
       onClose={onClose}
     >
@@ -1482,7 +1563,7 @@ export default function EstimateWizard({
           ) : stepIdx === totalSteps - 1 ? (
             <button className="btn-primary flex-1" disabled={saving} onClick={finish}>
               {saving ? <Spinner /> : null}
-              Create estimate
+              {estimateId ? "Save changes" : "Create estimate"}
             </button>
           ) : (
             <button className="btn-primary flex-1" onClick={() => setPhase(stepIdx + 1)}>
