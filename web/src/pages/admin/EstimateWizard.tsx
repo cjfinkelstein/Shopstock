@@ -460,7 +460,7 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
   'New 6" Recessed Lights': { material: "30.00", labor: "40" }, // was $25.74 (real invoice) -- spreadsheet wins
   "Smoke Detectors": { material: "50.00", labor: "40" }, // was $32.74 (Home Depot) -- spreadsheet wins
   "Combination CO/Smoke Detectors": { material: "75.00", labor: "40" }, // was $80.47 (Home Depot) -- spreadsheet wins
-  "Exhaust Fans": { material: "40", labor: "50" }, // Gluck (2707 Maurleen Ct) spreadsheet -- was $150/$40 (Zakem)
+  "Exhaust Fans": { material: "200", labor: "50" }, // CJ's updated price -- was $40 (Gluck spreadsheet)
   // GFCI Receptacle ($20.04) + Weatherproof In-Use Cover ($8.91) -- the two
   // real inventory SKUs that together make a complete waterproof GFCI.
   "Waterproof GFCI Outlets": { material: "28.95", labor: "40" },
