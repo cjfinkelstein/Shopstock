@@ -344,6 +344,10 @@ class Estimate(TimestampMixin, Base):
     # Set exactly once, only by the customer's public approve/decline click --
     # never reused from updated_at, which any later internal edit would touch.
     responded_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # The uploaded plan PDF itself (base64 data: URL, same convention as
+    # Item.image_data), kept so "Apply code-minimum symbols" can re-run the
+    # AI reading on demand without the admin re-uploading the file.
+    plan_pdf_data: Mapped[str | None] = mapped_column(Text)
 
     sections: Mapped[list["EstimateSection"]] = relationship(
         back_populates="estimate", cascade="all, delete-orphan", order_by="EstimateSection.sort_order")
