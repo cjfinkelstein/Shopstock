@@ -347,6 +347,8 @@ class Estimate(TimestampMixin, Base):
 
     sections: Mapped[list["EstimateSection"]] = relationship(
         back_populates="estimate", cascade="all, delete-orphan", order_by="EstimateSection.sort_order")
+    plan_pages: Mapped[list["EstimatePlanPage"]] = relationship(
+        back_populates="estimate", cascade="all, delete-orphan")
     creator: Mapped["User | None"] = relationship()
     job: Mapped["Job | None"] = relationship()
 
@@ -381,6 +383,47 @@ class EstimateLine(TimestampMixin, Base):
     sort_order: Mapped[int] = mapped_column(default=0, nullable=False)
 
     section: Mapped[EstimateSection] = relationship(back_populates="lines")
+    item: Mapped["Item | None"] = relationship()
+
+
+class EstimatePlanPage(TimestampMixin, Base):
+    """One rendered page of an uploaded plan PDF, attached to an estimate so
+    it can be marked up with electrical symbols (see EstimatePlanMarker) and
+    reopened later. image_data follows the same base64 data: URL convention
+    as Item.image_data -- no separate file-storage service for a shop this
+    size."""
+
+    __tablename__ = "estimate_plan_pages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    estimate_id: Mapped[int] = mapped_column(ForeignKey("estimates.id"), nullable=False, index=True)
+    page_number: Mapped[int] = mapped_column(nullable=False)
+    image_data: Mapped[str] = mapped_column(Text, nullable=False)
+
+    estimate: Mapped["Estimate"] = relationship(back_populates="plan_pages")
+    markers: Mapped[list["EstimatePlanMarker"]] = relationship(
+        back_populates="page", cascade="all, delete-orphan", order_by="EstimatePlanMarker.id")
+
+
+class EstimatePlanMarker(TimestampMixin, Base):
+    """One placed electrical symbol pin on a plan page. x/y are percent
+    offsets (0-100) from the page image's top-left, so a pin stays in the
+    right spot regardless of display size. item_id links it to a real
+    catalog item for pricing once matched (null until the admin picks one);
+    symbol_type always drives the pin's icon/color, matched or not."""
+
+    __tablename__ = "estimate_plan_markers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_page_id: Mapped[int] = mapped_column(ForeignKey("estimate_plan_pages.id"), nullable=False, index=True)
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("items.id"))
+    symbol_type: Mapped[str] = mapped_column(String(10), nullable=False)  # outlet|light|fan|switch|smoke|panel
+    label: Mapped[str] = mapped_column(String(300), nullable=False)
+    qty: Mapped[Decimal] = mapped_column(Num(12, 2), default=Decimal("1"), nullable=False)
+    x: Mapped[Decimal] = mapped_column(Num(5, 2), nullable=False)
+    y: Mapped[Decimal] = mapped_column(Num(5, 2), nullable=False)
+
+    page: Mapped["EstimatePlanPage"] = relationship(back_populates="markers")
     item: Mapped["Item | None"] = relationship()
 
 

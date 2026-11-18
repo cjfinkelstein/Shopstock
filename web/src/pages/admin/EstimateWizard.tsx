@@ -6,6 +6,7 @@ import Sheet from "../../components/Sheet";
 import { Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
 import type { ChecklistItem, Estimate, PlanAnalyzeResult } from "../../types";
+import PlanMarkupSheet from "./PlanMarkupSheet";
 
 /** Checklists lifted straight from "APEX Estimating Spreadsheet 2026" --
  * same section names, same intro sentences, same fixture lists, in the same
@@ -828,6 +829,14 @@ export default function EstimateWizard({
   const [analyzingPlan, setAnalyzingPlan] = useState(false);
   const [planResult, setPlanResult] = useState<PlanAnalyzeResult | null>(null);
   const planFileInput = useRef<HTMLInputElement>(null);
+  // Plan markup ("mark up a plan" button) creates its own draft estimate as
+  // soon as it's opened, since pins need a real estimate_id to attach to --
+  // finish() then PATCHes that same draft instead of creating a new one,
+  // same as editing an existing estimate (estimateId prop) does.
+  const [draftEstimateId, setDraftEstimateId] = useState<number | null>(null);
+  const [planMarkupOpen, setPlanMarkupOpen] = useState(false);
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  const effectiveEstimateId = estimateId ?? draftEstimateId ?? undefined;
 
   // Anything typed into "Not on the list?" on a past estimate lands here,
   // so it shows up as a normal checkbox from then on instead of needing to
@@ -1071,6 +1080,31 @@ export default function EstimateWizard({
     }
   };
 
+  // "Mark up a plan" places real catalog-matched line items by clicking
+  // directly on the plan, so it needs a real estimate to attach pins to --
+  // unlike the checklist/import-from-plan-sheet paths, which only build up
+  // in-memory state until finish(). Reuses the same draft across repeat
+  // clicks instead of creating a new one every time.
+  const openPlanMarkup = async () => {
+    if (draftEstimateId) {
+      setPlanMarkupOpen(true);
+      return;
+    }
+    setCreatingDraft(true);
+    try {
+      const est = await api<Estimate>("/estimates", {
+        method: "POST",
+        body: { job_id: jobId, customer, address, customer_email: customerEmail || undefined, scope_of_work: "", profit_pct: profitPct, discount_pct: discountPct },
+      });
+      setDraftEstimateId(est.id);
+      setPlanMarkupOpen(true);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not start the plan markup");
+    } finally {
+      setCreatingDraft(false);
+    }
+  };
+
   const costFor = (item: string, step: WizardStep) => {
     const sectionOverrides = ITEM_COST_OVERRIDES[step.section];
     // Exact match first (cheap, common case), then case/whitespace-insensitive
@@ -1174,8 +1208,12 @@ export default function EstimateWizard({
   const finish = async () => {
     setSaving(true);
     try {
-      if (estimateId) {
-        const full = await api<Estimate>(`/estimates/${estimateId}`, {
+      // effectiveEstimateId also covers a draft created by "Mark up a plan"
+      // that was then cancelled before anything was applied to it -- safe to
+      // PATCH since no plan-markup lines exist on it yet (applying always
+      // closes the wizard immediately, so finish() can't run after that).
+      if (effectiveEstimateId) {
+        const full = await api<Estimate>(`/estimates/${effectiveEstimateId}`, {
           method: "PATCH",
           body: {
             customer, address, customer_email: customerEmail || null,
@@ -1199,7 +1237,7 @@ export default function EstimateWizard({
       });
       onCreated(full);
     } catch (e) {
-      toast("error", e instanceof Error ? e.message : `Could not ${estimateId ? "save" : "create"} estimate`);
+      toast("error", e instanceof Error ? e.message : `Could not ${effectiveEstimateId ? "save" : "create"} estimate`);
       setSaving(false);
     }
   };
@@ -1301,6 +1339,21 @@ export default function EstimateWizard({
                 </p>
               </div>
             )}
+            <div>
+              <button
+                type="button"
+                className="btn-secondary w-full"
+                disabled={creatingDraft}
+                onClick={openPlanMarkup}
+              >
+                {creatingDraft ? <Spinner /> : <Icon name="pencil" size={16} />}
+                {creatingDraft ? "Starting…" : "Mark up a plan"}
+              </button>
+              <p className="mt-1.5 text-[12px] text-slate-400 dark:text-slate-500">
+                Upload a plan PDF, click symbols directly onto it, match them to real catalog items, and create
+                the estimate from exactly what you placed -- skips the checklist below.
+              </p>
+            </div>
             <label className="block">
               <span className="label">Customer</span>
               <input className="input" value={customer} onChange={(e) => setCustomer(e.target.value)} autoFocus />
@@ -1572,7 +1625,7 @@ export default function EstimateWizard({
           ) : stepIdx === totalSteps - 1 ? (
             <button className="btn-primary flex-1" disabled={saving} onClick={finish}>
               {saving ? <Spinner /> : null}
-              {estimateId ? "Save changes" : "Create estimate"}
+              {effectiveEstimateId ? "Save changes" : "Create estimate"}
             </button>
           ) : (
             <button className="btn-primary flex-1" onClick={() => setPhase(stepIdx + 1)}>
@@ -1582,6 +1635,17 @@ export default function EstimateWizard({
           )}
         </div>
       </div>
+
+      {planMarkupOpen && draftEstimateId && (
+        <PlanMarkupSheet
+          estimateId={draftEstimateId}
+          onClose={() => setPlanMarkupOpen(false)}
+          onApplied={(est) => {
+            setPlanMarkupOpen(false);
+            onCreated(est);
+          }}
+        />
+      )}
     </Sheet>
   );
 }

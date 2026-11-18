@@ -167,3 +167,96 @@ def decode_pdf_data_url(data_url: str) -> bytes:
     if "," in data_url:
         data_url = data_url.split(",", 1)[1]
     return base64.b64decode(data_url)
+
+
+_MARKER_TYPES = ["outlet", "light", "fan", "switch", "smoke", "panel"]
+
+_MARKER_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "confidence_note": {
+            "type": "string",
+            "description": (
+                "One or two plain-language sentences for a non-technical contractor: that "
+                "this is a code-minimum SUGGESTED layout (not a real symbol count, since "
+                "architectural plans don't show outlets/switches/lights), and to review "
+                "placement before pricing a job from it."
+            ),
+        },
+        "markers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "page": {"type": "integer", "description": "1-indexed page number this marker belongs to"},
+                    "type": {"type": "string", "enum": _MARKER_TYPES},
+                    "label": {"type": "string", "description": "short description including the room"},
+                    "qty": {"type": "number"},
+                    "x": {"type": "number", "description": "percent (0-100) from the left edge of that page"},
+                    "y": {"type": "number", "description": "percent (0-100) from the top edge of that page"},
+                },
+                "required": ["page", "type", "label", "qty", "x", "y"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["confidence_note", "markers"],
+    "additionalProperties": False,
+}
+
+_MARKER_PROMPT = """You are helping an electrical contractor mark up a residential architectural \
+plan with a code-minimum electrical layout -- this plan shows room layout and dimensions only, \
+with no electrical symbols or legend, so you are proposing typical IRC/NEC residential rough-in \
+coverage per room, not reading real fixture counts.
+
+For every page that is a floor plan (skip cover sheets, schedules, sections, and detail pages -- \
+return no markers for those), identify each room and propose: duplex outlets at standard wall \
+spacing, GFCI outlets at kitchen counters/bathrooms/garage/exterior/laundry, a switched light \
+fixture for every room/hallway/stairway at minimum, exhaust fans in bathrooms without a window, \
+switches for each fixture, combo CO/smoke detectors per code (each bedroom, outside each sleeping \
+area, each level), and any visible panel/meter/equipment (water heater, HVAC, sump pump, garage \
+door opener).
+
+Group identical items in one room into a single marker with the right qty, rather than one marker \
+per physical unit (e.g. one marker "6 duplex outlets, living room" with qty 6, not six separate \
+markers). Keep each page's list focused -- roughly 10-30 markers per floor plan page, not one per \
+inch of wall.
+
+Place x/y reading the room's position directly from that page's own image (0,0 is that page's \
+top-left corner, 100,100 its bottom-right)."""
+
+
+def propose_plan_markers(pdf_base64: str) -> dict:
+    """Vision call that reads a full plan PDF and proposes a code-minimum
+    electrical symbol layout per page -- see analyze_plan_sheet's module
+    docstring for why this is framed as a suggestion, not a reading: an
+    architectural plan has no electrical symbols to actually count."""
+    if not settings.anthropic_api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY is not configured")
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    response = client.messages.create(
+        model="claude-opus-5",
+        max_tokens=8000,
+        output_config={"format": {"type": "json_schema", "schema": _MARKER_RESPONSE_SCHEMA}},
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_base64},
+                    },
+                    {"type": "text", "text": _MARKER_PROMPT},
+                ],
+            }
+        ],
+    )
+
+    if response.stop_reason == "refusal":
+        raise RuntimeError("The AI declined to read this file")
+
+    text = next((b.text for b in response.content if b.type == "text"), None)
+    if not text:
+        raise RuntimeError("No response from the AI")
+    return json.loads(text)

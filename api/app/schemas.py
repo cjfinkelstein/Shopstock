@@ -762,6 +762,58 @@ class PlanAnalyzeOut(BaseModel):
     items: list[PlanAnalyzeItem]
 
 
+# ---------- Plan markup (spatial pins on an uploaded plan) ----------
+
+class PlanUploadIn(BaseModel):
+    filename: str
+    data: str  # data: URL, base64 PDF
+
+
+class PlanMarkerOut(BaseModel):
+    id: int
+    plan_page_id: int
+    item_id: int | None
+    item_name: str | None = None
+    item_sku: str | None = None
+    symbol_type: str
+    label: str
+    qty: Decimal
+    x: Decimal
+    y: Decimal
+
+
+class PlanPageOut(BaseModel):
+    id: int
+    page_number: int
+    image_data: str
+    markers: list[PlanMarkerOut] = []
+
+
+class PlanOut(BaseModel):
+    pages: list[PlanPageOut]
+    confidence_note: str | None = None
+
+
+class PlanMarkerIn(BaseModel):
+    plan_page_id: int
+    symbol_type: str = Field(pattern="^(outlet|light|fan|switch|smoke|panel)$")
+    label: str
+    qty: Decimal = Decimal("1")
+    x: Decimal
+    y: Decimal
+    item_id: int | None = None
+
+
+class PlanMarkerUpdate(BaseModel):
+    symbol_type: str | None = Field(default=None, pattern="^(outlet|light|fan|switch|smoke|panel)$")
+    label: str | None = None
+    qty: Decimal | None = None
+    x: Decimal | None = None
+    y: Decimal | None = None
+    item_id: int | None = None
+    clear_item: bool = False
+
+
 # ---------- AI assistant ----------
 
 class AssistantMessage(BaseModel):
