@@ -116,11 +116,19 @@ const WIZARD_STEPS: WizardStep[] = [
     defaultLabor: "40",
     groups: [
       {
+        // Every fixture Rough-In offers, plus this step's own extras (Linear
+        // Closet Lights, Pantry Lights) -- so anything checked in Rough-In
+        // has a same-named match here for the copy prompt, and everything
+        // Rough-In can wire for is also pickable as a customer-supplied
+        // fixture, not just this step's original narrower subset.
         intro: "Install the following customer-supplied fixtures:",
         items: [
-          "Chandeliers", "Pendant Lights", "Linear Closet Lights", "Basement Lights", "Exterior Lights",
-          "Ceiling Fans", "Vanity Lights", "Reading Lights", "Pantry Lights", "Under Cabinet Lights",
-          "Baseboard Heaters", "Wall Sconces",
+          "Recessed Lights", "Chandeliers", "Pendant Lights", "Exterior Light", "Exterior Floodlights",
+          "Basement Lights", "Crawl Space Lights", "Vanity Lights", "Exhaust Fans", "Reading Lights",
+          "Tub Pendant", "Ceiling Fans", "Closet Lights", "Linear Closet Lights", "Pantry Lights",
+          "Combination CO/Smoke Detectors", "Smoke Detectors", "Under Cabinet Lights", "Baseboard Heaters",
+          "Wall Sconces", "Emergency Lights", "EXIT Lights", "Combo EXIT/Emergency Lights", "2x2 Lights",
+          "2x4 Lights",
         ],
       },
     ],
