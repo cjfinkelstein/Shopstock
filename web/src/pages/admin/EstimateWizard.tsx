@@ -348,6 +348,7 @@ const SILENT_SECTIONS = ["Demolition", "Miscellaneous"];
 // everything a second time. Target section -> source section to copy from.
 const COPY_FROM_SECTION: Record<string, string> = {
   "Supply and Install": "Rough-In Electrical Work",
+  "Install Customer-Supplied Fixtures": "Rough-In Electrical Work",
   "Commercial Outlet Installation": "Commercial Rough-In",
   "Commercial Switch Installation": "Commercial Rough-In",
   "Commercial Lighting Installation": "Commercial Rough-In",
