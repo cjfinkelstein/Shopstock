@@ -1,5 +1,6 @@
 import base64
 import io
+import logging
 import re
 import secrets
 from pathlib import Path
@@ -29,6 +30,7 @@ from app.services.mailer import send_estimate_email
 from app.services.plan_analysis import analyze_plan_sheet, decode_pdf_data_url, propose_plan_markers
 
 router = APIRouter(prefix="/estimates", tags=["estimates"], dependencies=[Depends(require_admin)])
+logger = logging.getLogger(__name__)
 
 
 # Declared before the "/{estimate_id}" routes below so "checklist-items"
@@ -621,6 +623,7 @@ def auto_layout_plan(estimate_id: int, db: Session = Depends(get_db)):
     try:
         result = propose_plan_markers(base64.b64encode(decode_pdf_data_url(estimate.plan_pdf_data)).decode())
     except Exception as e:
+        logger.exception("propose_plan_markers failed for estimate %s", estimate_id)
         raise HTTPException(status_code=502, detail=f"The code-layout reading failed: {e}")
 
     for page in pages:
