@@ -571,11 +571,11 @@ def _serialize_plan(pages: list[EstimatePlanPage], confidence_note: str | None =
 
 @router.post("/{estimate_id}/plan/upload", response_model=PlanOut)
 def upload_plan(estimate_id: int, body: PlanUploadIn, db: Session = Depends(get_db)):
-    """Renders every page of an uploaded plan PDF to an image and asks the AI
-    for a code-minimum electrical layout per page (see plan_analysis's
-    propose_plan_markers -- a suggestion, never a real reading, since an
-    architectural plan has no electrical symbols to actually count).
-    Replaces any plan already on this estimate."""
+    """Renders every page of an uploaded plan PDF to an image and stores the
+    PDF itself for the "Apply code-minimum symbols" button below to re-read
+    on demand. Replaces any plan already on this estimate. Does NOT place
+    any symbols by itself -- that's a separate, explicit step so the admin
+    sees the blank plan first and chooses when to run the AI reading."""
     estimate = _get_or_404(db, estimate_id)
     for page in list(_get_plan_pages(db, estimate_id)):
         db.delete(page)
@@ -587,31 +587,49 @@ def upload_plan(estimate_id: int, body: PlanUploadIn, db: Session = Depends(get_
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read that PDF")
 
-    pages: list[EstimatePlanPage] = []
     for i, pdf_page in enumerate(doc, start=1):
         zoom = min(2200 / pdf_page.rect.width, 3)
         pix = pdf_page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
         image_data = "data:image/png;base64," + base64.b64encode(pix.tobytes("png")).decode()
-        page = EstimatePlanPage(estimate_id=estimate.id, page_number=i, image_data=image_data)
-        db.add(page)
-        pages.append(page)
+        db.add(EstimatePlanPage(estimate_id=estimate.id, page_number=i, image_data=image_data))
+
+    estimate.plan_pdf_data = body.data
+    db.commit()
+    return _serialize_plan(_get_plan_pages(db, estimate_id))
+
+
+@router.get("/{estimate_id}/plan", response_model=PlanOut)
+def get_plan(estimate_id: int, db: Session = Depends(get_db)):
+    _get_or_404(db, estimate_id)
+    return _serialize_plan(_get_plan_pages(db, estimate_id))
+
+
+@router.post("/{estimate_id}/plan/auto-layout", response_model=PlanOut)
+def auto_layout_plan(estimate_id: int, db: Session = Depends(get_db)):
+    """Asks the AI for a code-minimum electrical layout per page (see
+    plan_analysis's propose_plan_markers -- a suggestion, never a real
+    reading, since an architectural plan has no electrical symbols to
+    actually count) and replaces every current marker on this plan with
+    the result, so it's safe to click again for a clean re-read."""
+    estimate = _get_or_404(db, estimate_id)
+    if not estimate.plan_pdf_data:
+        raise HTTPException(status_code=400, detail="Upload a plan first.")
+    pages = _get_plan_pages(db, estimate_id)
+    if not pages:
+        raise HTTPException(status_code=400, detail="Upload a plan first.")
+
+    try:
+        result = propose_plan_markers(base64.b64encode(decode_pdf_data_url(estimate.plan_pdf_data)).decode())
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"The code-layout reading failed: {e}")
+
+    for page in pages:
+        for marker in list(page.markers):
+            db.delete(marker)
     db.flush()
 
-    confidence_note = None
-    markers_result: list[dict] = []
-    try:
-        result = propose_plan_markers(base64.b64encode(pdf_bytes).decode())
-        confidence_note = result.get("confidence_note")
-        markers_result = result.get("markers", [])
-    except Exception as e:
-        # Keep the rendered pages either way -- an AI hiccup shouldn't lose
-        # the upload. The admin can still mark the plan up by hand, and
-        # confidence_note surfaces what happened instead of silently
-        # returning an empty, unexplained layout.
-        confidence_note = f"Pages uploaded, but the automatic code-layout reading failed ({e}) -- mark up this plan by hand below."
-
     pages_by_number = {p.page_number: p for p in pages}
-    for marker_in in markers_result:
+    for marker_in in result.get("markers", []):
         page = pages_by_number.get(int(marker_in.get("page") or 0))
         symbol_type = marker_in.get("type")
         if not page or symbol_type not in PLAN_SYMBOL_LABOR_DEFAULT:
@@ -627,13 +645,7 @@ def upload_plan(estimate_id: int, body: PlanUploadIn, db: Session = Depends(get_
             label=str(marker_in.get("label") or symbol_type)[:300], qty=qty, x=x, y=y,
         ))
     db.commit()
-    return _serialize_plan(_get_plan_pages(db, estimate_id), confidence_note)
-
-
-@router.get("/{estimate_id}/plan", response_model=PlanOut)
-def get_plan(estimate_id: int, db: Session = Depends(get_db)):
-    _get_or_404(db, estimate_id)
-    return _serialize_plan(_get_plan_pages(db, estimate_id))
+    return _serialize_plan(_get_plan_pages(db, estimate_id), result.get("confidence_note"))
 
 
 @router.post("/{estimate_id}/plan/markers", response_model=PlanMarkerOut, status_code=201)

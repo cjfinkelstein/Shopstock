@@ -37,6 +37,7 @@ export default function PlanMarkupSheet({
   const [itemSearch, setItemSearch] = useState("");
   const [itemResults, setItemResults] = useState<Item[]>([]);
   const [applying, setApplying] = useState(false);
+  const [autoLayoutRunning, setAutoLayoutRunning] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -90,6 +91,20 @@ export default function PlanMarkupSheet({
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
+    }
+  };
+
+  const runAutoLayout = async () => {
+    setAutoLayoutRunning(true);
+    try {
+      const p = await api<Plan>(`/estimates/${estimateId}/plan/auto-layout`, { method: "POST" });
+      setPlan(p);
+      const count = p.pages.reduce((n, pg) => n + pg.markers.length, 0);
+      toast("success", `${count} code-minimum symbol${count === 1 ? "" : "s"} placed -- review and edit below`);
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not read the plan for a code layout");
+    } finally {
+      setAutoLayoutRunning(false);
     }
   };
 
@@ -217,7 +232,7 @@ export default function PlanMarkupSheet({
           >
             <Icon name="upload" size={28} className="text-slate-300 dark:text-slate-600" />
             <p className="text-[14px] text-slate-500 dark:text-slate-400">
-              Drag a plan PDF here, or upload one. Each page is read for a code-minimum electrical layout automatically.
+              Drag a plan PDF here, or upload one. You'll be able to apply a code-minimum layout automatically, then edit it by hand.
             </p>
             <input ref={fileInput} type="file" accept="application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
             <button className="btn-primary" disabled={uploading} onClick={() => fileInput.current?.click()}>
@@ -228,6 +243,18 @@ export default function PlanMarkupSheet({
         ) : (
           <div className="flex min-h-0 flex-1 flex-col md:flex-row">
             <div className="flex min-h-0 flex-1 flex-col p-4">
+              <div className="mb-2.5 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 p-3 dark:border-brand-500/30 dark:bg-brand-500/10">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold">Apply code-minimum symbols</p>
+                  <p className="text-[11.5px] text-slate-500 dark:text-slate-400">
+                    Reads every page and places a starting layout per room -- review and edit it after.
+                  </p>
+                </div>
+                <button className="btn-primary !min-h-[36px] shrink-0 px-3 text-[12.5px]" disabled={autoLayoutRunning} onClick={runAutoLayout}>
+                  {autoLayoutRunning ? <Spinner /> : <Icon name="zap" size={14} />}
+                  {autoLayoutRunning ? "Reading…" : "Apply code-minimum symbols"}
+                </button>
+              </div>
               <div className="mb-2.5 flex flex-wrap items-center gap-2">
                 {plan.pages.map((p) => (
                   <button
