@@ -1,0 +1,128 @@
+Rough-in for 1 combo CO/smoke detector, basement level, hardwired interconnected
+Rough-in for 1 GFCI-protected receptacle for the sump pump, basement
+Rough-in for 1 vanity light, proposed basement bath
+Rough-in for 1 GFCI outlet at vanity, proposed basement bath
+Rough-in for 1 exhaust fan, proposed basement bath
+Rough-in for 1 switched ceiling light, proposed basement utility/laundry room
+Rough-in for 1 dedicated 20A laundry GFCI receptacle
+Rough-in for 1 washer outlet
+Rough-in for 1 dryer outlet, 240V
+Rough-in for 1 water heater connection point (verify gas vs. electric)
+Rough-in for 1 switched stairway light with 3-way switches, basement stairs
+Rough-in for 6 duplex outlets, AFCI protected, living room
+Rough-in for 1 switched ceiling light or fan, living room
+Rough-in for 1 chandelier, dining room (tray ceiling)
+Rough-in for 5 duplex outlets, AFCI protected, dining room
+Rough-in for 6 small-appliance-circuit counter outlets, kitchen (2 dedicated 20A circuits)
+Rough-in for 1 dishwasher outlet
+Rough-in for 1 garbage disposal outlet
+Rough-in for 1 microwave outlet
+Rough-in for 1 range/oven outlet, 240V
+Rough-in for 1 refrigerator outlet
+Rough-in for 6 recessed lights, kitchen
+Rough-in for 6 undercabinet lights, kitchen
+Rough-in for 1 pendant light, breakfast area
+Rough-in for 3 duplex outlets, breakfast area
+Rough-in for 8 duplex outlets, AFCI protected, family room (two-story ceiling)
+Rough-in for 4 recessed lights, family room
+Rough-in for 1 switched ceiling light or fan, den
+Rough-in for 4 duplex outlets, AFCI protected, den
+Rough-in for 1 vanity light, powder room
+Rough-in for 1 GFCI outlet, powder room
+Rough-in for 1 exhaust fan, powder room
+Rough-in for 2 GFCI outlets, garage (one per bay)
+Rough-in for 2 garage door opener circuits
+Rough-in for 2 switched ceiling lights, garage
+Rough-in for 2 exterior GFCI weatherproof outlets, front and back of house
+Rough-in for 3 exterior entry lights, front door/garage/back door
+Rough-in for 1 switched hallway light, first floor
+Rough-in for 1 combo CO/smoke detector, first floor hallway
+Rough-in for 5 duplex outlets, AFCI protected, bedroom 2
+Rough-in for 1 switched ceiling light, bedroom 2
+Rough-in for 1 combo CO/smoke detector, bedroom 2
+Rough-in for 5 duplex outlets, AFCI protected, bedroom 3
+Rough-in for 1 switched ceiling light, bedroom 3
+Rough-in for 1 combo CO/smoke detector, bedroom 3
+Rough-in for 5 duplex outlets, AFCI protected, bedroom 4
+Rough-in for 1 switched ceiling light, bedroom 4
+Rough-in for 1 combo CO/smoke detector, bedroom 4
+Rough-in for 7 duplex outlets, AFCI protected, master bedroom and sitting area
+Rough-in for 1 switched ceiling light or fan, master bedroom
+Rough-in for 1 combo CO/smoke detector, master bedroom
+Rough-in for 2 vanity lights, master bath (double vanity)
+Rough-in for 2 GFCI outlets, master bath
+Rough-in for 1 shower light, wet-rated, master bath
+Rough-in for 1 exhaust fan, master bath
+Rough-in for 1 vanity light, hall bath
+Rough-in for 1 GFCI outlet, hall bath
+Rough-in for 1 exhaust fan, hall bath
+Rough-in for 1 switched ceiling light or fan, sitting loft
+Rough-in for 3 duplex outlets, sitting loft
+Rough-in for 1 switched hallway light, second floor
+Rough-in for 1 combo CO/smoke detector, second floor hallway
+Supply and install 1 new combo CO/smoke detector, basement level
+Supply and install 1 new GFCI-protected receptacle for the sump pump, basement
+Supply and install 1 new vanity light, proposed basement bath
+Supply and install 1 new GFCI outlet at vanity, proposed basement bath
+Supply and install 1 new exhaust fan, proposed basement bath
+Supply and install 1 new switched ceiling light, proposed basement utility/laundry room
+Supply and install 1 new dedicated 20A laundry GFCI receptacle
+Supply and install 1 new washer outlet
+Supply and install 1 new dryer outlet, 240V
+Supply and install 1 new switched stairway light with 3-way switches, basement stairs
+Supply and install 6 new duplex outlets, living room
+Supply and install 1 new switched ceiling light or fan, living room
+Supply and install 1 new chandelier, dining room
+Supply and install 5 new duplex outlets, dining room
+Supply and install 6 new small-appliance-circuit counter outlets, kitchen
+Supply and install 1 new dishwasher outlet
+Supply and install 1 new garbage disposal outlet
+Supply and install 1 new microwave outlet
+Supply and install 1 new range/oven outlet, 240V
+Supply and install 1 new refrigerator outlet
+Supply and install 6 new recessed lights, kitchen
+Supply and install 6 new undercabinet lights, kitchen
+Supply and install 1 new pendant light, breakfast area
+Supply and install 3 new duplex outlets, breakfast area
+Supply and install 8 new duplex outlets, family room
+Supply and install 4 new recessed lights, family room
+Supply and install 1 new switched ceiling light or fan, den
+Supply and install 4 new duplex outlets, den
+Supply and install 1 new vanity light, powder room
+Supply and install 1 new GFCI outlet, powder room
+Supply and install 1 new exhaust fan, powder room
+Supply and install 2 new GFCI outlets, garage
+Supply and install 2 new garage door openers
+Supply and install 2 new switched ceiling lights, garage
+Supply and install 2 new exterior GFCI weatherproof outlets
+Supply and install 3 new exterior entry lights
+Supply and install 1 new switched hallway light, first floor
+Supply and install 1 new combo CO/smoke detector, first floor hallway
+Supply and install 5 new duplex outlets, bedroom 2
+Supply and install 1 new switched ceiling light, bedroom 2
+Supply and install 1 new combo CO/smoke detector, bedroom 2
+Supply and install 5 new duplex outlets, bedroom 3
+Supply and install 1 new switched ceiling light, bedroom 3
+Supply and install 1 new combo CO/smoke detector, bedroom 3
+Supply and install 5 new duplex outlets, bedroom 4
+Supply and install 1 new switched ceiling light, bedroom 4
+Supply and install 1 new combo CO/smoke detector, bedroom 4
+Supply and install 7 new duplex outlets, master bedroom and sitting area
+Supply and install 1 new switched ceiling light or fan, master bedroom
+Supply and install 1 new combo CO/smoke detector, master bedroom
+Supply and install 2 new vanity lights, master bath
+Supply and install 2 new GFCI outlets, master bath
+Supply and install 1 new shower light, wet-rated, master bath
+Supply and install 1 new exhaust fan, master bath
+Supply and install 1 new vanity light, hall bath
+Supply and install 1 new GFCI outlet, hall bath
+Supply and install 1 new exhaust fan, hall bath
+Supply and install 1 new switched ceiling light or fan, sitting loft
+Supply and install 3 new duplex outlets, sitting loft
+Supply and install 1 new switched hallway light, second floor
+Supply and install 1 new combo CO/smoke detector, second floor hallway
+Supply and install 1 new 200A single phase panel
+Supply and install 1 new meter base/CT cabinet
+Supply and install breakers as required for the above circuits (lighting, small appliance, laundry, dedicated appliance, AFCI/GFCI per code)
+Install grounding per code (ground rods, bonding, grounding electrode conductor)
+Install new electric service and make ready for connection by local utility
