@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { api } from "../../api";
@@ -36,6 +37,7 @@ export default function PlanMarkupSheet({
   const [itemSearch, setItemSearch] = useState("");
   const [itemResults, setItemResults] = useState<Item[]>([]);
   const [applying, setApplying] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ id: number; moved: boolean } | null>(null);
@@ -59,6 +61,13 @@ export default function PlanMarkupSheet({
   }, [itemSearch, selected]);
 
   const page = plan?.pages.find((p) => p.id === pageId) ?? null;
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
 
   const handleFile = async (file: File) => {
     setUploading(true);
@@ -198,9 +207,17 @@ export default function PlanMarkupSheet({
         {loading ? (
           <div className="flex flex-1 items-center justify-center"><Spinner /></div>
         ) : !plan || plan.pages.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <div
+            className={`m-4 flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+              dragActive ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-slate-200 dark:border-slate-700"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={onDrop}
+          >
+            <Icon name="upload" size={28} className="text-slate-300 dark:text-slate-600" />
             <p className="text-[14px] text-slate-500 dark:text-slate-400">
-              Upload a plan PDF. Each page is read for a code-minimum electrical layout automatically.
+              Drag a plan PDF here, or upload one. Each page is read for a code-minimum electrical layout automatically.
             </p>
             <input ref={fileInput} type="file" accept="application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
             <button className="btn-primary" disabled={uploading} onClick={() => fileInput.current?.click()}>
