@@ -13,12 +13,12 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-import anthropic
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Job, User
+from app.services.anthropic_client import get_anthropic_client
 from app.routers.estimates import get_estimate as _route_get_estimate
 from app.routers.estimates import list_estimates as _route_list_estimates
 from app.routers.expenses import list_expenses as _route_list_expenses
@@ -283,10 +283,7 @@ so the admin knows what's included."""
 def run_chat(db: Session, user: User, message: str, history: list[dict]) -> Generator[dict, None, None]:
     """Yields NDJSON-ready event dicts: text / tool_start / tool_end / done / error.
     Raises RuntimeError("...ANTHROPIC_API_KEY...") if unconfigured -- caught by the router."""
-    if not settings.anthropic_api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY is not configured")
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = get_anthropic_client()
     messages: list[dict] = [*history, {"role": "user", "content": message}]
 
     for round_num in range(MAX_TOOL_ROUNDS + 1):

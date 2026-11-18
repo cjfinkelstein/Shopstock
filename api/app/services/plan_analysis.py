@@ -11,9 +11,7 @@ silently presenting a guess as a reading."""
 import base64
 import json
 
-import anthropic
-
-from app.config import settings
+from app.services.anthropic_client import get_anthropic_client
 
 SECTIONS = [
     "Rough-In Electrical Work",
@@ -127,10 +125,7 @@ confidence_note should be plain, non-technical language a contractor (not an eng
 
 
 def analyze_plan_sheet(pdf_base64: str) -> dict:
-    if not settings.anthropic_api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY is not configured")
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = get_anthropic_client()
     response = client.messages.create(
         model="claude-opus-5",
         max_tokens=8000,
@@ -231,10 +226,7 @@ def propose_plan_markers(pdf_base64: str) -> dict:
     electrical symbol layout per page -- see analyze_plan_sheet's module
     docstring for why this is framed as a suggestion, not a reading: an
     architectural plan has no electrical symbols to actually count."""
-    if not settings.anthropic_api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY is not configured")
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = get_anthropic_client()
     response = client.messages.create(
         model="claude-opus-5",
         max_tokens=8000,
