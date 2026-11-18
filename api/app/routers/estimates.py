@@ -5,6 +5,7 @@ import secrets
 from pathlib import Path
 from decimal import ROUND_CEILING, Decimal
 
+import pymupdf as fitz
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
@@ -15,13 +16,17 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth import require_admin
 from app.config import settings
 from app.database import get_db
-from app.models import Estimate, EstimateChecklistItem, EstimateLine, EstimateSection, Item, Job, User, utcnow
+from app.models import (
+    Estimate, EstimateChecklistItem, EstimateLine, EstimatePlanMarker, EstimatePlanPage, EstimateSection, Item,
+    Job, User, utcnow,
+)
 from app.schemas import (
     ChecklistItemIn, ChecklistItemOut, EstimateCreate, EstimateLineOut, EstimateOut, EstimateSectionOut,
-    EstimateSummaryOut, EstimateUpdate, PlanAnalyzeIn, PlanAnalyzeOut,
+    EstimateSummaryOut, EstimateUpdate, PlanAnalyzeIn, PlanAnalyzeOut, PlanMarkerIn, PlanMarkerOut,
+    PlanMarkerUpdate, PlanOut, PlanPageOut, PlanUploadIn,
 )
 from app.services.mailer import send_estimate_email
-from app.services.plan_analysis import analyze_plan_sheet, decode_pdf_data_url
+from app.services.plan_analysis import analyze_plan_sheet, decode_pdf_data_url, propose_plan_markers
 
 router = APIRouter(prefix="/estimates", tags=["estimates"], dependencies=[Depends(require_admin)])
 
@@ -518,6 +523,201 @@ def redraft_estimate(estimate_id: int, db: Session = Depends(get_db)):
         for line_order, draft in enumerate(drafts.get(name, [])):
             db.add(EstimateLine(section_id=section.id, sort_order=line_order, **draft))
     db.commit()
+    return _serialize(_get_or_404(db, estimate.id))
+
+
+# ---------- Plan markup: upload a plan, mark it up with symbol pins, price ----------
+
+PLAN_SYMBOL_LABOR_DEFAULT = {
+    "outlet": Decimal("45"), "light": Decimal("45"), "fan": Decimal("50"),
+    "switch": Decimal("40"), "smoke": Decimal("40"), "panel": Decimal("300"),
+}
+PLAN_SYMBOL_SECTION = {
+    "outlet": "Supply and Install", "light": "Supply and Install", "fan": "Supply and Install",
+    "switch": "Supply and Install", "smoke": "Supply and Install", "panel": "Panels and Meters",
+}
+
+
+def _serialize_plan_marker(m: EstimatePlanMarker) -> PlanMarkerOut:
+    return PlanMarkerOut(
+        id=m.id, plan_page_id=m.plan_page_id, item_id=m.item_id,
+        item_name=m.item.name if m.item else None, item_sku=m.item.sku if m.item else None,
+        symbol_type=m.symbol_type, label=m.label, qty=m.qty, x=m.x, y=m.y,
+    )
+
+
+def _get_plan_pages(db: Session, estimate_id: int) -> list[EstimatePlanPage]:
+    return (
+        db.query(EstimatePlanPage)
+        .options(joinedload(EstimatePlanPage.markers).joinedload(EstimatePlanMarker.item))
+        .filter(EstimatePlanPage.estimate_id == estimate_id)
+        .order_by(EstimatePlanPage.page_number)
+        .all()
+    )
+
+
+def _serialize_plan(pages: list[EstimatePlanPage], confidence_note: str | None = None) -> PlanOut:
+    return PlanOut(
+        pages=[
+            PlanPageOut(
+                id=p.id, page_number=p.page_number, image_data=p.image_data,
+                markers=[_serialize_plan_marker(m) for m in p.markers],
+            )
+            for p in pages
+        ],
+        confidence_note=confidence_note,
+    )
+
+
+@router.post("/{estimate_id}/plan/upload", response_model=PlanOut)
+def upload_plan(estimate_id: int, body: PlanUploadIn, db: Session = Depends(get_db)):
+    """Renders every page of an uploaded plan PDF to an image and asks the AI
+    for a code-minimum electrical layout per page (see plan_analysis's
+    propose_plan_markers -- a suggestion, never a real reading, since an
+    architectural plan has no electrical symbols to actually count).
+    Replaces any plan already on this estimate."""
+    estimate = _get_or_404(db, estimate_id)
+    for page in list(_get_plan_pages(db, estimate_id)):
+        db.delete(page)
+    db.flush()
+
+    pdf_bytes = decode_pdf_data_url(body.data)
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read that PDF")
+
+    pages: list[EstimatePlanPage] = []
+    for i, pdf_page in enumerate(doc, start=1):
+        zoom = min(2200 / pdf_page.rect.width, 3)
+        pix = pdf_page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+        image_data = "data:image/png;base64," + base64.b64encode(pix.tobytes("png")).decode()
+        page = EstimatePlanPage(estimate_id=estimate.id, page_number=i, image_data=image_data)
+        db.add(page)
+        pages.append(page)
+    db.flush()
+
+    confidence_note = None
+    markers_result: list[dict] = []
+    try:
+        result = propose_plan_markers(base64.b64encode(pdf_bytes).decode())
+        confidence_note = result.get("confidence_note")
+        markers_result = result.get("markers", [])
+    except Exception as e:
+        # Keep the rendered pages either way -- an AI hiccup shouldn't lose
+        # the upload. The admin can still mark the plan up by hand, and
+        # confidence_note surfaces what happened instead of silently
+        # returning an empty, unexplained layout.
+        confidence_note = f"Pages uploaded, but the automatic code-layout reading failed ({e}) -- mark up this plan by hand below."
+
+    pages_by_number = {p.page_number: p for p in pages}
+    for marker_in in markers_result:
+        page = pages_by_number.get(int(marker_in.get("page") or 0))
+        symbol_type = marker_in.get("type")
+        if not page or symbol_type not in PLAN_SYMBOL_LABOR_DEFAULT:
+            continue
+        try:
+            x = max(Decimal("0"), min(Decimal("100"), Decimal(str(marker_in.get("x", 50)))))
+            y = max(Decimal("0"), min(Decimal("100"), Decimal(str(marker_in.get("y", 50)))))
+            qty = max(Decimal("1"), Decimal(str(marker_in.get("qty", 1))))
+        except Exception:
+            continue
+        db.add(EstimatePlanMarker(
+            plan_page_id=page.id, symbol_type=symbol_type,
+            label=str(marker_in.get("label") or symbol_type)[:300], qty=qty, x=x, y=y,
+        ))
+    db.commit()
+    return _serialize_plan(_get_plan_pages(db, estimate_id), confidence_note)
+
+
+@router.get("/{estimate_id}/plan", response_model=PlanOut)
+def get_plan(estimate_id: int, db: Session = Depends(get_db)):
+    _get_or_404(db, estimate_id)
+    return _serialize_plan(_get_plan_pages(db, estimate_id))
+
+
+@router.post("/{estimate_id}/plan/markers", response_model=PlanMarkerOut, status_code=201)
+def add_plan_marker(estimate_id: int, body: PlanMarkerIn, db: Session = Depends(get_db)):
+    _get_or_404(db, estimate_id)
+    page = db.get(EstimatePlanPage, body.plan_page_id)
+    if not page or page.estimate_id != estimate_id:
+        raise HTTPException(status_code=404, detail="Plan page not found")
+    if body.item_id and not db.get(Item, body.item_id):
+        raise HTTPException(status_code=404, detail="Item not found")
+    marker = EstimatePlanMarker(
+        plan_page_id=page.id, item_id=body.item_id, symbol_type=body.symbol_type,
+        label=body.label, qty=body.qty, x=body.x, y=body.y,
+    )
+    db.add(marker)
+    db.commit()
+    db.refresh(marker)
+    return _serialize_plan_marker(marker)
+
+
+@router.patch("/{estimate_id}/plan/markers/{marker_id}", response_model=PlanMarkerOut)
+def update_plan_marker(estimate_id: int, marker_id: int, body: PlanMarkerUpdate, db: Session = Depends(get_db)):
+    _get_or_404(db, estimate_id)
+    marker = db.get(EstimatePlanMarker, marker_id)
+    if not marker or marker.page.estimate_id != estimate_id:
+        raise HTTPException(status_code=404, detail="Marker not found")
+    if body.item_id is not None:
+        if not db.get(Item, body.item_id):
+            raise HTTPException(status_code=404, detail="Item not found")
+        marker.item_id = body.item_id
+    if body.clear_item:
+        marker.item_id = None
+    data = body.model_dump(exclude_unset=True, exclude={"item_id", "clear_item"})
+    for field, value in data.items():
+        setattr(marker, field, value)
+    db.commit()
+    db.refresh(marker)
+    return _serialize_plan_marker(marker)
+
+
+@router.delete("/{estimate_id}/plan/markers/{marker_id}", status_code=204)
+def delete_plan_marker(estimate_id: int, marker_id: int, db: Session = Depends(get_db)):
+    _get_or_404(db, estimate_id)
+    marker = db.get(EstimatePlanMarker, marker_id)
+    if marker and marker.page.estimate_id == estimate_id:
+        db.delete(marker)
+        db.commit()
+
+
+@router.post("/{estimate_id}/plan/apply", response_model=EstimateOut)
+def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
+    """Turns every current plan marker into a real estimate line -- a
+    matched marker (item_id set) prices from that item's catalog cost; an
+    unmatched one goes in at $0 material so it's visibly a placeholder
+    needing a real cost. Appends into the existing Supply and Install /
+    Panels and Meters sections rather than replacing them -- safe to call
+    again, but calling it twice on the same markers adds them twice, so use
+    it once after marking everything up, not after every edit."""
+    estimate = _get_or_404(db, estimate_id)
+    sections_by_name = {s.name: s for s in estimate.sections}
+    pages = _get_plan_pages(db, estimate_id)
+
+    next_order = {name: len(section.lines) for name, section in sections_by_name.items()}
+    added = 0
+    for page in pages:
+        for marker in page.markers:
+            section_name = PLAN_SYMBOL_SECTION.get(marker.symbol_type, "Supply and Install")
+            section = sections_by_name.get(section_name)
+            if not section:
+                continue
+            item = marker.item
+            db.add(EstimateLine(
+                section_id=section.id, sort_order=next_order[section_name],
+                item_id=item.id if item else None,
+                description=item.name if item else marker.label,
+                qty=marker.qty, unit=item.unit if item else "each",
+                material_unit_cost=(item.avg_cost or item.last_cost or Decimal("0")) if item else Decimal("0"),
+                labor_unit_cost=PLAN_SYMBOL_LABOR_DEFAULT.get(marker.symbol_type, Decimal("40")),
+            ))
+            next_order[section_name] += 1
+            added += 1
+    db.commit()
+    if added == 0:
+        raise HTTPException(status_code=400, detail="No plan markers to apply yet.")
     return _serialize(_get_or_404(db, estimate.id))
 
 

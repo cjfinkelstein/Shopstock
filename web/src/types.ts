@@ -378,6 +378,33 @@ export interface Estimate {
   responded_at: string | null;
 }
 
+export type PlanSymbolType = "outlet" | "light" | "fan" | "switch" | "smoke" | "panel";
+
+export interface PlanMarker {
+  id: number;
+  plan_page_id: number;
+  item_id: number | null;
+  item_name: string | null;
+  item_sku: string | null;
+  symbol_type: PlanSymbolType;
+  label: string;
+  qty: string;
+  x: string;
+  y: string;
+}
+
+export interface PlanPage {
+  id: number;
+  page_number: number;
+  image_data: string;
+  markers: PlanMarker[];
+}
+
+export interface Plan {
+  pages: PlanPage[];
+  confidence_note: string | null;
+}
+
 export interface PublicEstimateLine {
   description: string;
   qty: string;
