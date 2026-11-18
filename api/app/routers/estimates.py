@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
+from openpyxl.workbook.properties import CalcProperties
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import require_admin
@@ -573,19 +574,16 @@ def _build_xlsx(estimate: Estimate) -> Workbook:
     for col, h in enumerate(headers, start=1):
         ws.cell(row=4, column=col, value=h).font = header_font
 
-    # openpyxl can't attach a cached value to a formula cell (it only ever
-    # writes the "=..." string), so a formula-only cell reads back as blank
-    # in anything that doesn't actually run a calc engine on open -- Windows/
-    # mobile file previews, some Excel calculation-mode setups, etc. That's
-    # exactly what showed up as "no cost of materials, no total costs" on a
-    # real download. So every derived dollar cell below is the actual
-    # computed number (same math as the API/UI use), not a formula --
-    # correct on open everywhere, at the cost of not live-recalculating if
-    # someone hand-edits a quantity in Excel afterward.
+    # Every derived dollar cell is a live formula (=C*D for a line's material
+    # total, =SUM(...) for section/grand totals, etc.), not a baked-in
+    # number, so editing a quantity or cost in Excel recalculates everything
+    # downstream of it. fullCalcOnLoad (set below, after the sheet is built)
+    # forces a recalculation the moment the file is opened in Excel/Google
+    # Sheets/LibreOffice, so the numbers are correct on first open too, not
+    # only after the next manual edit.
     row = 6
-    material_total = Decimal("0.00")
-    labor_total = Decimal("0.00")
     section_index = 0
+    section_h_ranges: list[str] = []  # every section's H-column line range, for the grand material+labor total
     for section in estimate.sections:
         if not section.lines:
             continue
@@ -599,50 +597,55 @@ def _build_xlsx(estimate: Estimate) -> Workbook:
         if intro:
             ws.cell(row=row, column=2, value=intro).font = normal
             row += 1
-        section_total = Decimal("0.00")
+        first_line_row = row
         for line in section.lines:
-            m, lb, tot = _line_totals(line)
-            material_total += m
-            labor_total += lb
-            section_total += tot
             ws.cell(row=row, column=2, value=line.description).font = normal
             ws.cell(row=row, column=3, value=float(line.qty))
             ws.cell(row=row, column=4, value=float(line.material_unit_cost)).number_format = _ACCOUNTING_FMT
-            ws.cell(row=row, column=5, value=float(m)).number_format = _ACCOUNTING_FMT
+            ws.cell(row=row, column=5, value=f"=C{row}*D{row}").number_format = _ACCOUNTING_FMT
             ws.cell(row=row, column=6, value=float(line.labor_unit_cost)).number_format = _ACCOUNTING_FMT
-            ws.cell(row=row, column=7, value=float(lb)).number_format = _ACCOUNTING_FMT
-            ws.cell(row=row, column=8, value=float(tot)).number_format = _ACCOUNTING_FMT
+            ws.cell(row=row, column=7, value=f"=C{row}*F{row}").number_format = _ACCOUNTING_FMT
+            ws.cell(row=row, column=8, value=f"=E{row}+G{row}").number_format = _ACCOUNTING_FMT
             row += 1
-        subtotal_cell = ws.cell(row=section_header_row, column=1, value=float(section_total))
+        last_line_row = row - 1
+        section_h_ranges.append(f"H{first_line_row}:H{last_line_row}")
+        subtotal_cell = ws.cell(row=section_header_row, column=1, value=f"=SUM(H{first_line_row}:H{last_line_row})")
         subtotal_cell.number_format = _ACCOUNTING_FMT
         subtotal_cell.font = bold
         row += 1  # blank row before the next section
 
-    subtotal = material_total + labor_total
     row += 1
+    subtotal_row = row
     ws.cell(row=row, column=2, value="Total cost of material and labor").font = bold
-    ws.cell(row=row, column=8, value=float(subtotal)).number_format = _ACCOUNTING_FMT
+    subtotal_formula = f"=SUM({','.join(section_h_ranges)})" if section_h_ranges else "=0"
+    ws.cell(row=row, column=8, value=subtotal_formula).number_format = _ACCOUNTING_FMT
     ws.cell(row=row, column=8).font = bold
     row += 2
 
-    profit_amount = (subtotal * estimate.profit_pct / Decimal("100")).quantize(Decimal("0.01"))
+    profit_row = row
     ws.cell(row=row, column=2, value="Profit").font = normal
     ws.cell(row=row, column=6, value=float(estimate.profit_pct) / 100).number_format = "0.0%"
-    ws.cell(row=row, column=8, value=float(profit_amount)).number_format = _ACCOUNTING_FMT
+    ws.cell(row=row, column=8, value=f"=ROUND(H{subtotal_row}*F{profit_row},2)").number_format = _ACCOUNTING_FMT
     row += 1
 
-    discount_amount = ((subtotal + profit_amount) * estimate.discount_pct / Decimal("100")).quantize(Decimal("0.01"))
+    discount_row = row
     ws.cell(row=row, column=2, value="Repeat customer discount").font = normal
     ws.cell(row=row, column=6, value=float(estimate.discount_pct) / 100).number_format = "0.0%"
-    ws.cell(row=row, column=8, value=float(-discount_amount)).number_format = _ACCOUNTING_FMT
+    ws.cell(
+        row=row, column=8, value=f"=-ROUND((H{subtotal_row}+H{profit_row})*F{discount_row},2)"
+    ).number_format = _ACCOUNTING_FMT
     row += 1
 
-    grand_total = (subtotal + profit_amount - discount_amount).quantize(Decimal("0.01"))
     ws.cell(row=row, column=2, value="TOTAL COST OF PROJECT").font = bold
-    grand_cell = ws.cell(row=row, column=8, value=float(grand_total))
+    grand_cell = ws.cell(row=row, column=8, value=f"=H{subtotal_row}+H{profit_row}+H{discount_row}")
     grand_cell.number_format = _ACCOUNTING_FMT
     grand_cell.font = bold
     row += 3
+
+    # Forces Excel/Google Sheets/LibreOffice to recalculate every formula the
+    # instant the file opens, instead of trusting (blank) cached values --
+    # openpyxl never writes a cached value for a formula cell it creates.
+    wb.calculation = CalcProperties(fullCalcOnLoad=True)
 
     if estimate.exclusions and estimate.exclusions.strip():
         ws.cell(row=row, column=2, value="Exclusions / Notes:").font = bold
