@@ -211,13 +211,14 @@ return no markers for those), identify each room and propose, following these ex
 - Combo CO/smoke detectors (type "co_smoke"): one in each hallway outside the sleeping areas, kept \
 as a SEPARATE marker type from plain smoke detectors -- never combine the two into one marker or \
 count.
-- Duplex outlets (type "duplex"): typical residential coverage -- generally one or two per room \
-depending on its size, placed on different walls so the room isn't left with a dead zone. Do NOT \
-calculate exact spacing or add an outlet every few feet along a wall -- a normal room needs a \
-small handful of outlets, not one per wall segment.
+- Duplex outlets (type "duplex"): at least one outlet on every wall of the room long enough to \
+reasonably hold one (skip a wall that's mostly a doorway/closet opening with no real wall space). \
+Do NOT calculate exact spacing or add more than one per wall for an ordinary-sized wall -- this is \
+wall coverage, not a spacing calculation, so a typical room ends up with roughly one outlet per \
+wall, not a dense row along each one.
 - GFCI outlets (type "gfci"), kept as a SEPARATE marker type from duplex outlets -- never combine \
 the two: in wet areas (kitchen, bathroom, laundry, garage, exterior) use GFCI instead of duplex, \
-same light-touch coverage as above (one or two per area, not dense spacing).
+same one-per-wall coverage as above.
 - Lighting (type "light"): one switched light fixture for every room/hallway/stairway.
 - Bedrooms: one ceiling fan (type "fan") AND one light (type "light") in every bedroom as separate \
 markers, except the master bedroom, which gets 3 lights instead of one.
@@ -228,9 +229,10 @@ bedrooms: in bathrooms without a window.
 pump, garage door opener).
 
 This is a light, code-minimum STARTING POINT the admin edits by hand -- when in doubt, place fewer \
-markers rather than more. Group every repeated type in a room into a single marker with the right \
-qty (e.g. one marker "2 duplex outlets, living room" with qty 2) rather than one marker per \
-physical unit -- this applies to outlets too now that they're no longer individually spaced.
+markers rather than more. Outlets are placed individually, one marker per wall (so each pin sits on \
+the actual wall it covers), not grouped into a single qty -- group every OTHER repeated type in a \
+room into a single marker with the right qty instead (e.g. one marker "1 light, living room" with \
+qty 1) rather than one marker per physical unit.
 
 Placement accuracy matters as much as the counts -- a pin in the wrong room is as wrong as a \
 missing one. For every marker:
