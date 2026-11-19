@@ -25,10 +25,18 @@ export default function PlanMarkupSheet({
   estimateId,
   onClose,
   onApplied,
+  onApplyToChecklist,
 }: {
   estimateId: number;
   onClose: () => void;
-  onApplied: (e: Estimate) => void;
+  // Either this or onApplyToChecklist is passed, not both. onApplied: the
+  // default path (EstimateDetail's standalone "Plan" button) -- writes
+  // real lines via POST .../plan/apply and hands back the updated
+  // estimate. onApplyToChecklist: the wizard's "Mark up a plan" path --
+  // skips that endpoint entirely and hands the raw markers to the caller,
+  // which checks them off in the normal checklist steps instead.
+  onApplied?: (e: Estimate) => void;
+  onApplyToChecklist?: (markers: PlanMarker[]) => void;
 }) {
   const toast = useToast();
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -42,6 +50,7 @@ export default function PlanMarkupSheet({
   const [applying, setApplying] = useState(false);
   const [autoLayoutRunning, setAutoLayoutRunning] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ id: number; moved: boolean } | null>(null);
@@ -187,8 +196,16 @@ export default function PlanMarkupSheet({
   const pageMarkers = page?.markers ?? [];
   const allMarkers = plan?.pages.flatMap((p) => p.markers) ?? [];
   const matchedCount = allMarkers.filter((m) => m.item_id).length;
+  const countsByType = SYMBOL_TYPES.map((t) => ({
+    ...t,
+    qty: allMarkers.filter((m) => m.symbol_type === t.id).reduce((n, m) => n + (parseFloat(m.qty) || 0), 0),
+  })).filter((t) => t.qty > 0);
 
   const apply = async () => {
+    if (onApplyToChecklist) {
+      onApplyToChecklist(allMarkers);
+      return;
+    }
     setApplying(true);
     try {
       const est = await api<Estimate>(`/estimates/${estimateId}/plan/apply`, { method: "POST" });
@@ -196,7 +213,7 @@ export default function PlanMarkupSheet({
       // Doesn't close -- keep editing/adding pins and hit Apply again any
       // time; each apply replaces the lines from the previous one rather
       // than piling up duplicates, so it's safe to re-run after any edit.
-      onApplied(est);
+      onApplied?.(est);
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Could not apply the plan");
     } finally {
@@ -272,13 +289,34 @@ export default function PlanMarkupSheet({
                         ? "border-brand-500 bg-brand-500 text-white"
                         : "border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                     }`}
-                    onClick={() => { setPageId(p.id); setSelected(null); }}
+                    onClick={() => { setPageId(p.id); setSelected(null); setZoom(1); }}
                   >
                     Page {p.page_number}
                   </button>
                 ))}
+                <div className="ml-auto flex items-center gap-1 rounded-full border border-slate-200 bg-white px-1 py-1 dark:border-slate-700 dark:bg-slate-800">
+                  <button
+                    className="icon-btn !h-[26px] !w-[26px]"
+                    disabled={zoom <= 1}
+                    onClick={() => setZoom((z) => Math.max(1, Math.round((z - 0.5) * 10) / 10))}
+                    aria-label="Zoom out"
+                  >
+                    <Icon name="minus" size={14} />
+                  </button>
+                  <span className="min-w-[34px] text-center text-[11.5px] font-semibold text-slate-500 dark:text-slate-400">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    className="icon-btn !h-[26px] !w-[26px]"
+                    disabled={zoom >= 4}
+                    onClick={() => setZoom((z) => Math.min(4, Math.round((z + 0.5) * 10) / 10))}
+                    aria-label="Zoom in"
+                  >
+                    <Icon name="plus" size={14} />
+                  </button>
+                </div>
                 <input ref={fileInput} type="file" accept="application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-                <button className="btn-secondary ml-auto !min-h-[32px] px-2.5 text-[12px]" disabled={uploading} onClick={() => fileInput.current?.click()}>
+                <button className="btn-secondary !min-h-[32px] px-2.5 text-[12px]" disabled={uploading} onClick={() => fileInput.current?.click()}>
                   {uploading ? <Spinner /> : <Icon name="upload" size={14} />}
                   {uploading ? "Reading…" : "Replace plan"}
                 </button>
@@ -290,7 +328,12 @@ export default function PlanMarkupSheet({
                 onClick={(e) => { if (placing) addMarker(e.clientX, e.clientY); }}
               >
                 {page && (
-                  <div className="relative inline-block min-w-full">
+                  // Pins are a fixed CSS pixel size (see below) and never
+                  // scale with this wrapper's width -- so zooming the plan
+                  // in makes pins cover a smaller fraction of it, which is
+                  // the point: zoom in to see true proportion/placement
+                  // instead of a giant pin hiding the detail under it.
+                  <div className="relative inline-block" style={{ width: `${zoom * 100}%`, minWidth: "100%" }}>
                     <img src={page.image_data} alt={`Plan page ${page.page_number}`} className="block w-full select-none" draggable={false} />
                     {pageMarkers.map((m) => {
                       const s = symbolOf(m.symbol_type);
@@ -321,6 +364,20 @@ export default function PlanMarkupSheet({
             </div>
 
             <div className="flex w-full shrink-0 flex-col gap-1.5 overflow-y-auto border-t border-slate-100 p-4 dark:border-slate-800 md:w-64 md:border-l md:border-t-0">
+              {countsByType.length > 0 && (
+                <>
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Counts (whole plan)</p>
+                  <div className="mb-2 flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-950">
+                    {countsByType.map((t) => (
+                      <div key={t.id} className="flex items-center gap-2 text-[12.5px]">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} />
+                        <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">{t.label}</span>
+                        <span className="font-mono font-bold tabular-nums">{t.qty % 1 === 0 ? t.qty : t.qty.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
               <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Add a symbol</p>
               {SYMBOL_TYPES.map((t) => (
                 <button
@@ -341,7 +398,9 @@ export default function PlanMarkupSheet({
                 Apply to estimate
               </button>
               <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                Creates real line items from every pin above -- matched pins price from the catalog, unmatched ones go in at $0 material to fix up after. Keep editing pins and hit this again any time -- it updates the estimate's lines instead of duplicating them.
+                {onApplyToChecklist
+                  ? "Checks off the regular estimate questions using the counts above (adding a custom item where nothing matches) so you can review and add more before finishing."
+                  : "Creates real line items from every pin above -- matched pins price from the catalog, unmatched ones go in at $0 material to fix up after. Keep editing pins and hit this again any time -- it updates the estimate's lines instead of duplicating them."}
               </p>
             </div>
           </div>
