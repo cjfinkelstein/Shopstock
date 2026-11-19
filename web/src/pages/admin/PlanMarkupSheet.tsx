@@ -125,9 +125,6 @@ export default function PlanMarkupSheet({
         body: { plan_page_id: page.id, symbol_type: placing, label: symbolOf(placing).label, qty: "1", x: String(x), y: String(y) },
       });
       setPlan((p) => (p ? { ...p, pages: p.pages.map((pg) => (pg.id === page.id ? { ...pg, markers: [...pg.markers, m] } : pg)) } : p));
-      setPlacing(null);
-      setSelected(m);
-      setItemSearch("");
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Could not add that pin");
     }
