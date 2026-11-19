@@ -53,6 +53,11 @@ export default function PlanMarkupSheet({
   const [zoom, setZoom] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  // The zoomable image wrapper, not the outer scrollable stage -- its
+  // getBoundingClientRect() reflects the image's actual on-screen size and
+  // position regardless of zoom or how far the stage is scrolled, which
+  // stageRef's rect does not (that's the viewport, not the content).
+  const wrapRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ id: number; moved: boolean } | null>(null);
   const panState = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
   const didPanRef = useRef(false);
@@ -123,7 +128,7 @@ export default function PlanMarkupSheet({
   };
 
   const stagePercent = (clientX: number, clientY: number) => {
-    const rect = stageRef.current!.getBoundingClientRect();
+    const rect = wrapRef.current!.getBoundingClientRect();
     const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
     const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
     return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
@@ -369,7 +374,7 @@ export default function PlanMarkupSheet({
                   // in makes pins cover a smaller fraction of it, which is
                   // the point: zoom in to see true proportion/placement
                   // instead of a giant pin hiding the detail under it.
-                  <div className="relative inline-block" style={{ width: `${zoom * 100}%`, minWidth: "100%" }}>
+                  <div ref={wrapRef} className="relative inline-block" style={{ width: `${zoom * 100}%`, minWidth: "100%" }}>
                     <img src={page.image_data} alt={`Plan page ${page.page_number}`} className="block w-full select-none" draggable={false} />
                     {pageMarkers.map((m) => {
                       const s = symbolOf(m.symbol_type);
