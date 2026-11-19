@@ -385,6 +385,15 @@ class EstimateLine(TimestampMixin, Base):
     material_unit_cost: Mapped[Decimal] = mapped_column(Num(12, 4), default=Decimal("0"), nullable=False)
     labor_unit_cost: Mapped[Decimal] = mapped_column(Num(12, 4), default=Decimal("0"), nullable=False)
     sort_order: Mapped[int] = mapped_column(default=0, nullable=False)
+    # from_plan marks every line "Apply to estimate" (plan markup) created,
+    # so a re-apply can find and replace exactly those lines -- regardless
+    # of whether plan_marker_id below is still valid -- without touching
+    # lines added by hand. plan_marker_id itself is just a best-effort trace
+    # back to the marker that produced the line (nulled, not matched on, if
+    # that marker is later deleted/replaced e.g. by re-running auto-layout).
+    from_plan: Mapped[bool] = mapped_column(default=False, nullable=False)
+    plan_marker_id: Mapped[int | None] = mapped_column(
+        ForeignKey("estimate_plan_markers.id", ondelete="SET NULL"), index=True)
 
     section: Mapped[EstimateSection] = relationship(back_populates="lines")
     item: Mapped["Item | None"] = relationship()

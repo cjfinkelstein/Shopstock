@@ -8,6 +8,7 @@ import { ItemThumb, PageLoader, Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
 import type { Estimate, EstimateLine, EstimateSection, Item } from "../../types";
 import EstimateWizard, { estimateToWizardState } from "./EstimateWizard";
+import PlanMarkupSheet from "./PlanMarkupSheet";
 
 type EditableLine = {
   key: number; // client-side identity, stable across re-renders even before save
@@ -66,6 +67,7 @@ export default function EstimateDetail() {
   const [sendOpen, setSendOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
 
   const load = useCallback(() => {
     api<Estimate>(`/estimates/${id}`)
@@ -290,6 +292,10 @@ export default function EstimateDetail() {
           <button className="btn-secondary" onClick={() => setWizardOpen(true)}>
             <Icon name="pencil" size={18} />
             Edit
+          </button>
+          <button className="btn-secondary" onClick={() => setPlanOpen(true)}>
+            <Icon name="map-pin" size={18} />
+            Plan
           </button>
           <button className="btn-secondary" onClick={remove}>
             <Icon name="trash" size={18} />
@@ -590,6 +596,14 @@ export default function EstimateDetail() {
           />
         );
       })()}
+
+      {planOpen && estimate && (
+        <PlanMarkupSheet
+          estimateId={estimate.id}
+          onClose={() => setPlanOpen(false)}
+          onApplied={() => load()}
+        />
+      )}
 
       {sendOpen && (
         <Sheet title="Send estimate" subtitle={estimate.estimate_number} onClose={() => setSendOpen(false)}>

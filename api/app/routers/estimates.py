@@ -705,13 +705,20 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     """Turns every current plan marker into a real estimate line -- a
     matched marker (item_id set) prices from that item's catalog cost; an
     unmatched one goes in at $0 material so it's visibly a placeholder
-    needing a real cost. Appends into the existing Supply and Install /
-    Panels and Meters sections rather than replacing them -- safe to call
-    again, but calling it twice on the same markers adds them twice, so use
-    it once after marking everything up, not after every edit."""
+    needing a real cost. Safe to call repeatedly after editing the plan:
+    each line is tagged with the marker that produced it, so a re-apply
+    first removes the lines from the previous apply (and only those --
+    lines added by hand have no plan_marker_id and are left alone) before
+    recreating them, rather than piling up duplicates."""
     estimate = _get_or_404(db, estimate_id)
     sections_by_name = {s.name: s for s in estimate.sections}
     pages = _get_plan_pages(db, estimate_id)
+
+    for section in estimate.sections:
+        for line in list(section.lines):
+            if line.from_plan:
+                db.delete(line)
+    db.flush()
 
     next_order = {name: len(section.lines) for name, section in sections_by_name.items()}
     added = 0
@@ -725,6 +732,7 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
             db.add(EstimateLine(
                 section_id=section.id, sort_order=next_order[section_name],
                 item_id=item.id if item else None,
+                from_plan=True, plan_marker_id=marker.id,
                 description=item.name if item else marker.label,
                 qty=marker.qty, unit=item.unit if item else "each",
                 material_unit_cost=(item.avg_cost or item.last_cost or Decimal("0")) if item else Decimal("0"),

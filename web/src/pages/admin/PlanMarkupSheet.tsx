@@ -192,7 +192,10 @@ export default function PlanMarkupSheet({
     setApplying(true);
     try {
       const est = await api<Estimate>(`/estimates/${estimateId}/plan/apply`, { method: "POST" });
-      toast("success", "Plan applied to the estimate");
+      toast("success", `Applied -- ${allMarkers.length} line item${allMarkers.length === 1 ? "" : "s"} synced to the estimate`);
+      // Doesn't close -- keep editing/adding pins and hit Apply again any
+      // time; each apply replaces the lines from the previous one rather
+      // than piling up duplicates, so it's safe to re-run after any edit.
       onApplied(est);
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Could not apply the plan");
@@ -214,9 +217,14 @@ export default function PlanMarkupSheet({
               <p className="max-w-md text-[12px] text-amber-600 dark:text-amber-400">{plan.confidence_note}</p>
             )}
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
-            <Icon name="x" size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="btn-secondary !min-h-[32px] px-3 text-[12.5px]" onClick={onClose}>
+              Done
+            </button>
+            <button className="icon-btn" onClick={onClose} aria-label="Close">
+              <Icon name="x" size={18} />
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -333,7 +341,7 @@ export default function PlanMarkupSheet({
                 Apply to estimate
               </button>
               <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                Creates real line items from every pin above -- matched pins price from the catalog, unmatched ones go in at $0 material to fix up after.
+                Creates real line items from every pin above -- matched pins price from the catalog, unmatched ones go in at $0 material to fix up after. Keep editing pins and hit this again any time -- it updates the estimate's lines instead of duplicating them.
               </p>
             </div>
           </div>
