@@ -421,7 +421,7 @@ class EstimatePlanMarker(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     plan_page_id: Mapped[int] = mapped_column(ForeignKey("estimate_plan_pages.id"), nullable=False, index=True)
     item_id: Mapped[int | None] = mapped_column(ForeignKey("items.id"))
-    symbol_type: Mapped[str] = mapped_column(String(10), nullable=False)  # outlet|light|fan|switch|smoke|panel
+    symbol_type: Mapped[str] = mapped_column(String(10), nullable=False)  # duplex|gfci|light|fan|exfan|switch|smoke|co_smoke|panel
     label: Mapped[str] = mapped_column(String(300), nullable=False)
     qty: Mapped[Decimal] = mapped_column(Num(12, 2), default=Decimal("1"), nullable=False)
     x: Mapped[Decimal] = mapped_column(Num(5, 2), nullable=False)

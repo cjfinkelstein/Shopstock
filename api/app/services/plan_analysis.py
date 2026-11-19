@@ -164,7 +164,7 @@ def decode_pdf_data_url(data_url: str) -> bytes:
     return base64.b64decode(data_url)
 
 
-_MARKER_TYPES = ["outlet", "light", "fan", "switch", "smoke", "co_smoke", "panel"]
+_MARKER_TYPES = ["duplex", "gfci", "light", "fan", "exfan", "switch", "smoke", "co_smoke", "panel"]
 
 _MARKER_RESPONSE_SCHEMA = {
     "type": "object",
@@ -210,19 +210,21 @@ return no markers for those), identify each room and propose, following these ex
 - Smoke detectors (type "smoke"): one plain smoke detector in every room (not just bedrooms).
 - Combo CO/smoke detectors (type "co_smoke"): one in each hallway, kept as a SEPARATE marker type \
 from plain smoke detectors -- never combine the two into one marker or count.
-- Outlets: at least one outlet on every wall of every room, and additionally spaced so no point \
-along a wall is more than 12 feet from an outlet (add extra outlets along long walls to satisfy \
-this).
-- Wet areas (kitchen, bathroom, laundry, garage, exterior): same rule as outlets above -- one on \
-every wall, but spaced so no point along a wall is more than 8 feet from an outlet (tighter than \
-the 12-foot rule elsewhere) -- and GFCI.
-- Lighting: a switched light fixture for every room/hallway/stairway at minimum.
-- Bedrooms: one fan/light fixture in every bedroom, except the master bedroom, which gets 3 lights \
-instead.
-- Exhaust fans: in bathrooms without a window.
-- Switches: one for each fixture placed.
-- Panels/equipment: any visible panel/meter/equipment (water heater, HVAC, sump pump, garage door \
-opener).
+- Duplex outlets (type "duplex"): at least one on every wall of every room EXCEPT wet areas \
+(see below), and additionally spaced so no point along a wall is more than 12 feet from an outlet \
+(add extra outlets along long walls to satisfy this).
+- GFCI outlets (type "gfci"), kept as a SEPARATE marker type from duplex outlets -- never combine \
+the two: in wet areas (kitchen, bathroom, laundry, garage, exterior) use GFCI instead of duplex, \
+with the same wall-coverage rule but spaced so no point along a wall is more than 8 feet from an \
+outlet (tighter than the 12-foot rule elsewhere).
+- Lighting (type "light"): a switched light fixture for every room/hallway/stairway at minimum.
+- Bedrooms: one ceiling fan (type "fan") AND one light (type "light") in every bedroom as separate \
+markers, except the master bedroom, which gets 3 lights instead of one.
+- Exhaust fans (type "exfan"), kept as a SEPARATE marker type from the ceiling fans used in \
+bedrooms: in bathrooms without a window.
+- Switches (type "switch"): one for each fixture placed (lights, fans, exhaust fans).
+- Panels/equipment (type "panel"): any visible panel/meter/equipment (water heater, HVAC, sump \
+pump, garage door opener).
 
 Group identical items in one room into a single marker with the right qty, rather than one marker \
 per physical unit (e.g. one marker "6 duplex outlets, living room" with qty 6, not six separate \

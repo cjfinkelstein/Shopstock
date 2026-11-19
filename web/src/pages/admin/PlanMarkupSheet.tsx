@@ -9,9 +9,11 @@ import { useToast } from "../../toast";
 import type { Estimate, Item, Plan, PlanMarker, PlanSymbolType } from "../../types";
 
 const SYMBOL_TYPES: { id: PlanSymbolType; label: string; color: string; letter: string }[] = [
-  { id: "outlet", label: "Duplex / GFCI Outlet", color: "#2f6fb5", letter: "O" },
+  { id: "duplex", label: "Duplex Outlet", color: "#2f6fb5", letter: "O" },
+  { id: "gfci", label: "GFCI Outlet", color: "#2f9bb5", letter: "G" },
   { id: "light", label: "Light Fixture", color: "#b8962f", letter: "L" },
-  { id: "fan", label: "Fan / Exhaust Fan", color: "#2f8f7a", letter: "F" },
+  { id: "fan", label: "Ceiling Fan", color: "#2f8f7a", letter: "F" },
+  { id: "exfan", label: "Exhaust Fan", color: "#1f6e5c", letter: "X" },
   { id: "switch", label: "Switch", color: "#7a4fb5", letter: "S" },
   { id: "smoke", label: "Smoke Detector", color: "#c23b3b", letter: "D" },
   { id: "co_smoke", label: "Combo Smoke/CO Detector", color: "#8a2424", letter: "C" },

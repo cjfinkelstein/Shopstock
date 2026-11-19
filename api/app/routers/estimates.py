@@ -531,13 +531,14 @@ def redraft_estimate(estimate_id: int, db: Session = Depends(get_db)):
 # ---------- Plan markup: upload a plan, mark it up with symbol pins, price ----------
 
 PLAN_SYMBOL_LABOR_DEFAULT = {
-    "outlet": Decimal("45"), "light": Decimal("45"), "fan": Decimal("50"),
-    "switch": Decimal("40"), "smoke": Decimal("40"), "co_smoke": Decimal("45"), "panel": Decimal("300"),
+    "duplex": Decimal("45"), "gfci": Decimal("50"), "light": Decimal("45"), "fan": Decimal("50"),
+    "exfan": Decimal("55"), "switch": Decimal("40"), "smoke": Decimal("40"), "co_smoke": Decimal("45"),
+    "panel": Decimal("300"),
 }
 PLAN_SYMBOL_SECTION = {
-    "outlet": "Supply and Install", "light": "Supply and Install", "fan": "Supply and Install",
-    "switch": "Supply and Install", "smoke": "Supply and Install", "co_smoke": "Supply and Install",
-    "panel": "Panels and Meters",
+    "duplex": "Supply and Install", "gfci": "Supply and Install", "light": "Supply and Install",
+    "fan": "Supply and Install", "exfan": "Supply and Install", "switch": "Supply and Install",
+    "smoke": "Supply and Install", "co_smoke": "Supply and Install", "panel": "Panels and Meters",
 }
 
 
