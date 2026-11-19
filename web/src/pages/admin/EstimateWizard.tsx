@@ -367,8 +367,10 @@ type Selections = Record<string, { checked: boolean; qty: string }>;
 type CustomItem = { id: number; name: string; qty: string };
 
 // Where "Apply to estimate" on the plan markup screen lands each symbol
-// type's total count: an exact checklist item when one exists, or
-// customOnly when nothing in the checklist matches closely enough (the
+// type's total count -- usually TWO targets (the rough-in wiring step AND
+// the supply/install step both get the same count checked off, since a
+// plan's symbols represent work done in both phases), each either an exact
+// checklist item or customOnly when nothing matches closely enough (the
 // marker's own readable label becomes a free-text custom item instead).
 type PlanChecklistTarget = { section: string; groupIdx: number; item: string } | { section: string; customOnly: true };
 
@@ -378,28 +380,31 @@ const PLAN_SYMBOL_LABEL: Record<PlanSymbolType, string> = {
   panel: "Panel/Equipment",
 };
 
-const RESIDENTIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget> = {
-  duplex: { section: "Supply and Install", groupIdx: 1, item: "Duplex Outlets" },
-  gfci: { section: "Supply and Install", groupIdx: 1, item: "GFCI Outlets" },
-  switch: { section: "Supply and Install", groupIdx: 1, item: "Single-Pole Toggle Switches" },
-  light: { section: "Supply and Install", groupIdx: 0, item: "Flush Mount Ceiling Lights" },
-  fan: { section: "Supply and Install", groupIdx: 0, item: "Ceiling Fans" },
-  exfan: { section: "Supply and Install", groupIdx: 0, item: "Exhaust Fans" },
-  smoke: { section: "Supply and Install", groupIdx: 0, item: "Smoke Detectors" },
-  co_smoke: { section: "Supply and Install", groupIdx: 0, item: "Combination CO/Smoke Detectors" },
-  panel: { section: "Panels and Meters", customOnly: true },
+// Only Rough-In gets checked off -- Supply and Install (and the commercial
+// install steps) already have a "copy selections from Rough-In" button on
+// their own screen, so pre-filling both here would just duplicate that.
+const RESIDENTIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget[]> = {
+  duplex: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "Duplex Outlets" }],
+  gfci: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "GFCI Outlet" }],
+  switch: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "Single-Pole Toggle Switches" }],
+  light: [{ section: "Rough-In Electrical Work", customOnly: true }],
+  fan: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Ceiling Fans" }],
+  exfan: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Exhaust Fans" }],
+  smoke: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Smoke Detectors" }],
+  co_smoke: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Combination CO/Smoke Detectors" }],
+  panel: [{ section: "Panels and Meters", customOnly: true }],
 };
 
-const COMMERCIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget> = {
-  duplex: { section: "Commercial Outlet Installation", groupIdx: 0, item: "Duplex Outlet" },
-  gfci: { section: "Commercial Outlet Installation", groupIdx: 0, item: "GFCI Outlet" },
-  switch: { section: "Commercial Switch Installation", groupIdx: 0, item: "Toggle Switch" },
-  light: { section: "Commercial Lighting Installation", groupIdx: 0, item: "2x2 Light" },
-  fan: { section: "Commercial Lighting Installation", customOnly: true },
-  exfan: { section: "Commercial Lighting Installation", groupIdx: 0, item: "Exhaust Fan" },
-  smoke: { section: "Commercial Lighting Installation", customOnly: true },
-  co_smoke: { section: "Commercial Lighting Installation", customOnly: true },
-  panel: { section: "Commercial Panels and Meters", customOnly: true },
+const COMMERCIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget[]> = {
+  duplex: [{ section: "Commercial Rough-In", groupIdx: 1, item: "Duplex Outlet" }],
+  gfci: [{ section: "Commercial Rough-In", groupIdx: 1, item: "GFCI Outlet" }],
+  switch: [{ section: "Commercial Rough-In", groupIdx: 0, item: "Toggle Switch" }],
+  light: [{ section: "Commercial Rough-In", groupIdx: 2, item: "2x2 Light" }],
+  fan: [{ section: "Commercial Rough-In", customOnly: true }],
+  exfan: [{ section: "Commercial Rough-In", groupIdx: 3, item: "Exhaust Fan" }],
+  smoke: [{ section: "Commercial Rough-In", customOnly: true }],
+  co_smoke: [{ section: "Commercial Rough-In", customOnly: true }],
+  panel: [{ section: "Commercial Panels and Meters", customOnly: true }],
 };
 
 // "saved" is a reserved group id for the dynamically-fetched "previously
@@ -1163,16 +1168,17 @@ export default function EstimateWizard({
     let placed = 0;
     for (const [symbolType, qty] of totals) {
       if (qty <= 0) continue;
-      const target = map[symbolType];
-      const stepIdx = steps.findIndex((s) => s.section === target.section);
-      if (stepIdx === -1) continue;
-      if ("item" in target) {
-        newSelections[key(stepIdx, target.groupIdx, target.item)] = { checked: true, qty: String(qty) };
-      } else {
-        newCustom[stepIdx] = [
-          ...(newCustom[stepIdx] ?? []),
-          { id: nextCustomId++, name: `${PLAN_SYMBOL_LABEL[symbolType]} (from plan)`, qty: String(qty) },
-        ];
+      for (const target of map[symbolType]) {
+        const stepIdx = steps.findIndex((s) => s.section === target.section);
+        if (stepIdx === -1) continue;
+        if ("item" in target) {
+          newSelections[key(stepIdx, target.groupIdx, target.item)] = { checked: true, qty: String(qty) };
+        } else {
+          newCustom[stepIdx] = [
+            ...(newCustom[stepIdx] ?? []),
+            { id: nextCustomId++, name: `${PLAN_SYMBOL_LABEL[symbolType]} (from plan)`, qty: String(qty) },
+          ];
+        }
       }
       placed += 1;
     }
