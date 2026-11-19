@@ -380,75 +380,30 @@ const PLAN_SYMBOL_LABEL: Record<PlanSymbolType, string> = {
   panel: "Panel/Equipment",
 };
 
+// Only Rough-In gets checked off -- Supply and Install (and the commercial
+// install steps) already have a "copy selections from Rough-In" button on
+// their own screen, so pre-filling both here would just duplicate that.
 const RESIDENTIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget[]> = {
-  duplex: [
-    { section: "Rough-In Electrical Work", groupIdx: 1, item: "Duplex Outlets" },
-    { section: "Supply and Install", groupIdx: 1, item: "Duplex Outlets" },
-  ],
-  gfci: [
-    { section: "Rough-In Electrical Work", groupIdx: 1, item: "GFCI Outlet" },
-    { section: "Supply and Install", groupIdx: 1, item: "GFCI Outlets" },
-  ],
-  switch: [
-    { section: "Rough-In Electrical Work", groupIdx: 1, item: "Single-Pole Toggle Switches" },
-    { section: "Supply and Install", groupIdx: 1, item: "Single-Pole Toggle Switches" },
-  ],
-  light: [
-    { section: "Rough-In Electrical Work", customOnly: true },
-    { section: "Supply and Install", groupIdx: 0, item: "Flush Mount Ceiling Lights" },
-  ],
-  fan: [
-    { section: "Rough-In Electrical Work", groupIdx: 0, item: "Ceiling Fans" },
-    { section: "Supply and Install", groupIdx: 0, item: "Ceiling Fans" },
-  ],
-  exfan: [
-    { section: "Rough-In Electrical Work", groupIdx: 0, item: "Exhaust Fans" },
-    { section: "Supply and Install", groupIdx: 0, item: "Exhaust Fans" },
-  ],
-  smoke: [
-    { section: "Rough-In Electrical Work", groupIdx: 0, item: "Smoke Detectors" },
-    { section: "Supply and Install", groupIdx: 0, item: "Smoke Detectors" },
-  ],
-  co_smoke: [
-    { section: "Rough-In Electrical Work", groupIdx: 0, item: "Combination CO/Smoke Detectors" },
-    { section: "Supply and Install", groupIdx: 0, item: "Combination CO/Smoke Detectors" },
-  ],
+  duplex: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "Duplex Outlets" }],
+  gfci: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "GFCI Outlet" }],
+  switch: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "Single-Pole Toggle Switches" }],
+  light: [{ section: "Rough-In Electrical Work", customOnly: true }],
+  fan: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Ceiling Fans" }],
+  exfan: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Exhaust Fans" }],
+  smoke: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Smoke Detectors" }],
+  co_smoke: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Combination CO/Smoke Detectors" }],
   panel: [{ section: "Panels and Meters", customOnly: true }],
 };
 
 const COMMERCIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget[]> = {
-  duplex: [
-    { section: "Commercial Rough-In", groupIdx: 1, item: "Duplex Outlet" },
-    { section: "Commercial Outlet Installation", groupIdx: 0, item: "Duplex Outlet" },
-  ],
-  gfci: [
-    { section: "Commercial Rough-In", groupIdx: 1, item: "GFCI Outlet" },
-    { section: "Commercial Outlet Installation", groupIdx: 0, item: "GFCI Outlet" },
-  ],
-  switch: [
-    { section: "Commercial Rough-In", groupIdx: 0, item: "Toggle Switch" },
-    { section: "Commercial Switch Installation", groupIdx: 0, item: "Toggle Switch" },
-  ],
-  light: [
-    { section: "Commercial Rough-In", groupIdx: 2, item: "2x2 Light" },
-    { section: "Commercial Lighting Installation", groupIdx: 0, item: "2x2 Light" },
-  ],
-  fan: [
-    { section: "Commercial Rough-In", customOnly: true },
-    { section: "Commercial Lighting Installation", customOnly: true },
-  ],
-  exfan: [
-    { section: "Commercial Rough-In", groupIdx: 3, item: "Exhaust Fan" },
-    { section: "Commercial Lighting Installation", groupIdx: 0, item: "Exhaust Fan" },
-  ],
-  smoke: [
-    { section: "Commercial Rough-In", customOnly: true },
-    { section: "Commercial Lighting Installation", customOnly: true },
-  ],
-  co_smoke: [
-    { section: "Commercial Rough-In", customOnly: true },
-    { section: "Commercial Lighting Installation", customOnly: true },
-  ],
+  duplex: [{ section: "Commercial Rough-In", groupIdx: 1, item: "Duplex Outlet" }],
+  gfci: [{ section: "Commercial Rough-In", groupIdx: 1, item: "GFCI Outlet" }],
+  switch: [{ section: "Commercial Rough-In", groupIdx: 0, item: "Toggle Switch" }],
+  light: [{ section: "Commercial Rough-In", groupIdx: 2, item: "2x2 Light" }],
+  fan: [{ section: "Commercial Rough-In", customOnly: true }],
+  exfan: [{ section: "Commercial Rough-In", groupIdx: 3, item: "Exhaust Fan" }],
+  smoke: [{ section: "Commercial Rough-In", customOnly: true }],
+  co_smoke: [{ section: "Commercial Rough-In", customOnly: true }],
   panel: [{ section: "Commercial Panels and Meters", customOnly: true }],
 };
 
