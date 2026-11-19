@@ -207,17 +207,18 @@ coverage per room, not reading real fixture counts.
 For every page that is a floor plan (skip cover sheets, schedules, sections, and detail pages -- \
 return no markers for those), identify each room and propose, following these exact rules:
 
-- Smoke detectors (type "smoke"): one plain smoke detector in every room (not just bedrooms).
-- Combo CO/smoke detectors (type "co_smoke"): one in each hallway, kept as a SEPARATE marker type \
-from plain smoke detectors -- never combine the two into one marker or count.
-- Duplex outlets (type "duplex"): at least one on every wall of every room EXCEPT wet areas \
-(see below), and additionally spaced so no point along a wall is more than 12 feet from an outlet \
-(add extra outlets along long walls to satisfy this).
+- Smoke detectors (type "smoke"): one plain smoke detector in each bedroom only -- not every room.
+- Combo CO/smoke detectors (type "co_smoke"): one in each hallway outside the sleeping areas, kept \
+as a SEPARATE marker type from plain smoke detectors -- never combine the two into one marker or \
+count.
+- Duplex outlets (type "duplex"): typical residential coverage -- generally one or two per room \
+depending on its size, placed on different walls so the room isn't left with a dead zone. Do NOT \
+calculate exact spacing or add an outlet every few feet along a wall -- a normal room needs a \
+small handful of outlets, not one per wall segment.
 - GFCI outlets (type "gfci"), kept as a SEPARATE marker type from duplex outlets -- never combine \
 the two: in wet areas (kitchen, bathroom, laundry, garage, exterior) use GFCI instead of duplex, \
-with the same wall-coverage rule but spaced so no point along a wall is more than 8 feet from an \
-outlet (tighter than the 12-foot rule elsewhere).
-- Lighting (type "light"): a switched light fixture for every room/hallway/stairway at minimum.
+same light-touch coverage as above (one or two per area, not dense spacing).
+- Lighting (type "light"): one switched light fixture for every room/hallway/stairway.
 - Bedrooms: one ceiling fan (type "fan") AND one light (type "light") in every bedroom as separate \
 markers, except the master bedroom, which gets 3 lights instead of one.
 - Exhaust fans (type "exfan"), kept as a SEPARATE marker type from the ceiling fans used in \
@@ -226,12 +227,10 @@ bedrooms: in bathrooms without a window.
 - Panels/equipment (type "panel"): any visible panel/meter/equipment (water heater, HVAC, sump \
 pump, garage door opener).
 
-Outlets are the exception to grouping -- since the 12/8-foot spacing rule above means their count \
-and position depend on each wall's actual length, place them as individual duplex/gfci markers at \
-their real positions along each wall (not grouped into one marker per room) so placement stays \
-accurate. Group every other repeated type in a room into a single marker with the right qty \
-instead (e.g. one marker "1 light, living room" with qty 1, or "2 smoke detectors, open floor \
-area" with qty 2 if two genuinely sit in the same spot) rather than one marker per physical unit.
+This is a light, code-minimum STARTING POINT the admin edits by hand -- when in doubt, place fewer \
+markers rather than more. Group every repeated type in a room into a single marker with the right \
+qty (e.g. one marker "2 duplex outlets, living room" with qty 2) rather than one marker per \
+physical unit -- this applies to outlets too now that they're no longer individually spaced.
 
 Placement accuracy matters as much as the counts -- a pin in the wrong room is as wrong as a \
 missing one. For every marker:
@@ -239,9 +238,7 @@ missing one. For every marker:
 picking x/y -- don't estimate from the room list or guess a generic layout.
 - x/y must land INSIDE the room the marker is labeled for, never in an adjoining room, a hallway, \
 on top of a wall line, or outside the building's outline.
-- For an outlet or switch, place it just inside the room against the specific wall segment it \
-belongs to (not the room's center) -- spread multiple outlets along that wall's actual length \
-rather than stacking them at one point.
+- For an outlet or switch, place it just inside the room against a wall (not the room's center).
 - For a ceiling item (light, fan, smoke/co_smoke detector), place it near the center of the room \
 or hallway it covers.
 - For a panel/equipment marker, place it at or next to the actual symbol/callout for that \
