@@ -1157,17 +1157,39 @@ export default function EstimateWizard({
   const applyPlanMarkersToChecklist = (markers: PlanMarker[]) => {
     const map = jobType === "commercial" ? COMMERCIAL_PLAN_MAP : RESIDENTIAL_PLAN_MAP;
     const steps = jobType === "commercial" ? COMMERCIAL_STEPS : WIZARD_STEPS;
-    const totals = new Map<PlanSymbolType, number>();
+    const roughInSection = jobType === "commercial" ? "Commercial Rough-In" : "Rough-In Electrical Work";
+    const roughInStepIdx = steps.findIndex((s) => s.section === roughInSection);
+    // A marker placed from the plan screen's full Rough-In item palette
+    // carries that item's exact name as its label (e.g. "Recessed Lights"),
+    // so look for a direct match in Rough-In before falling back to the
+    // symbol type's generic bucket -- an AI-auto-layout marker's label
+    // won't exactly match one of these and correctly falls through.
+    const exactItemByLabel = new Map<string, { groupIdx: number; item: string }>();
+    if (roughInStepIdx !== -1) {
+      steps[roughInStepIdx].groups.forEach((g, gi) => g.items.forEach((it) => exactItemByLabel.set(it.toLowerCase(), { groupIdx: gi, item: it })));
+    }
+
+    // Group by label (not just symbol type) so differently-labeled markers
+    // of the same type (e.g. "Recessed Lights" vs "Chandeliers", both
+    // type "light") are counted and matched separately instead of lumped.
+    const totals = new Map<string, { symbolType: PlanSymbolType; qty: number }>();
     for (const m of markers) {
       const qty = parseFloat(m.qty) || 0;
-      totals.set(m.symbol_type, (totals.get(m.symbol_type) ?? 0) + qty);
+      const cur = totals.get(m.label);
+      totals.set(m.label, { symbolType: m.symbol_type, qty: (cur?.qty ?? 0) + qty });
     }
 
     const newSelections: Selections = {};
     const newCustom: Record<number, CustomItem[]> = {};
     let placed = 0;
-    for (const [symbolType, qty] of totals) {
+    for (const [label, { symbolType, qty }] of totals) {
       if (qty <= 0) continue;
+      const exact = roughInStepIdx !== -1 ? exactItemByLabel.get(label.toLowerCase()) : undefined;
+      if (exact) {
+        newSelections[key(roughInStepIdx, exact.groupIdx, exact.item)] = { checked: true, qty: String(qty) };
+        placed += 1;
+        continue;
+      }
       for (const target of map[symbolType]) {
         const stepIdx = steps.findIndex((s) => s.section === target.section);
         if (stepIdx === -1) continue;

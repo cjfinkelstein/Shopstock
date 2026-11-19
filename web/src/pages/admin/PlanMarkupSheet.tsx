@@ -21,6 +21,42 @@ const SYMBOL_TYPES: { id: PlanSymbolType; label: string; color: string; letter: 
 ];
 const symbolOf = (id: PlanSymbolType) => SYMBOL_TYPES.find((t) => t.id === id) ?? SYMBOL_TYPES[0];
 
+// Every item from the "Rough-In Electrical Work" checklist step (kept in
+// sync with WIZARD_STEPS in EstimateWizard.tsx by hand, same as the
+// Install Customer-Supplied Fixtures list already is), each tagged with the
+// closest symbol type for its pin's icon/color -- placing one sets the
+// marker's label to the item's exact name, not the generic bucket label,
+// so "Apply to estimate" can match it to this exact checklist item.
+const ROUGH_IN_ITEMS: { group: string; type: PlanSymbolType; item: string }[] = [
+  ...([
+    "Recessed Lights", "Chandeliers", "Pendant Lights", "Exterior Light", "Exterior Floodlights",
+    "Basement Lights", "Crawl Space Lights", "Vanity Lights", "Reading Lights", "Tub Pendant",
+    "Closet Lights", "Under Cabinet Lights", "Wall Sconces", "Emergency Lights", "EXIT Lights",
+    "Combo EXIT/Emergency Lights", "2x2 Lights", "2x4 Lights",
+  ].map((item) => ({ group: "Fixtures", type: "light" as PlanSymbolType, item }))),
+  { group: "Fixtures", type: "exfan", item: "Exhaust Fans" },
+  { group: "Fixtures", type: "fan", item: "Ceiling Fans" },
+  { group: "Fixtures", type: "co_smoke", item: "Combination CO/Smoke Detectors" },
+  { group: "Fixtures", type: "smoke", item: "Smoke Detectors" },
+  { group: "Fixtures", type: "panel", item: "Baseboard Heaters" },
+  ...([
+    "Single-Pole Toggle Switches", "Three-Way Toggle Switches", "Four-Way Toggle Switches",
+    "Dimmer Switches", "Occupancy Sensor Switches",
+  ].map((item) => ({ group: "Switches & Outlets", type: "switch" as PlanSymbolType, item }))),
+  { group: "Switches & Outlets", type: "duplex", item: "Duplex Outlets" },
+  { group: "Switches & Outlets", type: "duplex", item: "Quad Outlets" },
+  { group: "Switches & Outlets", type: "gfci", item: "GFCI Outlet" },
+  { group: "Switches & Outlets", type: "gfci", item: "Waterproof GFCI Outlet" },
+  ...([
+    "Dishwasher Outlet", "Disposal Outlet", "Microwave Outlet", "Oven/Range Outlet",
+    "Refrigerator Outlet", "Washer Outlet", "Dryer Outlet", "Garage Door Opener Outlet", "TV Outlet",
+    "Data Outlet (CAT5e)", "Thermostat",
+  ].map((item) => ({ group: "Switches & Outlets", type: "duplex" as PlanSymbolType, item }))),
+  ...([
+    "New HVAC Indoor & Outdoor Unit", "New Kitchen Hood", "New Water Heater", "Sump Pump",
+  ].map((item) => ({ group: "Equipment", type: "panel" as PlanSymbolType, item }))),
+];
+
 export default function PlanMarkupSheet({
   estimateId,
   onClose,
@@ -43,7 +79,8 @@ export default function PlanMarkupSheet({
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [pageId, setPageId] = useState<number | null>(null);
-  const [placing, setPlacing] = useState<PlanSymbolType | null>(null);
+  const [placing, setPlacing] = useState<{ type: PlanSymbolType; label: string } | null>(null);
+  const [paletteFilter, setPaletteFilter] = useState("");
   const [selected, setSelected] = useState<PlanMarker | null>(null);
   const [itemSearch, setItemSearch] = useState("");
   const [itemResults, setItemResults] = useState<Item[]>([]);
@@ -140,7 +177,7 @@ export default function PlanMarkupSheet({
     try {
       const m = await api<PlanMarker>(`/estimates/${estimateId}/plan/markers`, {
         method: "POST",
-        body: { plan_page_id: page.id, symbol_type: placing, label: symbolOf(placing).label, qty: "1", x: String(x), y: String(y) },
+        body: { plan_page_id: page.id, symbol_type: placing.type, label: placing.label, qty: "1", x: String(x), y: String(y) },
       });
       setPlan((p) => (p ? { ...p, pages: p.pages.map((pg) => (pg.id === page.id ? { ...pg, markers: [...pg.markers, m] } : pg)) } : p));
     } catch (e) {
@@ -233,10 +270,18 @@ export default function PlanMarkupSheet({
   const pageMarkers = page?.markers ?? [];
   const allMarkers = plan?.pages.flatMap((p) => p.markers) ?? [];
   const matchedCount = allMarkers.filter((m) => m.item_id).length;
-  const countsByType = SYMBOL_TYPES.map((t) => ({
-    ...t,
-    qty: allMarkers.filter((m) => m.symbol_type === t.id).reduce((n, m) => n + (parseFloat(m.qty) || 0), 0),
-  })).filter((t) => t.qty > 0);
+  // By label, not just symbol_type -- placed pins now carry a specific
+  // item name (e.g. "Recessed Lights" vs "Chandeliers", both type "light"),
+  // so a bucket-level count would wrongly lump different items together.
+  const countsByLabel = Object.values(
+    allMarkers.reduce<Record<string, { label: string; color: string; qty: number }>>((acc, m) => {
+      const key = m.label;
+      const qty = parseFloat(m.qty) || 0;
+      if (!acc[key]) acc[key] = { label: m.label, color: symbolOf(m.symbol_type).color, qty: 0 };
+      acc[key].qty += qty;
+      return acc;
+    }, {}),
+  ).sort((a, b) => a.label.localeCompare(b.label));
 
   const apply = async () => {
     if (onApplyToChecklist) {
@@ -405,12 +450,12 @@ export default function PlanMarkupSheet({
             </div>
 
             <div className="flex w-full shrink-0 flex-col gap-1.5 overflow-y-auto border-t border-slate-100 p-4 dark:border-slate-800 md:w-64 md:border-l md:border-t-0">
-              {countsByType.length > 0 && (
+              {countsByLabel.length > 0 && (
                 <>
                   <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Counts (whole plan)</p>
                   <div className="mb-2 flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-950">
-                    {countsByType.map((t) => (
-                      <div key={t.id} className="flex items-center gap-2 text-[12.5px]">
+                    {countsByLabel.map((t) => (
+                      <div key={t.label} className="flex items-center gap-2 text-[12.5px]">
                         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} />
                         <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">{t.label}</span>
                         <span className="font-mono font-bold tabular-nums">{t.qty % 1 === 0 ? t.qty : t.qty.toFixed(2)}</span>
@@ -419,19 +464,54 @@ export default function PlanMarkupSheet({
                   </div>
                 </>
               )}
-              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Add a symbol</p>
+
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Quick symbols</p>
               {SYMBOL_TYPES.map((t) => (
                 <button
                   key={t.id}
-                  className={`card-interactive flex items-center gap-2 p-2.5 text-left text-[12.5px] font-semibold ${placing === t.id ? "ring-2 ring-brand-500" : ""}`}
-                  onClick={() => setPlacing(placing === t.id ? null : t.id)}
+                  className={`card-interactive flex items-center gap-2 p-2.5 text-left text-[12.5px] font-semibold ${placing?.type === t.id && placing.label === t.label ? "ring-2 ring-brand-500" : ""}`}
+                  onClick={() => setPlacing(placing?.type === t.id && placing.label === t.label ? null : { type: t.id, label: t.label })}
                 >
                   <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: t.color }} />
                   {t.label}
                 </button>
               ))}
+
+              <p className="mb-1 mt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Rough-in items</p>
+              <input
+                className="input mb-1 !min-h-[30px] text-[12.5px]"
+                placeholder="Filter…"
+                value={paletteFilter}
+                onChange={(e) => setPaletteFilter(e.target.value)}
+              />
+              {["Fixtures", "Switches & Outlets", "Equipment"].map((group) => {
+                const items = ROUGH_IN_ITEMS.filter(
+                  (r) => r.group === group && r.item.toLowerCase().includes(paletteFilter.trim().toLowerCase()),
+                );
+                if (items.length === 0) return null;
+                return (
+                  <div key={group}>
+                    <p className="mb-0.5 mt-1.5 text-[10.5px] font-semibold text-slate-400 dark:text-slate-500">{group}</p>
+                    {items.map((r) => {
+                      const s = symbolOf(r.type);
+                      const active = placing?.type === r.type && placing.label === r.item;
+                      return (
+                        <button
+                          key={r.item}
+                          className={`card-interactive flex w-full items-center gap-2 p-2 text-left text-[12px] font-semibold ${active ? "ring-2 ring-brand-500" : ""}`}
+                          onClick={() => setPlacing(active ? null : { type: r.type, label: r.item })}
+                        >
+                          <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
+                          <span className="min-w-0 flex-1 truncate">{r.item}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+
               <p className="mt-1 text-[11.5px] text-slate-400 dark:text-slate-500">
-                {placing ? `Click the plan to drop a ${symbolOf(placing).label.toLowerCase()} pin.` : "Pick a symbol, then click the plan."}
+                {placing ? `Click the plan to drop a ${placing.label.toLowerCase()} pin.` : "Pick a symbol, then click the plan."}
               </p>
 
               <button className="btn-primary mt-3" disabled={applying || allMarkers.length === 0} onClick={apply}>
