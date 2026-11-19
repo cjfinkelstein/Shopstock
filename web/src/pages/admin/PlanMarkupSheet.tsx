@@ -207,6 +207,18 @@ export default function PlanMarkupSheet({
     }
   };
 
+  const clearAllMarkers = async () => {
+    if (!confirm("Clear every symbol on every page of this plan? This can't be undone.")) return;
+    try {
+      await api(`/estimates/${estimateId}/plan/markers`, { method: "DELETE" });
+      setPlan((p) => (p ? { ...p, pages: p.pages.map((pg) => ({ ...pg, markers: [] })) } : p));
+      setSelected(null);
+      toast("success", "Cleared every symbol from the plan");
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not clear the plan's symbols");
+    }
+  };
+
   const onPinPointerDown = (m: PlanMarker, e: React.PointerEvent) => {
     e.stopPropagation();
     dragState.current = { id: m.id, moved: false };
@@ -397,6 +409,14 @@ export default function PlanMarkupSheet({
                     <Icon name="plus" size={14} />
                   </button>
                 </div>
+                <button
+                  className="btn-secondary !min-h-[32px] px-2.5 text-[12px] !text-red-600 dark:!text-red-400"
+                  disabled={allMarkers.length === 0}
+                  onClick={clearAllMarkers}
+                >
+                  <Icon name="trash" size={14} />
+                  Clear all symbols
+                </button>
                 <input ref={fileInput} type="file" accept="application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
                 <button className="btn-secondary !min-h-[32px] px-2.5 text-[12px]" disabled={uploading} onClick={() => fileInput.current?.click()}>
                   {uploading ? <Spinner /> : <Icon name="upload" size={14} />}

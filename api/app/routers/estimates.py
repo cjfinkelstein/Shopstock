@@ -700,6 +700,17 @@ def delete_plan_marker(estimate_id: int, marker_id: int, db: Session = Depends(g
         db.commit()
 
 
+@router.delete("/{estimate_id}/plan/markers", status_code=204)
+def delete_all_plan_markers(estimate_id: int, db: Session = Depends(get_db)):
+    """Clears every marker across every page of this plan in one call --
+    the "Clear all symbols" button, as opposed to deleting one pin."""
+    _get_or_404(db, estimate_id)
+    for page in _get_plan_pages(db, estimate_id):
+        for marker in list(page.markers):
+            db.delete(marker)
+    db.commit()
+
+
 @router.post("/{estimate_id}/plan/apply", response_model=EstimateOut)
 def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     """Turns every current plan marker into a real estimate line -- a
