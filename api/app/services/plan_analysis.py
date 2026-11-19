@@ -164,7 +164,7 @@ def decode_pdf_data_url(data_url: str) -> bytes:
     return base64.b64decode(data_url)
 
 
-_MARKER_TYPES = ["outlet", "light", "fan", "switch", "smoke", "panel"]
+_MARKER_TYPES = ["outlet", "light", "fan", "switch", "smoke", "co_smoke", "panel"]
 
 _MARKER_RESPONSE_SCHEMA = {
     "type": "object",
@@ -205,17 +205,46 @@ with no electrical symbols or legend, so you are proposing typical IRC/NEC resid
 coverage per room, not reading real fixture counts.
 
 For every page that is a floor plan (skip cover sheets, schedules, sections, and detail pages -- \
-return no markers for those), identify each room and propose: duplex outlets at standard wall \
-spacing, GFCI outlets at kitchen counters/bathrooms/garage/exterior/laundry, a switched light \
-fixture for every room/hallway/stairway at minimum, exhaust fans in bathrooms without a window, \
-switches for each fixture, combo CO/smoke detectors per code (each bedroom, outside each sleeping \
-area, each level), and any visible panel/meter/equipment (water heater, HVAC, sump pump, garage \
-door opener).
+return no markers for those), identify each room and propose, following these exact rules:
+
+- Smoke detectors (type "smoke"): one plain smoke detector in every room (not just bedrooms).
+- Combo CO/smoke detectors (type "co_smoke"): one in each hallway, kept as a SEPARATE marker type \
+from plain smoke detectors -- never combine the two into one marker or count.
+- Outlets: at least one outlet on every wall of every room, and additionally spaced so no point \
+along a wall is more than 12 feet from an outlet (add extra outlets along long walls to satisfy \
+this).
+- Wet areas (kitchen, bathroom, laundry, garage, exterior): same rule as outlets above -- one on \
+every wall, but spaced so no point along a wall is more than 8 feet from an outlet (tighter than \
+the 12-foot rule elsewhere) -- and GFCI.
+- Lighting: a switched light fixture for every room/hallway/stairway at minimum.
+- Bedrooms: one fan/light fixture in every bedroom, except the master bedroom, which gets 3 lights \
+instead.
+- Exhaust fans: in bathrooms without a window.
+- Switches: one for each fixture placed.
+- Panels/equipment: any visible panel/meter/equipment (water heater, HVAC, sump pump, garage door \
+opener).
 
 Group identical items in one room into a single marker with the right qty, rather than one marker \
 per physical unit (e.g. one marker "6 duplex outlets, living room" with qty 6, not six separate \
 markers). Keep each page's list focused -- roughly 10-30 markers per floor plan page, not one per \
 inch of wall.
+
+Placement accuracy matters as much as the counts -- a pin in the wrong room is as wrong as a \
+missing one. For every marker:
+- Look at that page's actual image and find the real room boundaries (the wall lines) before \
+picking x/y -- don't estimate from the room list or guess a generic layout.
+- x/y must land INSIDE the room the marker is labeled for, never in an adjoining room, a hallway, \
+on top of a wall line, or outside the building's outline.
+- For an outlet or switch, place it just inside the room against the specific wall segment it \
+belongs to (not the room's center) -- spread multiple outlets along that wall's actual length \
+rather than stacking them at one point.
+- For a ceiling item (light, fan, smoke/co_smoke detector), place it near the center of the room \
+or hallway it covers.
+- For a panel/equipment marker, place it at or next to the actual symbol/callout for that \
+equipment if the plan shows one, otherwise at the room/location named for it (e.g. the garage, \
+the utility room).
+- Double check each page's x/y values before finishing: the markers for a room should visually \
+cluster inside that room's drawn outline, not be smeared across the page.
 
 Place x/y reading the room's position directly from that page's own image (0,0 is that page's \
 top-left corner, 100,100 its bottom-right)."""

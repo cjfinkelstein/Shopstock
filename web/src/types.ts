@@ -378,7 +378,7 @@ export interface Estimate {
   responded_at: string | null;
 }
 
-export type PlanSymbolType = "outlet" | "light" | "fan" | "switch" | "smoke" | "panel";
+export type PlanSymbolType = "outlet" | "light" | "fan" | "switch" | "smoke" | "co_smoke" | "panel";
 
 export interface PlanMarker {
   id: number;

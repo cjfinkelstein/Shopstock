@@ -796,7 +796,7 @@ class PlanOut(BaseModel):
 
 class PlanMarkerIn(BaseModel):
     plan_page_id: int
-    symbol_type: str = Field(pattern="^(outlet|light|fan|switch|smoke|panel)$")
+    symbol_type: str = Field(pattern="^(outlet|light|fan|switch|smoke|co_smoke|panel)$")
     label: str
     qty: Decimal = Decimal("1")
     x: Decimal
@@ -805,7 +805,7 @@ class PlanMarkerIn(BaseModel):
 
 
 class PlanMarkerUpdate(BaseModel):
-    symbol_type: str | None = Field(default=None, pattern="^(outlet|light|fan|switch|smoke|panel)$")
+    symbol_type: str | None = Field(default=None, pattern="^(outlet|light|fan|switch|smoke|co_smoke|panel)$")
     label: str | None = None
     qty: Decimal | None = None
     x: Decimal | None = None

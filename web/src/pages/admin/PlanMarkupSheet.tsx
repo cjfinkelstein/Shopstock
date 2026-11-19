@@ -13,7 +13,8 @@ const SYMBOL_TYPES: { id: PlanSymbolType; label: string; color: string; letter: 
   { id: "light", label: "Light Fixture", color: "#b8962f", letter: "L" },
   { id: "fan", label: "Fan / Exhaust Fan", color: "#2f8f7a", letter: "F" },
   { id: "switch", label: "Switch", color: "#7a4fb5", letter: "S" },
-  { id: "smoke", label: "Smoke / CO Detector", color: "#c23b3b", letter: "D" },
+  { id: "smoke", label: "Smoke Detector", color: "#c23b3b", letter: "D" },
+  { id: "co_smoke", label: "Combo Smoke/CO Detector", color: "#8a2424", letter: "C" },
   { id: "panel", label: "Panel / Equipment", color: "#5a5f66", letter: "P" },
 ];
 const symbolOf = (id: PlanSymbolType) => SYMBOL_TYPES.find((t) => t.id === id) ?? SYMBOL_TYPES[0];
@@ -124,9 +125,6 @@ export default function PlanMarkupSheet({
         body: { plan_page_id: page.id, symbol_type: placing, label: symbolOf(placing).label, qty: "1", x: String(x), y: String(y) },
       });
       setPlan((p) => (p ? { ...p, pages: p.pages.map((pg) => (pg.id === page.id ? { ...pg, markers: [...pg.markers, m] } : pg)) } : p));
-      setPlacing(null);
-      setSelected(m);
-      setItemSearch("");
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Could not add that pin");
     }
