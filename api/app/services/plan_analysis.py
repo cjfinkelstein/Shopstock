@@ -226,10 +226,12 @@ bedrooms: in bathrooms without a window.
 - Panels/equipment (type "panel"): any visible panel/meter/equipment (water heater, HVAC, sump \
 pump, garage door opener).
 
-Group identical items in one room into a single marker with the right qty, rather than one marker \
-per physical unit (e.g. one marker "6 duplex outlets, living room" with qty 6, not six separate \
-markers). Keep each page's list focused -- roughly 10-30 markers per floor plan page, not one per \
-inch of wall.
+Outlets are the exception to grouping -- since the 12/8-foot spacing rule above means their count \
+and position depend on each wall's actual length, place them as individual duplex/gfci markers at \
+their real positions along each wall (not grouped into one marker per room) so placement stays \
+accurate. Group every other repeated type in a room into a single marker with the right qty \
+instead (e.g. one marker "1 light, living room" with qty 1, or "2 smoke detectors, open floor \
+area" with qty 2 if two genuinely sit in the same spot) rather than one marker per physical unit.
 
 Placement accuracy matters as much as the counts -- a pin in the wrong room is as wrong as a \
 missing one. For every marker:
@@ -260,7 +262,11 @@ def propose_plan_markers(pdf_base64: str) -> dict:
     client = get_anthropic_client()
     response = client.messages.create(
         model="claude-opus-5",
-        max_tokens=8000,
+        # A full multi-page house plan can need hundreds of markers under
+        # the wall-coverage/spacing rules above -- 8000 was enough for a
+        # handful of pages but silently truncated (no text block at all) on
+        # a bigger one, like a 14-page set. 32000 gives real headroom.
+        max_tokens=32000,
         output_config={"format": {"type": "json_schema", "schema": _MARKER_RESPONSE_SCHEMA}},
         messages=[
             {
@@ -278,8 +284,13 @@ def propose_plan_markers(pdf_base64: str) -> dict:
 
     if response.stop_reason == "refusal":
         raise RuntimeError("The AI declined to read this file")
+    if response.stop_reason == "max_tokens":
+        raise RuntimeError(
+            "This plan needed more symbols than we could read in one pass -- try splitting it into "
+            "smaller uploads (fewer pages at a time) and running this again on each."
+        )
 
     text = next((b.text for b in response.content if b.type == "text"), None)
     if not text:
-        raise RuntimeError("No response from the AI")
+        raise RuntimeError(f"No response from the AI (stop reason: {response.stop_reason})")
     return json.loads(text)
