@@ -836,6 +836,7 @@ export default function EstimateWizard({
   const [draftEstimateId, setDraftEstimateId] = useState<number | null>(null);
   const [planMarkupOpen, setPlanMarkupOpen] = useState(false);
   const [creatingDraft, setCreatingDraft] = useState(false);
+  const [planAppliedEstimate, setPlanAppliedEstimate] = useState<Estimate | null>(null);
   const effectiveEstimateId = estimateId ?? draftEstimateId ?? undefined;
 
   // Anything typed into "Not on the list?" on a past estimate lands here,
@@ -1639,11 +1640,18 @@ export default function EstimateWizard({
       {planMarkupOpen && draftEstimateId && (
         <PlanMarkupSheet
           estimateId={draftEstimateId}
-          onClose={() => setPlanMarkupOpen(false)}
-          onApplied={(est) => {
+          // Applying doesn't close the sheet -- keep editing pins and
+          // re-apply as many times as needed. Only closing the sheet
+          // itself (X / Done) leaves the wizard: if anything was ever
+          // applied, that goes straight to the created/updated estimate
+          // instead of back to the checklist, since finish()'s full
+          // section PATCH would otherwise wipe the real priced lines the
+          // plan just wrote.
+          onClose={() => {
             setPlanMarkupOpen(false);
-            onCreated(est);
+            if (planAppliedEstimate) onCreated(planAppliedEstimate);
           }}
+          onApplied={(est) => setPlanAppliedEstimate(est)}
         />
       )}
     </Sheet>
