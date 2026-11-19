@@ -25,10 +25,18 @@ export default function PlanMarkupSheet({
   estimateId,
   onClose,
   onApplied,
+  onApplyToChecklist,
 }: {
   estimateId: number;
   onClose: () => void;
-  onApplied: (e: Estimate) => void;
+  // Either this or onApplyToChecklist is passed, not both. onApplied: the
+  // default path (EstimateDetail's standalone "Plan" button) -- writes
+  // real lines via POST .../plan/apply and hands back the updated
+  // estimate. onApplyToChecklist: the wizard's "Mark up a plan" path --
+  // skips that endpoint entirely and hands the raw markers to the caller,
+  // which checks them off in the normal checklist steps instead.
+  onApplied?: (e: Estimate) => void;
+  onApplyToChecklist?: (markers: PlanMarker[]) => void;
 }) {
   const toast = useToast();
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -188,8 +196,16 @@ export default function PlanMarkupSheet({
   const pageMarkers = page?.markers ?? [];
   const allMarkers = plan?.pages.flatMap((p) => p.markers) ?? [];
   const matchedCount = allMarkers.filter((m) => m.item_id).length;
+  const countsByType = SYMBOL_TYPES.map((t) => ({
+    ...t,
+    qty: allMarkers.filter((m) => m.symbol_type === t.id).reduce((n, m) => n + (parseFloat(m.qty) || 0), 0),
+  })).filter((t) => t.qty > 0);
 
   const apply = async () => {
+    if (onApplyToChecklist) {
+      onApplyToChecklist(allMarkers);
+      return;
+    }
     setApplying(true);
     try {
       const est = await api<Estimate>(`/estimates/${estimateId}/plan/apply`, { method: "POST" });
@@ -197,7 +213,7 @@ export default function PlanMarkupSheet({
       // Doesn't close -- keep editing/adding pins and hit Apply again any
       // time; each apply replaces the lines from the previous one rather
       // than piling up duplicates, so it's safe to re-run after any edit.
-      onApplied(est);
+      onApplied?.(est);
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Could not apply the plan");
     } finally {
@@ -348,6 +364,20 @@ export default function PlanMarkupSheet({
             </div>
 
             <div className="flex w-full shrink-0 flex-col gap-1.5 overflow-y-auto border-t border-slate-100 p-4 dark:border-slate-800 md:w-64 md:border-l md:border-t-0">
+              {countsByType.length > 0 && (
+                <>
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Counts (whole plan)</p>
+                  <div className="mb-2 flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-950">
+                    {countsByType.map((t) => (
+                      <div key={t.id} className="flex items-center gap-2 text-[12.5px]">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} />
+                        <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">{t.label}</span>
+                        <span className="font-mono font-bold tabular-nums">{t.qty % 1 === 0 ? t.qty : t.qty.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
               <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Add a symbol</p>
               {SYMBOL_TYPES.map((t) => (
                 <button
@@ -368,7 +398,9 @@ export default function PlanMarkupSheet({
                 Apply to estimate
               </button>
               <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                Creates real line items from every pin above -- matched pins price from the catalog, unmatched ones go in at $0 material to fix up after. Keep editing pins and hit this again any time -- it updates the estimate's lines instead of duplicating them.
+                {onApplyToChecklist
+                  ? "Checks off the regular estimate questions using the counts above (adding a custom item where nothing matches) so you can review and add more before finishing."
+                  : "Creates real line items from every pin above -- matched pins price from the catalog, unmatched ones go in at $0 material to fix up after. Keep editing pins and hit this again any time -- it updates the estimate's lines instead of duplicating them."}
               </p>
             </div>
           </div>

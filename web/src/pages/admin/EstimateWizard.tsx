@@ -5,7 +5,7 @@ import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import { Spinner } from "../../components/ui";
 import { useToast } from "../../toast";
-import type { ChecklistItem, Estimate, PlanAnalyzeResult } from "../../types";
+import type { ChecklistItem, Estimate, PlanAnalyzeResult, PlanMarker, PlanSymbolType } from "../../types";
 import PlanMarkupSheet from "./PlanMarkupSheet";
 
 /** Checklists lifted straight from "APEX Estimating Spreadsheet 2026" --
@@ -365,6 +365,42 @@ const COPY_FROM_SECTION: Record<string, string> = {
 
 type Selections = Record<string, { checked: boolean; qty: string }>;
 type CustomItem = { id: number; name: string; qty: string };
+
+// Where "Apply to estimate" on the plan markup screen lands each symbol
+// type's total count: an exact checklist item when one exists, or
+// customOnly when nothing in the checklist matches closely enough (the
+// marker's own readable label becomes a free-text custom item instead).
+type PlanChecklistTarget = { section: string; groupIdx: number; item: string } | { section: string; customOnly: true };
+
+const PLAN_SYMBOL_LABEL: Record<PlanSymbolType, string> = {
+  duplex: "Duplex Outlet", gfci: "GFCI Outlet", light: "Light Fixture", fan: "Ceiling Fan",
+  exfan: "Exhaust Fan", switch: "Switch", smoke: "Smoke Detector", co_smoke: "Combo Smoke/CO Detector",
+  panel: "Panel/Equipment",
+};
+
+const RESIDENTIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget> = {
+  duplex: { section: "Supply and Install", groupIdx: 1, item: "Duplex Outlets" },
+  gfci: { section: "Supply and Install", groupIdx: 1, item: "GFCI Outlets" },
+  switch: { section: "Supply and Install", groupIdx: 1, item: "Single-Pole Toggle Switches" },
+  light: { section: "Supply and Install", groupIdx: 0, item: "Flush Mount Ceiling Lights" },
+  fan: { section: "Supply and Install", groupIdx: 0, item: "Ceiling Fans" },
+  exfan: { section: "Supply and Install", groupIdx: 0, item: "Exhaust Fans" },
+  smoke: { section: "Supply and Install", groupIdx: 0, item: "Smoke Detectors" },
+  co_smoke: { section: "Supply and Install", groupIdx: 0, item: "Combination CO/Smoke Detectors" },
+  panel: { section: "Panels and Meters", customOnly: true },
+};
+
+const COMMERCIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget> = {
+  duplex: { section: "Commercial Outlet Installation", groupIdx: 0, item: "Duplex Outlet" },
+  gfci: { section: "Commercial Outlet Installation", groupIdx: 0, item: "GFCI Outlet" },
+  switch: { section: "Commercial Switch Installation", groupIdx: 0, item: "Toggle Switch" },
+  light: { section: "Commercial Lighting Installation", groupIdx: 0, item: "2x2 Light" },
+  fan: { section: "Commercial Lighting Installation", customOnly: true },
+  exfan: { section: "Commercial Lighting Installation", groupIdx: 0, item: "Exhaust Fan" },
+  smoke: { section: "Commercial Lighting Installation", customOnly: true },
+  co_smoke: { section: "Commercial Lighting Installation", customOnly: true },
+  panel: { section: "Commercial Panels and Meters", customOnly: true },
+};
 
 // "saved" is a reserved group id for the dynamically-fetched "previously
 // added" checklist group, kept distinct from the hardcoded groups' numeric
@@ -836,7 +872,6 @@ export default function EstimateWizard({
   const [draftEstimateId, setDraftEstimateId] = useState<number | null>(null);
   const [planMarkupOpen, setPlanMarkupOpen] = useState(false);
   const [creatingDraft, setCreatingDraft] = useState(false);
-  const [planAppliedEstimate, setPlanAppliedEstimate] = useState<Estimate | null>(null);
   const effectiveEstimateId = estimateId ?? draftEstimateId ?? undefined;
 
   // Anything typed into "Not on the list?" on a past estimate lands here,
@@ -1104,6 +1139,55 @@ export default function EstimateWizard({
     } finally {
       setCreatingDraft(false);
     }
+  };
+
+  // "Apply to estimate" on the plan markup screen hands back every marker
+  // instead of writing lines itself -- totals per symbol type get checked
+  // off (or, where nothing in the checklist matches, added as a custom
+  // item) in the normal checklist steps, which the admin then reviews, can
+  // still add to, and finishes exactly like any other estimate. This is
+  // the one and only path that writes real lines for this draft, so there's
+  // no risk of finish()'s full-section PATCH wiping anything the plan wrote
+  // directly -- nothing was ever written directly.
+  const applyPlanMarkersToChecklist = (markers: PlanMarker[]) => {
+    const map = jobType === "commercial" ? COMMERCIAL_PLAN_MAP : RESIDENTIAL_PLAN_MAP;
+    const steps = jobType === "commercial" ? COMMERCIAL_STEPS : WIZARD_STEPS;
+    const totals = new Map<PlanSymbolType, number>();
+    for (const m of markers) {
+      const qty = parseFloat(m.qty) || 0;
+      totals.set(m.symbol_type, (totals.get(m.symbol_type) ?? 0) + qty);
+    }
+
+    const newSelections: Selections = {};
+    const newCustom: Record<number, CustomItem[]> = {};
+    let placed = 0;
+    for (const [symbolType, qty] of totals) {
+      if (qty <= 0) continue;
+      const target = map[symbolType];
+      const stepIdx = steps.findIndex((s) => s.section === target.section);
+      if (stepIdx === -1) continue;
+      if ("item" in target) {
+        newSelections[key(stepIdx, target.groupIdx, target.item)] = { checked: true, qty: String(qty) };
+      } else {
+        newCustom[stepIdx] = [
+          ...(newCustom[stepIdx] ?? []),
+          { id: nextCustomId++, name: `${PLAN_SYMBOL_LABEL[symbolType]} (from plan)`, qty: String(qty) },
+        ];
+      }
+      placed += 1;
+    }
+
+    setSelections((s) => ({ ...s, ...newSelections }));
+    if (Object.keys(newCustom).length) {
+      setCustomItems((c) => {
+        const next = { ...c };
+        for (const [stepIdx, items] of Object.entries(newCustom)) next[Number(stepIdx)] = [...(next[Number(stepIdx)] ?? []), ...items];
+        return next;
+      });
+    }
+    setPlanMarkupOpen(false);
+    setPhase(0);
+    toast("success", `Checked off ${placed} item type${placed === 1 ? "" : "s"} from the plan -- review before finishing.`);
   };
 
   const costFor = (item: string, step: WizardStep) => {
@@ -1640,18 +1724,13 @@ export default function EstimateWizard({
       {planMarkupOpen && draftEstimateId && (
         <PlanMarkupSheet
           estimateId={draftEstimateId}
-          // Applying doesn't close the sheet -- keep editing pins and
-          // re-apply as many times as needed. Only closing the sheet
-          // itself (X / Done) leaves the wizard: if anything was ever
-          // applied, that goes straight to the created/updated estimate
-          // instead of back to the checklist, since finish()'s full
-          // section PATCH would otherwise wipe the real priced lines the
-          // plan just wrote.
-          onClose={() => {
-            setPlanMarkupOpen(false);
-            if (planAppliedEstimate) onCreated(planAppliedEstimate);
-          }}
-          onApplied={(est) => setPlanAppliedEstimate(est)}
+          // Applying hands the markers to applyPlanMarkersToChecklist
+          // instead of writing lines itself (see onApplyToChecklist below),
+          // which closes this sheet and jumps into the checklist steps on
+          // its own -- so closing here (X / Done, with nothing applied
+          // yet) just returns to the intro screen, nothing special to do.
+          onClose={() => setPlanMarkupOpen(false)}
+          onApplyToChecklist={applyPlanMarkersToChecklist}
         />
       )}
     </Sheet>
