@@ -532,11 +532,12 @@ def redraft_estimate(estimate_id: int, db: Session = Depends(get_db)):
 
 PLAN_SYMBOL_LABOR_DEFAULT = {
     "outlet": Decimal("45"), "light": Decimal("45"), "fan": Decimal("50"),
-    "switch": Decimal("40"), "smoke": Decimal("40"), "panel": Decimal("300"),
+    "switch": Decimal("40"), "smoke": Decimal("40"), "co_smoke": Decimal("45"), "panel": Decimal("300"),
 }
 PLAN_SYMBOL_SECTION = {
     "outlet": "Supply and Install", "light": "Supply and Install", "fan": "Supply and Install",
-    "switch": "Supply and Install", "smoke": "Supply and Install", "panel": "Panels and Meters",
+    "switch": "Supply and Install", "smoke": "Supply and Install", "co_smoke": "Supply and Install",
+    "panel": "Panels and Meters",
 }
 
 

@@ -164,7 +164,7 @@ def decode_pdf_data_url(data_url: str) -> bytes:
     return base64.b64decode(data_url)
 
 
-_MARKER_TYPES = ["outlet", "light", "fan", "switch", "smoke", "panel"]
+_MARKER_TYPES = ["outlet", "light", "fan", "switch", "smoke", "co_smoke", "panel"]
 
 _MARKER_RESPONSE_SCHEMA = {
     "type": "object",
@@ -205,12 +205,24 @@ with no electrical symbols or legend, so you are proposing typical IRC/NEC resid
 coverage per room, not reading real fixture counts.
 
 For every page that is a floor plan (skip cover sheets, schedules, sections, and detail pages -- \
-return no markers for those), identify each room and propose: duplex outlets at standard wall \
-spacing, GFCI outlets at kitchen counters/bathrooms/garage/exterior/laundry, a switched light \
-fixture for every room/hallway/stairway at minimum, exhaust fans in bathrooms without a window, \
-switches for each fixture, combo CO/smoke detectors per code (each bedroom, outside each sleeping \
-area, each level), and any visible panel/meter/equipment (water heater, HVAC, sump pump, garage \
-door opener).
+return no markers for those), identify each room and propose, following these exact rules:
+
+- Smoke detectors (type "smoke"): one plain smoke detector in every room (not just bedrooms).
+- Combo CO/smoke detectors (type "co_smoke"): one in each hallway, kept as a SEPARATE marker type \
+from plain smoke detectors -- never combine the two into one marker or count.
+- Outlets: at least one outlet on every wall of every room, and additionally spaced so no point \
+along a wall is more than 12 feet from an outlet (add extra outlets along long walls to satisfy \
+this).
+- Wet areas (kitchen, bathroom, laundry, garage, exterior): same rule as outlets above -- one on \
+every wall, but spaced so no point along a wall is more than 8 feet from an outlet (tighter than \
+the 12-foot rule elsewhere) -- and GFCI.
+- Lighting: a switched light fixture for every room/hallway/stairway at minimum.
+- Bedrooms: one fan/light fixture in every bedroom, except the master bedroom, which gets 3 lights \
+instead.
+- Exhaust fans: in bathrooms without a window.
+- Switches: one for each fixture placed.
+- Panels/equipment: any visible panel/meter/equipment (water heater, HVAC, sump pump, garage door \
+opener).
 
 Group identical items in one room into a single marker with the right qty, rather than one marker \
 per physical unit (e.g. one marker "6 duplex outlets, living room" with qty 6, not six separate \
