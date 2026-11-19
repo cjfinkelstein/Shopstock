@@ -202,6 +202,7 @@ export default function PlanMarkupSheet({
       await api(`/estimates/${estimateId}/plan/markers/${id}`, { method: "DELETE" });
       setPlan((p) => (p ? { ...p, pages: p.pages.map((pg) => ({ ...pg, markers: pg.markers.filter((x) => x.id !== id) })) } : p));
       setSelected(null);
+      setPlacing(null);
     } catch (e) {
       toast("error", e instanceof Error ? e.message : "Could not remove that pin");
     }
@@ -241,6 +242,11 @@ export default function PlanMarkupSheet({
         const { x, y } = stagePercent(up.clientX, up.clientY);
         patchMarker(m.id, { x: String(x), y: String(y) });
       } else {
+        // Disarm any symbol still armed from the palette -- otherwise the
+        // very next click on the stage (e.g. clicking where this pin was,
+        // to check it's gone) immediately drops a fresh pin there, making
+        // a deleted pin look like it "didn't go away".
+        setPlacing(null);
         setSelected(m);
         setItemSearch("");
       }
