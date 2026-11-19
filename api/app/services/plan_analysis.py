@@ -260,7 +260,11 @@ def propose_plan_markers(pdf_base64: str) -> dict:
     docstring for why this is framed as a suggestion, not a reading: an
     architectural plan has no electrical symbols to actually count."""
     client = get_anthropic_client()
-    response = client.messages.create(
+    # Streaming (required by the SDK above a 10-minute estimated response
+    # time, which a 32000-token max_tokens can trigger even when the actual
+    # response is much shorter) -- .get_final_message() blocks and returns
+    # the same Message shape messages.create() would have.
+    with client.messages.stream(
         model="claude-opus-5",
         # A full multi-page house plan can need hundreds of markers under
         # the wall-coverage/spacing rules above -- 8000 was enough for a
@@ -280,7 +284,8 @@ def propose_plan_markers(pdf_base64: str) -> dict:
                 ],
             }
         ],
-    )
+    ) as stream:
+        response = stream.get_final_message()
 
     if response.stop_reason == "refusal":
         raise RuntimeError("The AI declined to read this file")
