@@ -387,7 +387,7 @@ const RESIDENTIAL_PLAN_MAP: Record<PlanSymbolType, PlanChecklistTarget[]> = {
   duplex: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "Duplex Outlets" }],
   gfci: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "GFCI Outlet" }],
   switch: [{ section: "Rough-In Electrical Work", groupIdx: 1, item: "Single-Pole Toggle Switches" }],
-  light: [{ section: "Rough-In Electrical Work", customOnly: true }],
+  light: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Recessed Lights" }],
   fan: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Ceiling Fans" }],
   exfan: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Exhaust Fans" }],
   smoke: [{ section: "Rough-In Electrical Work", groupIdx: 0, item: "Smoke Detectors" }],
