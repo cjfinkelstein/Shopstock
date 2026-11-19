@@ -54,6 +54,8 @@ export default function PlanMarkupSheet({
   const fileInput = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ id: number; moved: boolean } | null>(null);
+  const panState = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const didPanRef = useRef(false);
 
   const load = () => {
     api<Plan>(`/estimates/${estimateId}/plan`)
@@ -193,6 +195,36 @@ export default function PlanMarkupSheet({
     document.addEventListener("pointerup", onUp);
   };
 
+  // Click-to-drag panning for when the plan is zoomed past the stage's
+  // width/height -- scrollbars alone are slow for a big image, and this is
+  // the expected gesture (map/photo-viewer style). Only counts as a pan
+  // once the pointer actually moves past a small threshold, so a plain
+  // click still places/selects a pin exactly as before.
+  const onStagePointerDown = (e: React.PointerEvent) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    panState.current = { x: e.clientX, y: e.clientY, scrollLeft: stage.scrollLeft, scrollTop: stage.scrollTop };
+    didPanRef.current = false;
+    const onMove = (mv: PointerEvent) => {
+      const start = panState.current;
+      if (!start) return;
+      const dx = mv.clientX - start.x;
+      const dy = mv.clientY - start.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) didPanRef.current = true;
+      if (didPanRef.current) {
+        stage.scrollLeft = start.scrollLeft - dx;
+        stage.scrollTop = start.scrollTop - dy;
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      panState.current = null;
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
+
   const pageMarkers = page?.markers ?? [];
   const allMarkers = plan?.pages.flatMap((p) => p.markers) ?? [];
   const matchedCount = allMarkers.filter((m) => m.item_id).length;
@@ -324,8 +356,12 @@ export default function PlanMarkupSheet({
 
               <div
                 ref={stageRef}
-                className={`relative min-h-0 flex-1 overflow-auto rounded-xl border border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-950 ${placing ? "cursor-copy" : "cursor-crosshair"}`}
-                onClick={(e) => { if (placing) addMarker(e.clientX, e.clientY); }}
+                className={`relative min-h-0 flex-1 overflow-auto rounded-xl border border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-950 ${placing ? "cursor-copy" : "cursor-grab active:cursor-grabbing"}`}
+                onPointerDown={onStagePointerDown}
+                onClick={(e) => {
+                  if (didPanRef.current) { didPanRef.current = false; return; }
+                  if (placing) addMarker(e.clientX, e.clientY);
+                }}
               >
                 {page && (
                   // Pins are a fixed CSS pixel size (see below) and never
