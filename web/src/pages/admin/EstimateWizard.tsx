@@ -921,15 +921,21 @@ export default function EstimateWizard({
   };
 
   // Checks off everything in targetStepIdx that's checked in sourceStepIdx
-  // and shares an item name (case-insensitive) -- carries the same qty over.
-  // Built-in checklist items and "previously added" saved items are both
-  // matched by name; custom free-text items aren't, since there's nothing
-  // reliable to match them against in the target step.
+  // and shares an item name (case-insensitive) -- carries the same qty
+  // over. Nothing is ever silently dropped: a checked item, a checked
+  // "previously added" saved item, or a custom item that has no same-named
+  // counterpart on the target step (a different pluralization like "GFCI
+  // Outlet" vs "GFCI Outlets", or a genuinely one-off item) is instead
+  // added to the target as its own custom item, so every checked thing on
+  // the source step ends up represented on the target one way or another.
   const copySelectionsFromStep = (targetStepIdx: number, sourceStepIdx: number) => {
     const sourceStep = activeSteps[sourceStepIdx];
     const targetStep = activeSteps[targetStepIdx];
     const targetItemByName = new Map<string, { groupIdx: number; item: string }>();
     targetStep.groups.forEach((g, gi) => g.items.forEach((it) => targetItemByName.set(it.toLowerCase(), { groupIdx: gi, item: it })));
+    const targetSavedNames = new Set(savedForStep(targetStepIdx).map((s) => s.label.toLowerCase()));
+    const existingCustomNames = new Set((customItems[targetStepIdx] ?? []).map((c) => c.name.toLowerCase()));
+    const toAddAsCustom: { name: string; qty: string }[] = [];
 
     setSelections((s) => {
       const next = { ...s };
@@ -939,16 +945,30 @@ export default function EstimateWizard({
           if (!sel?.checked) return;
           const target = targetItemByName.get(item.toLowerCase());
           if (target) next[key(targetStepIdx, target.groupIdx, target.item)] = { checked: true, qty: sel.qty };
+          else toAddAsCustom.push({ name: item, qty: sel.qty });
         });
       });
       for (const saved of savedForStep(sourceStepIdx)) {
         const sel = s[key(sourceStepIdx, "saved", saved.label)];
         if (!sel?.checked) continue;
-        const targetSaved = savedForStep(targetStepIdx).find((t) => t.label.toLowerCase() === saved.label.toLowerCase());
-        if (targetSaved) next[key(targetStepIdx, "saved", targetSaved.label)] = { checked: true, qty: sel.qty };
+        if (targetSavedNames.has(saved.label.toLowerCase())) {
+          next[key(targetStepIdx, "saved", saved.label)] = { checked: true, qty: sel.qty };
+        } else {
+          toAddAsCustom.push({ name: saved.label, qty: sel.qty });
+        }
       }
       return next;
     });
+
+    for (const custom of customItems[sourceStepIdx] ?? []) toAddAsCustom.push({ name: custom.name, qty: custom.qty });
+
+    const fresh = toAddAsCustom.filter((c) => !existingCustomNames.has(c.name.toLowerCase()));
+    if (fresh.length > 0) {
+      setCustomItems((c) => ({
+        ...c,
+        [targetStepIdx]: [...(c[targetStepIdx] ?? []), ...fresh.map((f) => ({ id: nextCustomId++, name: f.name, qty: f.qty }))],
+      }));
+    }
   };
 
   const setBreakerQty = (delta: number) => {
