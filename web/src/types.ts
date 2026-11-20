@@ -386,6 +386,8 @@ export interface PlanMarker {
   item_id: number | null;
   item_name: string | null;
   item_sku: string | null;
+  item_material_cost: string | null;
+  item_unit: string | null;
   symbol_type: PlanSymbolType;
   label: string;
   qty: string;

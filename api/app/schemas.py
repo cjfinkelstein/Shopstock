@@ -775,6 +775,11 @@ class PlanMarkerOut(BaseModel):
     item_id: int | None
     item_name: str | None = None
     item_sku: str | None = None
+    # The matched item's real catalog cost -- exposed so a path that prices
+    # a marker from scratch (the wizard's checklist pre-fill) can use the
+    # real cost for a matched item instead of a flat generic default.
+    item_material_cost: Decimal | None = None
+    item_unit: str | None = None
     symbol_type: str
     label: str
     qty: Decimal
