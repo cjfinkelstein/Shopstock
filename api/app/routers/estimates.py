@@ -499,7 +499,22 @@ def send_estimate(estimate_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{estimate_id}", status_code=204)
 def delete_estimate(estimate_id: int, db: Session = Depends(get_db)):
+    """Bulk-deletes every child row before the estimate itself, instead of
+    relying on ORM cascade -- a plan with many markers/lines (a dense
+    multi-page auto-layout can place hundreds) made plain db.delete(estimate)
+    genuinely slow, since cascade="all, delete-orphan" loads every child row
+    into memory and issues one DELETE per row rather than one bulk DELETE
+    per table. Markers before pages, lines before sections -- both child
+    tables' FKs point the other way."""
     estimate = _get_or_404(db, estimate_id)
+    page_ids = [p.id for p in estimate.plan_pages]
+    section_ids = [s.id for s in estimate.sections]
+    if page_ids:
+        db.query(EstimatePlanMarker).filter(EstimatePlanMarker.plan_page_id.in_(page_ids)).delete(synchronize_session=False)
+        db.query(EstimatePlanPage).filter(EstimatePlanPage.id.in_(page_ids)).delete(synchronize_session=False)
+    if section_ids:
+        db.query(EstimateLine).filter(EstimateLine.section_id.in_(section_ids)).delete(synchronize_session=False)
+        db.query(EstimateSection).filter(EstimateSection.id.in_(section_ids)).delete(synchronize_session=False)
     db.delete(estimate)
     db.commit()
 
