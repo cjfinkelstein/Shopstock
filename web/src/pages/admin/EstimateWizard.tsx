@@ -364,7 +364,10 @@ const COPY_FROM_SECTION: Record<string, string> = {
 };
 
 type Selections = Record<string, { checked: boolean; qty: string }>;
-type CustomItem = { id: number; name: string; qty: string };
+// material/labor: set only for a custom item priced from a real catalog
+// match (a plan marker matched to a real item) -- overrides costFor()'s
+// name-lookup/step-default pricing in buildSections() when present.
+type CustomItem = { id: number; name: string; qty: string; material?: string; labor?: string };
 
 // Where "Apply to estimate" on the plan markup screen lands each symbol
 // type's total count -- usually TWO targets (the rough-in wiring step AND
@@ -1169,19 +1172,51 @@ export default function EstimateWizard({
       steps[roughInStepIdx].groups.forEach((g, gi) => g.items.forEach((it) => exactItemByLabel.set(it.toLowerCase(), { groupIdx: gi, item: it })));
     }
 
-    // Group by label (not just symbol type) so differently-labeled markers
-    // of the same type (e.g. "Recessed Lights" vs "Chandeliers", both
-    // type "light") are counted and matched separately instead of lumped.
-    const totals = new Map<string, { symbolType: PlanSymbolType; qty: number }>();
+    const newSelections: Selections = {};
+    const newCustom: Record<number, CustomItem[]> = {};
+    let placed = 0;
+
+    // A marker matched to a real catalog item (the admin linked it to one
+    // while marking up the plan) carries that item's real cost -- route it
+    // as its own priced custom item instead of a plain checklist checkbox,
+    // which has no way to carry a per-pin price. Grouped by item so two
+    // pins matched to the same item combine into one line.
+    const matchedTotals = new Map<number, { name: string; material: string; qty: number }>();
+    const unmatched: PlanMarker[] = [];
     for (const m of markers) {
+      if (m.item_id && m.item_name) {
+        const cur = matchedTotals.get(m.item_id);
+        matchedTotals.set(m.item_id, {
+          name: m.item_name,
+          material: m.item_material_cost ?? "0",
+          qty: (cur?.qty ?? 0) + (parseFloat(m.qty) || 0),
+        });
+      } else {
+        unmatched.push(m);
+      }
+    }
+    if (roughInStepIdx !== -1) {
+      for (const { name, material, qty } of matchedTotals.values()) {
+        if (qty <= 0) continue;
+        newCustom[roughInStepIdx] = [
+          ...(newCustom[roughInStepIdx] ?? []),
+          { id: nextCustomId++, name, qty: String(qty), material },
+        ];
+        placed += 1;
+      }
+    }
+
+    // Group the rest by label (not just symbol type) so differently-labeled
+    // markers of the same type (e.g. "Recessed Lights" vs "Chandeliers",
+    // both type "light") are counted and matched separately instead of
+    // lumped.
+    const totals = new Map<string, { symbolType: PlanSymbolType; qty: number }>();
+    for (const m of unmatched) {
       const qty = parseFloat(m.qty) || 0;
       const cur = totals.get(m.label);
       totals.set(m.label, { symbolType: m.symbol_type, qty: (cur?.qty ?? 0) + qty });
     }
 
-    const newSelections: Selections = {};
-    const newCustom: Record<number, CustomItem[]> = {};
-    let placed = 0;
     for (const [label, { symbolType, qty }] of totals) {
       if (qty <= 0) continue;
       const exact = roughInStepIdx !== -1 ? exactItemByLabel.get(label.toLowerCase()) : undefined;
@@ -1271,7 +1306,9 @@ export default function EstimateWizard({
       for (const custom of customItems[stepIdx] ?? []) {
         lines.push({
           item_id: null, description: descriptionFor(custom.name), qty: custom.qty, unit: "each",
-          ...costFor(custom.name, step),
+          ...(custom.material !== undefined
+            ? { material_unit_cost: custom.material, labor_unit_cost: custom.labor ?? step.defaultLabor }
+            : costFor(custom.name, step)),
         });
       }
       bySection[step.section] = lines;

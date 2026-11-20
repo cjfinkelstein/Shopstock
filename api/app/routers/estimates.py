@@ -546,6 +546,8 @@ def _serialize_plan_marker(m: EstimatePlanMarker) -> PlanMarkerOut:
     return PlanMarkerOut(
         id=m.id, plan_page_id=m.plan_page_id, item_id=m.item_id,
         item_name=m.item.name if m.item else None, item_sku=m.item.sku if m.item else None,
+        item_material_cost=(m.item.avg_cost or m.item.last_cost) if m.item else None,
+        item_unit=m.item.unit if m.item else None,
         symbol_type=m.symbol_type, label=m.label, qty=m.qty, x=m.x, y=m.y,
     )
 
