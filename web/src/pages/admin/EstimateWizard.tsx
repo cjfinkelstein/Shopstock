@@ -1217,11 +1217,21 @@ export default function EstimateWizard({
       totals.set(m.label, { symbolType: m.symbol_type, qty: (cur?.qty ?? 0) + qty });
     }
 
+    // Adds to an existing selection's qty instead of overwriting it -- two
+    // different-labeled plan markers (e.g. "Outlet, basement north wall"
+    // and "Outlet, basement west wall", both type "duplex") land on the
+    // SAME checklist item ("Duplex Outlets"), so without this the second
+    // one silently replaced the first's count instead of combining with it.
+    const addSelection = (k: string, qty: number) => {
+      const cur = newSelections[k];
+      newSelections[k] = { checked: true, qty: String((cur ? parseFloat(cur.qty) || 0 : 0) + qty) };
+    };
+
     for (const [label, { symbolType, qty }] of totals) {
       if (qty <= 0) continue;
       const exact = roughInStepIdx !== -1 ? exactItemByLabel.get(label.toLowerCase()) : undefined;
       if (exact) {
-        newSelections[key(roughInStepIdx, exact.groupIdx, exact.item)] = { checked: true, qty: String(qty) };
+        addSelection(key(roughInStepIdx, exact.groupIdx, exact.item), qty);
         placed += 1;
         continue;
       }
@@ -1229,7 +1239,7 @@ export default function EstimateWizard({
         const stepIdx = steps.findIndex((s) => s.section === target.section);
         if (stepIdx === -1) continue;
         if ("item" in target) {
-          newSelections[key(stepIdx, target.groupIdx, target.item)] = { checked: true, qty: String(qty) };
+          addSelection(key(stepIdx, target.groupIdx, target.item), qty);
         } else {
           newCustom[stepIdx] = [
             ...(newCustom[stepIdx] ?? []),
