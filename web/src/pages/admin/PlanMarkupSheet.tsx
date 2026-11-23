@@ -131,6 +131,29 @@ export default function PlanMarkupSheet({
   const [autoLayoutRunning, setAutoLayoutRunning] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [zoom, setZoom] = useState(1);
+  // Items starred from the full Rough-in list below, shown as big buttons
+  // up top -- lets a plan be matched to exactly what's on its own
+  // electrical legend instead of scrolling/filtering the full checklist
+  // every time. Persisted per-estimate (not per-page) since the same
+  // legend applies across the whole plan set, and survives reopening this
+  // sheet later.
+  const legendKey = `shopstock:planLegend:${estimateId}`;
+  const [legend, setLegend] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(legendKey);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const toggleLegend = (item: string) => {
+    setLegend((prev) => {
+      const next = new Set(prev);
+      if (next.has(item)) next.delete(item); else next.add(item);
+      try { localStorage.setItem(legendKey, JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
   const fileInput = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   // The zoomable image wrapper, not the outer scrollable stage -- its
@@ -534,6 +557,34 @@ export default function PlanMarkupSheet({
                 </>
               )}
 
+              {(() => {
+                const paletteItems = jobType === "commercial" ? COMMERCIAL_ROUGH_IN_ITEMS : ROUGH_IN_ITEMS;
+                const legendItems = paletteItems.filter((r) => legend.has(r.item));
+                return legendItems.length > 0 && (
+                  <>
+                    <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Legend ({legendItems.length})
+                    </p>
+                    <div className="mb-2 grid grid-cols-2 gap-1.5">
+                      {legendItems.map((r) => {
+                        const s = symbolOf(r.type);
+                        const active = placing?.type === r.type && placing.label === r.item;
+                        return (
+                          <button
+                            key={r.item}
+                            className={`card-interactive flex items-center gap-1.5 p-2 text-left text-[11.5px] font-bold leading-tight ${active ? "ring-2 ring-brand-500" : ""}`}
+                            onClick={() => setPlacing(active ? null : { type: r.type, label: r.item })}
+                          >
+                            <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
+                            <span className="min-w-0 flex-1">{r.item}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+
               <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Quick symbols</p>
               {SYMBOL_TYPES.map((t) => (
                 <button
@@ -547,6 +598,9 @@ export default function PlanMarkupSheet({
               ))}
 
               <p className="mb-1 mt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Rough-in items</p>
+              <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">
+                Tap the star to pin an item to the Legend above.
+              </p>
               <input
                 className="input mb-1 !min-h-[30px] text-[12.5px]"
                 placeholder="Filter…"
@@ -564,15 +618,24 @@ export default function PlanMarkupSheet({
                     {items.map((r) => {
                       const s = symbolOf(r.type);
                       const active = placing?.type === r.type && placing.label === r.item;
+                      const pinned = legend.has(r.item);
                       return (
-                        <button
-                          key={r.item}
-                          className={`card-interactive flex w-full items-center gap-2 p-2 text-left text-[12px] font-semibold ${active ? "ring-2 ring-brand-500" : ""}`}
-                          onClick={() => setPlacing(active ? null : { type: r.type, label: r.item })}
-                        >
-                          <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
-                          <span className="min-w-0 flex-1 truncate">{r.item}</span>
-                        </button>
+                        <div key={r.item} className="flex items-center gap-1">
+                          <button
+                            className={`card-interactive flex w-full min-w-0 items-center gap-2 p-2 text-left text-[12px] font-semibold ${active ? "ring-2 ring-brand-500" : ""}`}
+                            onClick={() => setPlacing(active ? null : { type: r.type, label: r.item })}
+                          >
+                            <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
+                            <span className="min-w-0 flex-1 truncate">{r.item}</span>
+                          </button>
+                          <button
+                            className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:text-amber-500 dark:text-slate-600"
+                            title={pinned ? "Remove from Legend" : "Pin to Legend"}
+                            onClick={() => toggleLegend(r.item)}
+                          >
+                            <Icon name="star" size={16} filled={pinned} className={pinned ? "text-amber-500" : ""} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
