@@ -1836,6 +1836,7 @@ export default function EstimateWizard({
       {planMarkupOpen && draftEstimateId && (
         <PlanMarkupSheet
           estimateId={draftEstimateId}
+          jobType={jobType}
           // Applying hands the markers to applyPlanMarkersToChecklist
           // instead of writing lines itself (see onApplyToChecklist below),
           // which closes this sheet and jumps into the checklist steps on

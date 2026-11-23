@@ -600,6 +600,7 @@ export default function EstimateDetail() {
       {planOpen && estimate && (
         <PlanMarkupSheet
           estimateId={estimate.id}
+          jobType={estimateToWizardState(estimate).jobType}
           onClose={() => setPlanOpen(false)}
           onApplied={() => load()}
         />

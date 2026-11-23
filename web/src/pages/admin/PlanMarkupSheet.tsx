@@ -57,13 +57,56 @@ const ROUGH_IN_ITEMS: { group: string; type: PlanSymbolType; item: string }[] = 
   ].map((item) => ({ group: "Equipment", type: "panel" as PlanSymbolType, item }))),
 ];
 
+// Same idea as ROUGH_IN_ITEMS above, but for a commercial job -- kept in
+// sync by hand with "Commercial Rough-In" in EstimateWizard.tsx. Used
+// instead of ROUGH_IN_ITEMS whenever the estimate being marked up is
+// commercial, since the residential list's item names don't match
+// anything in the commercial checklist "Apply to estimate" routes into.
+const COMMERCIAL_ROUGH_IN_ITEMS: { group: string; type: PlanSymbolType; item: string }[] = [
+  ...([
+    'Recessed Light (4")', "Recessed Light w/ Battery Backup", "2x2 Light", "2x2 Light w/ Battery Backup",
+    "LED Pendant Light", "LED Pendant Light w/ Battery Backup", "Exterior Wall Sconce w/ Battery Backup",
+    "Exterior Recessed Light", "Exterior Recessed Light w/ Battery Backup", "EXIT Sign (Single-Sided)",
+    "EXIT Sign (Double-Sided)", "EXIT Sign w/ Directional Arrow", "Emergency Light",
+    "Combo EXIT/Emergency Light", "Combo EXIT/Emergency Light w/ Remote Exterior Head",
+    "Ceiling Mounted Occupancy Sensor", "LED Bathroom Vanity Light", "LED Surface-Mounted Utility Light",
+  ].map((item) => ({ group: "Fixtures", type: "light" as PlanSymbolType, item }))),
+  ...([
+    "Push Button Switch (Standard)", "Push Button Switch (Basic)", "Toggle Switch", "Occupancy Sensor Switch",
+  ].map((item) => ({ group: "Switches & Outlets", type: "switch" as PlanSymbolType, item }))),
+  { group: "Switches & Outlets", type: "duplex", item: "Duplex Outlet" },
+  { group: "Switches & Outlets", type: "duplex", item: "Duplex Outlet w/ Plug-Load Control" },
+  { group: "Switches & Outlets", type: "duplex", item: "Quad Outlet" },
+  { group: "Switches & Outlets", type: "duplex", item: "Quad Outlet w/ Plug-Load Control" },
+  { group: "Switches & Outlets", type: "gfci", item: "GFCI Outlet" },
+  { group: "Switches & Outlets", type: "gfci", item: "Weatherproof GFCI Outlet" },
+  { group: "Switches & Outlets", type: "duplex", item: "Specialty Outlet" },
+  { group: "Switches & Outlets", type: "duplex", item: "Sign Receptacle" },
+  { group: "Switches & Outlets", type: "duplex", item: "Data Outlet" },
+  { group: "Equipment", type: "panel", item: "Air Handler" },
+  { group: "Equipment", type: "panel", item: "Condenser" },
+  { group: "Equipment", type: "panel", item: "Rooftop Unit" },
+  { group: "Equipment", type: "exfan", item: "Exhaust Fan" },
+  { group: "Equipment", type: "panel", item: "Water Heater" },
+  { group: "Equipment", type: "panel", item: "Motorized Damper" },
+  { group: "Equipment", type: "panel", item: "Fire Alarm Control Panel" },
+  { group: "Equipment", type: "panel", item: "Circulator Pump" },
+];
+
 export default function PlanMarkupSheet({
   estimateId,
+  jobType = "residential",
   onClose,
   onApplied,
   onApplyToChecklist,
 }: {
   estimateId: number;
+  // Picks which "Rough-in items" palette to show -- the two checklists use
+  // different item names entirely, so placing a commercial plan's symbols
+  // from the residential list would never match anything on
+  // "Apply to estimate". Defaults to residential since EstimateDetail's
+  // standalone "Plan" button doesn't otherwise know the job type up front.
+  jobType?: "residential" | "commercial";
   onClose: () => void;
   // Either this or onApplyToChecklist is passed, not both. onApplied: the
   // default path (EstimateDetail's standalone "Plan" button) -- writes
@@ -511,7 +554,7 @@ export default function PlanMarkupSheet({
                 onChange={(e) => setPaletteFilter(e.target.value)}
               />
               {["Fixtures", "Switches & Outlets", "Equipment"].map((group) => {
-                const items = ROUGH_IN_ITEMS.filter(
+                const items = (jobType === "commercial" ? COMMERCIAL_ROUGH_IN_ITEMS : ROUGH_IN_ITEMS).filter(
                   (r) => r.group === group && r.item.toLowerCase().includes(paletteFilter.trim().toLowerCase()),
                 );
                 if (items.length === 0) return null;
