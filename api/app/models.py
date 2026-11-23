@@ -327,6 +327,11 @@ class Estimate(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     estimate_number: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), index=True)
+    # Soft-delete only, matching every other deletable row in this app --
+    # "Delete" hides it (filtered out of list/get/public-share lookups)
+    # instead of removing it, so an accidental click doesn't lose real work
+    # with no way back.
+    active: Mapped[bool] = mapped_column(default=True, nullable=False)
     customer: Mapped[str | None] = mapped_column(String(200))
     address: Mapped[str | None] = mapped_column(String(300))
     scope_of_work: Mapped[str] = mapped_column(Text, nullable=False)
