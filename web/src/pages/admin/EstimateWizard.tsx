@@ -1377,6 +1377,18 @@ export default function EstimateWizard({
         }
       }
       for (const custom of customItems[stepIdx] ?? []) {
+        // A custom item can end up named exactly like a real checklist item
+        // this step already checked off -- e.g. "Toggle Switch" added as a
+        // free-text custom item (by hand, or a plan marker whose label
+        // didn't exact-match at the time) alongside the checklist's own
+        // "Toggle Switch" box. Without this, both become separate lines on
+        // the finished estimate ("Toggle Switch" showing twice in
+        // Rough-In) -- merge its qty into the existing line instead.
+        const existing = lines.find((l) => l.description.trim().toLowerCase() === descriptionFor(custom.name).trim().toLowerCase());
+        if (existing) {
+          existing.qty = String((parseFloat(existing.qty) || 0) + (parseFloat(custom.qty) || 0));
+          continue;
+        }
         lines.push({
           item_id: null, description: descriptionFor(custom.name), qty: custom.qty, unit: "each",
           ...(custom.material !== undefined
@@ -1402,10 +1414,18 @@ export default function EstimateWizard({
     const sections: string[] = [];
     activeSteps.forEach((step, stepIdx) => {
       const parts: string[] = [];
+      // Same name collision buildSections() merges (a custom item named
+      // exactly like a checklist item it already checked off) -- tracked
+      // here too so the scope-of-work text doesn't read "Toggle Switch"
+      // twice for the one real line that results.
+      const pickedNames = new Set<string>();
       step.groups.forEach((group, groupIdx) => {
         const picked = group.items
           .filter((it) => selections[key(stepIdx, groupIdx, it)]?.checked && parseFloat(selections[key(stepIdx, groupIdx, it)].qty) > 0)
           .map((it) => `${selections[key(stepIdx, groupIdx, it)].qty} ${it}`);
+        group.items
+          .filter((it) => selections[key(stepIdx, groupIdx, it)]?.checked && parseFloat(selections[key(stepIdx, groupIdx, it)].qty) > 0)
+          .forEach((it) => pickedNames.add(it.trim().toLowerCase()));
         if (picked.length === 0) return;
         parts.push(group.intro ? `${group.intro} ${picked.join(", ")}.` : `${picked.join(", ")}.`);
         // Items whose price genuinely can't be a fixed number (e.g. the BGE
@@ -1416,11 +1436,16 @@ export default function EstimateWizard({
           .filter((it) => selections[key(stepIdx, groupIdx, it)]?.checked && ITEM_SCOPE_NOTES[it])
           .forEach((it) => parts.push(ITEM_SCOPE_NOTES[it]));
       });
+      savedForStep(stepIdx)
+        .filter((s) => selections[key(stepIdx, "saved", s.label)]?.checked && parseFloat(selections[key(stepIdx, "saved", s.label)].qty) > 0)
+        .forEach((s) => pickedNames.add(s.label.trim().toLowerCase()));
       const extras = [
         ...savedForStep(stepIdx)
           .filter((s) => selections[key(stepIdx, "saved", s.label)]?.checked && parseFloat(selections[key(stepIdx, "saved", s.label)].qty) > 0)
           .map((s) => `${selections[key(stepIdx, "saved", s.label)].qty} ${s.label}`),
-        ...(customItems[stepIdx] ?? []).map((c) => `${c.qty} ${c.name}`),
+        ...(customItems[stepIdx] ?? [])
+          .filter((c) => !pickedNames.has(c.name.trim().toLowerCase()))
+          .map((c) => `${c.qty} ${c.name}`),
       ];
       if (extras.length > 0) parts.push(`Also: ${extras.join(", ")}.`);
       if (parts.length > 0) sections.push(`${stepIdx + 1}. ${step.section}\n${parts.join("\n")}`);
