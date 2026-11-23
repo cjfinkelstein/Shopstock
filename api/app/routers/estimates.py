@@ -363,7 +363,7 @@ def _get_or_404(db: Session, estimate_id: int) -> Estimate:
             joinedload(Estimate.creator),
             joinedload(Estimate.job),
         )
-        .filter(Estimate.id == estimate_id)
+        .filter(Estimate.id == estimate_id, Estimate.active.is_(True))
         .first()
     )
     if not est:
@@ -373,7 +373,7 @@ def _get_or_404(db: Session, estimate_id: int) -> Estimate:
 
 @router.get("", response_model=list[EstimateSummaryOut])
 def list_estimates(job_id: int | None = None, db: Session = Depends(get_db)):
-    q = db.query(Estimate).options(joinedload(Estimate.sections).joinedload(EstimateSection.lines))
+    q = db.query(Estimate).options(joinedload(Estimate.sections).joinedload(EstimateSection.lines)).filter(Estimate.active.is_(True))
     if job_id is not None:
         q = q.filter(Estimate.job_id == job_id)
     rows = q.order_by(Estimate.created_at.desc()).all()
@@ -499,23 +499,13 @@ def send_estimate(estimate_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{estimate_id}", status_code=204)
 def delete_estimate(estimate_id: int, db: Session = Depends(get_db)):
-    """Bulk-deletes every child row before the estimate itself, instead of
-    relying on ORM cascade -- a plan with many markers/lines (a dense
-    multi-page auto-layout can place hundreds) made plain db.delete(estimate)
-    genuinely slow, since cascade="all, delete-orphan" loads every child row
-    into memory and issues one DELETE per row rather than one bulk DELETE
-    per table. Markers before pages, lines before sections -- both child
-    tables' FKs point the other way."""
+    """Soft-delete, matching every other deletable row in this app -- sets
+    active=False (filtered out of list/get/public-share lookups) instead of
+    removing the row, so an accidental click doesn't lose real work with no
+    way back. Also instant regardless of how many plan markers/lines the
+    estimate has, unlike the hard-delete this replaced."""
     estimate = _get_or_404(db, estimate_id)
-    page_ids = [p.id for p in estimate.plan_pages]
-    section_ids = [s.id for s in estimate.sections]
-    if page_ids:
-        db.query(EstimatePlanMarker).filter(EstimatePlanMarker.plan_page_id.in_(page_ids)).delete(synchronize_session=False)
-        db.query(EstimatePlanPage).filter(EstimatePlanPage.id.in_(page_ids)).delete(synchronize_session=False)
-    if section_ids:
-        db.query(EstimateLine).filter(EstimateLine.section_id.in_(section_ids)).delete(synchronize_session=False)
-        db.query(EstimateSection).filter(EstimateSection.id.in_(section_ids)).delete(synchronize_session=False)
-    db.delete(estimate)
+    estimate.active = False
     db.commit()
 
 

@@ -18,7 +18,7 @@ def _get_by_token_or_404(db: Session, token: str) -> Estimate:
     estimate = (
         db.query(Estimate)
         .options(joinedload(Estimate.sections).joinedload(EstimateSection.lines))
-        .filter(Estimate.share_token == token)
+        .filter(Estimate.share_token == token, Estimate.active.is_(True))
         .first()
     )
     # Never distinguish "wrong token" from "no such estimate" in the response.
