@@ -746,14 +746,20 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     """Turns every current plan marker into a real estimate line -- a
     matched marker (item_id set) prices from that item's catalog cost; an
     unmatched one goes in at $0 material so it's visibly a placeholder
-    needing a real cost. Safe to call repeatedly after editing the plan:
-    each line is tagged with the marker that produced it, so a re-apply
-    first removes the lines from the previous apply (and only those --
-    lines added by hand have no plan_marker_id and are left alone) before
-    recreating them, rather than piling up duplicates. Also rewrites the
-    estimate's Scope of Work from its current lines, so clicking "Plan" on
-    an already-created estimate and adding something keeps both price and
-    scope of work in sync, not just price."""
+    needing a real cost. Markers that land on the same section with the
+    same description (e.g. five separate "Toggle Switch" pins) are summed
+    into ONE line instead of one line per pin -- otherwise a dense plan
+    shows the same item repeated over and over instead of a single real
+    quantity, which is exactly the kind of duplicate "it says Toggle twice"
+    the wizard's own checklist path already guards against (see
+    buildSections in EstimateWizard.tsx). Safe to call repeatedly after
+    editing the plan: every line from this path is from_plan=True, so a
+    re-apply first removes all of those (lines added by hand have no
+    plan_marker_id and are left alone) before recreating them, rather than
+    piling up duplicates. Also rewrites the estimate's Scope of Work from
+    its current lines, so clicking "Plan" on an already-created estimate
+    and adding something keeps both price and scope of work in sync, not
+    just price."""
     estimate = _get_or_404(db, estimate_id)
     sections_by_name = {s.name: s for s in estimate.sections}
     pages = _get_plan_pages(db, estimate_id)
@@ -765,25 +771,46 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     db.flush()
 
     next_order = {name: len(section.lines) for name, section in sections_by_name.items()}
-    added = 0
+    # Keyed by (section_name, item_id, description.lower()) -- a matched
+    # marker only merges with another marker matched to the SAME catalog
+    # item (never two different items that happen to share a name); an
+    # unmatched marker merges purely on its label text within the section.
+    grouped: dict[tuple[str, int | None, str], dict] = {}
     for page in pages:
         for marker in page.markers:
             section_name = PLAN_SYMBOL_SECTION.get(marker.symbol_type, "Supply and Install")
-            section = sections_by_name.get(section_name)
-            if not section:
+            if section_name not in sections_by_name:
                 continue
             item = marker.item
-            db.add(EstimateLine(
-                section_id=section.id, sort_order=next_order[section_name],
-                item_id=item.id if item else None,
-                from_plan=True, plan_marker_id=marker.id,
-                description=item.name if item else marker.label,
-                qty=marker.qty, unit=item.unit if item else "each",
-                material_unit_cost=(item.avg_cost or item.last_cost or Decimal("0")) if item else Decimal("0"),
-                labor_unit_cost=PLAN_SYMBOL_LABOR_DEFAULT.get(marker.symbol_type, Decimal("40")),
-            ))
-            next_order[section_name] += 1
-            added += 1
+            description = item.name if item else marker.label
+            gkey = (section_name, item.id if item else None, description.strip().lower())
+            if gkey in grouped:
+                grouped[gkey]["qty"] += marker.qty
+                grouped[gkey]["marker_ids"].append(marker.id)
+            else:
+                grouped[gkey] = {
+                    "section_name": section_name,
+                    "item_id": item.id if item else None,
+                    "description": description,
+                    "unit": item.unit if item else "each",
+                    "qty": marker.qty,
+                    "material_unit_cost": (item.avg_cost or item.last_cost or Decimal("0")) if item else Decimal("0"),
+                    "labor_unit_cost": PLAN_SYMBOL_LABOR_DEFAULT.get(marker.symbol_type, Decimal("40")),
+                    "marker_ids": [marker.id],
+                }
+
+    added = 0
+    for g in grouped.values():
+        section = sections_by_name[g["section_name"]]
+        db.add(EstimateLine(
+            section_id=section.id, sort_order=next_order[g["section_name"]],
+            item_id=g["item_id"],
+            from_plan=True, plan_marker_id=g["marker_ids"][0],
+            description=g["description"], qty=g["qty"], unit=g["unit"],
+            material_unit_cost=g["material_unit_cost"], labor_unit_cost=g["labor_unit_cost"],
+        ))
+        next_order[g["section_name"]] += 1
+        added += 1
     if added == 0:
         db.rollback()
         raise HTTPException(status_code=400, detail="No plan markers to apply yet.")
