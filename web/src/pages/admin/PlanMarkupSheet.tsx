@@ -586,6 +586,13 @@ export default function PlanMarkupSheet({
               })()}
 
               <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Quick symbols</p>
+              {jobType === "commercial" && (
+                <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">
+                  "Panel" here means panels/disconnects only -- for HVAC, water heaters, and other
+                  equipment, use the named items in the Equipment group below instead, so each type
+                  gets counted and priced on its own.
+                </p>
+              )}
               {SYMBOL_TYPES.map((t) => (
                 <button
                   key={t.id}
@@ -593,7 +600,7 @@ export default function PlanMarkupSheet({
                   onClick={() => setPlacing(placing?.type === t.id && placing.label === t.label ? null : { type: t.id, label: t.label })}
                 >
                   <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: t.color }} />
-                  {t.label}
+                  {jobType === "commercial" && t.id === "panel" ? "Panel" : t.label}
                 </button>
               ))}
 
