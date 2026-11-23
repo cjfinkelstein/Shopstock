@@ -28,8 +28,9 @@ const WIZARD_STEPS: WizardStep[] = [
     section: "Rough-In Electrical Work",
     // Real completed jobs (Zakem Basement's actual invoice, not a draft)
     // priced rough-in material at $20-25/unit, not $15 -- bumped to match.
-    defaultMaterial: "20",
-    defaultLabor: "35",
+    // Then raised 1/3 across the board (CJ's call) -- $20->$26.67, $35->$46.67.
+    defaultMaterial: "26.67",
+    defaultLabor: "46.67",
     groups: [
       {
         intro: "Provide rough-in wiring for the following fixtures:",
@@ -484,18 +485,20 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
   },
   // The Zakem Basement spreadsheet -- CJ's own real job-costing document --
   // priced rough-in per item, not flat like the app's default assumed.
-  // Only items that differ from the $20/$35 default are listed here; the
-  // switches/outlets that matched it exactly ($20/$35) needed no entry.
+  // Only items that differ from the step default are listed here; the
+  // switches/outlets that matched it exactly needed no entry. Every number
+  // below (like the step default above) is the original Zakem price raised
+  // 1/3 (CJ's call) -- $25->$33.33, $30->$40.00, $35->$46.67.
   "Rough-In Electrical Work": {
-    "Recessed Lights": { material: "25", labor: "35" },
-    "Baseboard Heaters": { material: "25", labor: "35" },
-    "Thermostat": { material: "25", labor: "35" },
-    "Vanity Lights": { material: "25", labor: "35" },
-    "Exterior Light": { material: "25", labor: "35" },
-    "Exhaust Fans": { material: "25", labor: "35" },
-    "Smoke Detectors": { material: "25", labor: "35" },
-    "Washer Outlet": { material: "25", labor: "35" },
-    "Combination CO/Smoke Detectors": { material: "30", labor: "35" },
+    "Recessed Lights": { material: "33.33", labor: "46.67" },
+    "Baseboard Heaters": { material: "33.33", labor: "46.67" },
+    "Thermostat": { material: "33.33", labor: "46.67" },
+    "Vanity Lights": { material: "33.33", labor: "46.67" },
+    "Exterior Light": { material: "33.33", labor: "46.67" },
+    "Exhaust Fans": { material: "33.33", labor: "46.67" },
+    "Smoke Detectors": { material: "33.33", labor: "46.67" },
+    "Washer Outlet": { material: "33.33", labor: "46.67" },
+    "Combination CO/Smoke Detectors": { material: "40.00", labor: "46.67" },
   },
   "Supply and Install": {
   // Real per-device material cost from the parts inventory (labor stays the
