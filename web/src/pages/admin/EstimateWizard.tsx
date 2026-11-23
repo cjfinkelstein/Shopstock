@@ -367,6 +367,23 @@ const COPY_FROM_SECTION: Record<string, string> = {
   "Commercial Lighting Installation": "Commercial Rough-In",
 };
 
+// Unlike residential's single combined "Supply and Install" (which really
+// does want every Rough-In item copied over, per an explicit ask: "every
+// single item should be there not missing anything"), Commercial Rough-In
+// is ONE checklist covering switches+outlets+lighting+equipment+data, but
+// its three install steps are each narrow -- Switch Installation only
+// prices switches, Outlet Installation only outlets, Lighting Installation
+// only lighting. A blind full copy dumped every checked Rough-In item
+// (lights, outlets, EXIT signs...) into whichever install step you copied
+// into, as $0 custom clutter with nothing to do with that step. Restrict
+// the copy to each target's matching Commercial Rough-In group index
+// (0=switches, 1=outlets, 2=lighting -- see COMMERCIAL_STEPS above).
+const COPY_GROUP_FILTER: Record<string, number[]> = {
+  "Commercial Outlet Installation": [1],
+  "Commercial Switch Installation": [0],
+  "Commercial Lighting Installation": [2],
+};
+
 type Selections = Record<string, { checked: boolean; qty: string }>;
 // material/labor: set only for a custom item priced from a real catalog
 // match (a plan marker matched to a real item) -- overrides costFor()'s
@@ -948,6 +965,7 @@ export default function EstimateWizard({
   const copySelectionsFromStep = (targetStepIdx: number, sourceStepIdx: number) => {
     const sourceStep = activeSteps[sourceStepIdx];
     const targetStep = activeSteps[targetStepIdx];
+    const groupFilter = COPY_GROUP_FILTER[targetStep.section];
     const targetItemByName = new Map<string, { groupIdx: number; item: string }>();
     targetStep.groups.forEach((g, gi) => g.items.forEach((it) => targetItemByName.set(it.toLowerCase(), { groupIdx: gi, item: it })));
     const targetSavedNames = new Set(savedForStep(targetStepIdx).map((s) => s.label.toLowerCase()));
@@ -957,6 +975,7 @@ export default function EstimateWizard({
     setSelections((s) => {
       const next = { ...s };
       sourceStep.groups.forEach((g, gi) => {
+        if (groupFilter && !groupFilter.includes(gi)) return;
         g.items.forEach((item) => {
           const sel = s[key(sourceStepIdx, gi, item)];
           if (!sel?.checked) return;
@@ -970,14 +989,21 @@ export default function EstimateWizard({
         if (!sel?.checked) continue;
         if (targetSavedNames.has(saved.label.toLowerCase())) {
           next[key(targetStepIdx, "saved", saved.label)] = { checked: true, qty: sel.qty };
-        } else {
+        } else if (!groupFilter) {
+          // Only dump an unmatched item as $0 custom clutter on a section
+          // that wants the full copy (residential) -- a category-filtered
+          // commercial target (switches/outlets/lighting only) has no group
+          // to check a saved/custom item against, so skip it rather than
+          // guess wrong.
           toAddAsCustom.push({ name: saved.label, qty: sel.qty });
         }
       }
       return next;
     });
 
-    for (const custom of customItems[sourceStepIdx] ?? []) toAddAsCustom.push({ name: custom.name, qty: custom.qty });
+    if (!groupFilter) {
+      for (const custom of customItems[sourceStepIdx] ?? []) toAddAsCustom.push({ name: custom.name, qty: custom.qty });
+    }
 
     const fresh = toAddAsCustom.filter((c) => !existingCustomNames.has(c.name.toLowerCase()));
     if (fresh.length > 0) {
