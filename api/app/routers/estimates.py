@@ -719,6 +719,29 @@ def delete_all_plan_markers(estimate_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{estimate_id}/plan/apply", response_model=EstimateOut)
+def _qty_str(qty: Decimal) -> str:
+    s = str(qty)
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def _scope_of_work_from_sections(estimate: Estimate) -> str:
+    """Rebuilds the full Scope of Work text from every section's current
+    lines (not just the ones a plan apply just touched), same grouped
+    "N. Section Name" / "qty description, qty description." format the
+    wizard's own buildScopeOfWork() writes -- so re-applying a plan to an
+    already-created estimate keeps the scope of work in sync with
+    whatever's actually priced on it, not just the price itself."""
+    by_name = {s.name: s for s in estimate.sections}
+    blocks = []
+    for idx, name in enumerate(STANDARD_SECTIONS, start=1):
+        section = by_name.get(name)
+        if not section or not section.lines:
+            continue
+        items = ", ".join(f"{_qty_str(l.qty)} {l.description}" for l in section.lines)
+        blocks.append(f"{idx}. {name}\n{items}.")
+    return "\n\n".join(blocks)
+
+
 def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     """Turns every current plan marker into a real estimate line -- a
     matched marker (item_id set) prices from that item's catalog cost; an
@@ -727,7 +750,10 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     each line is tagged with the marker that produced it, so a re-apply
     first removes the lines from the previous apply (and only those --
     lines added by hand have no plan_marker_id and are left alone) before
-    recreating them, rather than piling up duplicates."""
+    recreating them, rather than piling up duplicates. Also rewrites the
+    estimate's Scope of Work from its current lines, so clicking "Plan" on
+    an already-created estimate and adding something keeps both price and
+    scope of work in sync, not just price."""
     estimate = _get_or_404(db, estimate_id)
     sections_by_name = {s.name: s for s in estimate.sections}
     pages = _get_plan_pages(db, estimate_id)
@@ -758,9 +784,12 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
             ))
             next_order[section_name] += 1
             added += 1
-    db.commit()
     if added == 0:
+        db.rollback()
         raise HTTPException(status_code=400, detail="No plan markers to apply yet.")
+    db.flush()
+    estimate.scope_of_work = _scope_of_work_from_sections(_get_or_404(db, estimate.id))
+    db.commit()
     return _serialize(_get_or_404(db, estimate.id))
 
 
