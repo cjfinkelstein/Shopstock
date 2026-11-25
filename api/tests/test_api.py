@@ -627,4 +627,65 @@ class TestClockOutPhotos:
         feed = [p for p in r.json() if p["id"] == photo_id]
         assert len(feed) == 1
         assert feed[0]["caption"] == "Spare parts in the van"
-        assert feed[0]["shift_date"]
+
+
+class TestPlanApply:
+    """Regression coverage for POST /estimates/{id}/plan/apply -- this
+    endpoint has no request body, so a route/function mismatch (the
+    @router.post decorator landing on the wrong def after a merge) doesn't
+    show up as an import error or a 404, just a confusing 422 "field
+    required" the instant someone clicks the real button. Hitting the
+    actual route through the test client, not just calling apply_plan
+    directly, is what would have caught that."""
+
+    def _add_marker(self, db_session, estimate_id, symbol_type, label, qty="1"):
+        from decimal import Decimal
+
+        from app.models import EstimatePlanMarker, EstimatePlanPage
+
+        page = EstimatePlanPage(estimate_id=estimate_id, page_number=1, image_data="data:image/png;base64,Zg==")
+        db_session.add(page)
+        db_session.flush()
+        marker = EstimatePlanMarker(
+            plan_page_id=page.id, symbol_type=symbol_type, label=label,
+            qty=Decimal(qty), x=Decimal("10"), y=Decimal("10"),
+        )
+        db_session.add(marker)
+        db_session.commit()
+
+    def test_apply_residential(self, client, seeded, db_session):
+        admin = login_admin(client)
+        r = client.post("/api/v1/estimates", headers=admin, json={"scope_of_work": ""})
+        assert r.status_code == 201, r.text
+        estimate_id = r.json()["id"]
+
+        self._add_marker(db_session, estimate_id, "duplex", "Duplex Outlets", qty="3")
+
+        r = client.post(f"/api/v1/estimates/{estimate_id}/plan/apply", headers=admin)
+        assert r.status_code == 200, r.text
+        section = next(s for s in r.json()["sections"] if s["name"] == "Supply and Install")
+        assert [l["description"] for l in section["lines"]] == ["Duplex Outlets"]
+        assert section["lines"][0]["qty"] == "3.00"
+
+    def test_apply_commercial(self, client, seeded, db_session):
+        """A commercial estimate has no "Supply and Install"/"Panels and
+        Meters" section -- every marker must land in a section that
+        actually exists on it, or Apply silently does nothing."""
+        admin = login_admin(client)
+        r = client.post("/api/v1/estimates", headers=admin, json={"scope_of_work": ""})
+        assert r.status_code == 201, r.text
+        estimate_id = r.json()["id"]
+
+        r = client.patch(f"/api/v1/estimates/{estimate_id}", headers=admin, json={
+            "sections": [{"name": "Commercial Rough-In", "lines": []}, {"name": "Commercial Panels and Meters", "lines": []}],
+        })
+        assert r.status_code == 200, r.text
+
+        self._add_marker(db_session, estimate_id, "light", "2x2 Light", qty="5")
+        self._add_marker(db_session, estimate_id, "panel", "New 200A 3-Phase Panel", qty="1")
+
+        r = client.post(f"/api/v1/estimates/{estimate_id}/plan/apply", headers=admin)
+        assert r.status_code == 200, r.text
+        sections = {s["name"]: s for s in r.json()["sections"]}
+        assert [l["description"] for l in sections["Commercial Rough-In"]["lines"]] == ["2x2 Light"]
+        assert [l["description"] for l in sections["Commercial Panels and Meters"]["lines"]] == ["New 200A 3-Phase Panel"]

@@ -471,6 +471,15 @@ def update_estimate(estimate_id: int, body: EstimateUpdate, db: Session = Depend
                     description=line_in.description, qty=line_in.qty, unit=line_in.unit,
                     material_unit_cost=line_in.material_unit_cost, labor_unit_cost=line_in.labor_unit_cost,
                 ))
+        # The old sections/lines were removed and the new ones added via
+        # raw db.delete()/db.add(), not through estimate.sections itself --
+        # so the Estimate object this function loaded at the top (still in
+        # this session's identity map) keeps showing its OLD sections in
+        # memory. Without this, the re-fetch below wouldn't actually be
+        # fresh: SQLAlchemy doesn't refresh an already-loaded relationship
+        # on a later query in the same session unless told to (same class
+        # of bug as apply_plan's -- see its own comment on this).
+        db.expire_all()
     db.commit()
     return _serialize(_get_or_404(db, estimate.id))
 
@@ -753,7 +762,6 @@ def delete_all_plan_markers(estimate_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@router.post("/{estimate_id}/plan/apply", response_model=EstimateOut)
 def _qty_str(qty: Decimal) -> str:
     s = str(qty)
     return s.rstrip("0").rstrip(".") if "." in s else s
@@ -777,6 +785,7 @@ def _scope_of_work_from_sections(estimate: Estimate) -> str:
     return "\n\n".join(blocks)
 
 
+@router.post("/{estimate_id}/plan/apply", response_model=EstimateOut)
 def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     """Turns every current plan marker into a real estimate line -- a
     matched marker (item_id set) prices from that item's catalog cost; an
@@ -859,6 +868,16 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=400, detail="No plan markers to apply yet.")
     db.flush()
+    # The lines just added went straight in via db.add(), not through
+    # estimate.sections[i].lines.append(...) -- so the section objects
+    # loaded at the top of this function by _get_or_404 still show their
+    # OLD (pre-apply) lines collection in memory: SQLAlchemy doesn't
+    # refresh an already-loaded relationship on a later query in the same
+    # session unless told to. Without this, _scope_of_work_from_sections
+    # below silently wrote a scope of work missing every line this very
+    # call just added, and the response handed back to the frontend showed
+    # the same stale, incomplete line list.
+    db.expire_all()
     estimate.scope_of_work = _scope_of_work_from_sections(_get_or_404(db, estimate.id))
     db.commit()
     return _serialize(_get_or_404(db, estimate.id))
