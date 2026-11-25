@@ -692,7 +692,7 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
   "Commercial Outlet Installation": {
     "Duplex Outlet": { material: "7", labor: "50" },
     "Duplex Outlet w/ Plug-Load Control": { material: "15", labor: "50" },
-    "Quad Outlet": { material: "7", labor: "50" },
+    "Quad Outlet": { material: "15", labor: "50" }, // 7 Church Ln ($15) higher than Eastern/Mainspring ($7)
     "Quad Outlet w/ Plug-Load Control": { material: "15", labor: "50" },
     "GFCI Outlet": { material: "30", labor: "50" },
     "Weatherproof GFCI Outlet": { material: "30", labor: "50" },
@@ -722,10 +722,10 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
     "EXIT Sign w/ Directional Arrow": { material: "55", labor: "50" },
     // Eastern Ave only -- Mainspring's Lighting Installation doesn't cover these.
     "Exhaust Fan": { material: "120", labor: "50" },
-    "Emergency Light": { material: "120", labor: "50" },
-    "Combo EXIT/Emergency Light": { material: "120", labor: "50" },
+    "Emergency Light": { material: "200", labor: "50" }, // 7 Church Ln ($200) higher than Eastern Ave ($120)
+    "Combo EXIT/Emergency Light": { material: "200", labor: "50" }, // 7 Church Ln ($200) higher than Eastern Ave ($120)
     "Combo EXIT/Emergency Light w/ Remote Exterior Head": { material: "180", labor: "60" },
-    "Ceiling Mounted Occupancy Sensor": { material: "120", labor: "50" },
+    "Ceiling Mounted Occupancy Sensor": { material: "150", labor: "50" }, // 7 Church Ln ($150) higher than Eastern Ave ($120)
     "LED Bathroom Vanity Light": { material: "80", labor: "50" },
     "LED Surface-Mounted Utility Light": { material: "60", labor: "50" },
   },
@@ -757,10 +757,10 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
     "3/0 AWG Wire": { material: "15", labor: "5" }, // Mainspring, per foot
     "3/0 AWG Neutral Wire": { material: "15", labor: "5" }, // Mainspring, per foot
     "#6 AWG Ground Wire": { material: "3", labor: "5" }, // Mainspring, per foot
-    // Eastern Ave -- that row's labor cell read $20/ft but only $2/ft actually
-    // matches its own total ($400 over 200ft); using $2, per the same
-    // trust-the-math-that-works rule as the rows above.
-    "#4 AWG THHN Wire": { material: "3", labor: "2" },
+    // Eastern Ave's labor cell read $20/ft but only $2/ft actually matched
+    // its own total ($400 over 200ft); 7 Church Ln's own per-ft cell reads
+    // $5/ft (material agrees at $3) -- going with the higher of the two.
+    "#4 AWG THHN Wire": { material: "3", labor: "5" },
     "#1 AWG Wire": { material: "4", labor: "5" }, // Mainspring, per foot
     "#1 AWG Neutral Wire": { material: "4", labor: "5" }, // Mainspring, per foot
   },
