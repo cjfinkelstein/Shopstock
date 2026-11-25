@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import Icon from "./Icon";
@@ -22,10 +22,20 @@ export default function Sheet({ title, subtitle, onClose, children }: Props) {
     };
   }, [onClose]);
 
+  // A plain onClick={onClose} on the backdrop closes on ANY click that
+  // reaches it -- including one from a mousedown that started inside the
+  // panel (e.g. dragging to pan a plan markup image) and happened to end
+  // outside the sheet's bounds, which the browser still dispatches as a
+  // click on the backdrop. Only close for a press-and-release that both
+  // land directly on the backdrop itself, so a drag that merely ends
+  // outside the box doesn't close it.
+  const downOnBackdrop = useRef(false);
+
   return createPortal(
     <div
       className="fixed inset-0 z-[1100] flex flex-col justify-end bg-slate-950/45 backdrop-blur-[2px] animate-fade-in"
-      onClick={onClose}
+      onMouseDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget; }}
+      onClick={(e) => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose(); }}
     >
       <div
         className="mx-auto w-full max-w-lg animate-sheet-up rounded-t-[28px] bg-white shadow-sheet dark:bg-slate-900"
