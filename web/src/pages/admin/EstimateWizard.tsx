@@ -822,9 +822,9 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
     "30A 2-Pole Breaker": { material: "50", labor: "15" }, // both jobs agree exactly
     "45A 2-Pole Breaker": { material: "50", labor: "15" }, // both jobs agree exactly
     "50A Single-Pole Breaker": { material: "50", labor: "15" }, // 7 Church Ln
-    "50A 2-Pole Breaker": { material: "50", labor: "15" }, // Mainspring only
+    "50A 2-Pole Breaker": { material: "150", labor: "15" }, // EST-1009 ($150) higher than Mainspring ($50)
     "50A 3-Pole Breaker": { material: "95", labor: "15" }, // 7 Church Ln
-    "60A 2-Pole Breaker": { material: "50", labor: "15" }, // both jobs agree exactly
+    "60A 2-Pole Breaker": { material: "150", labor: "15" }, // EST-1009 ($150) higher than Eastern/Mainspring ($50)
     "60A 3-Pole Breaker": { material: "95", labor: "15" }, // 7 Church Ln
     "125A 3-Pole Breaker": { material: "600", labor: "15" }, // Mainspring only
     "150A 3-Pole Breaker": { material: "300", labor: "15" }, // EST-1009 (Meir Kirshenbaum)
