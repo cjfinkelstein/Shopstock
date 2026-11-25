@@ -371,6 +371,20 @@ def _get_or_404(db: Session, estimate_id: int) -> Estimate:
     return est
 
 
+def _get_active_estimate_light(db: Session, estimate_id: int) -> Estimate:
+    """Same existence/active check as _get_or_404, without its eager-loaded
+    sections->lines->items join. Plan-marker CRUD fires on every single
+    click while marking up a plan and never touches sections at all -- on
+    an estimate with hundreds of lines (or hundreds of markers across
+    several apply cycles), that join multiplies into a large result set
+    every call and was adding real per-click latency/lag on a dense
+    commercial plan. This just confirms the estimate exists and is active."""
+    est = db.query(Estimate).filter(Estimate.id == estimate_id, Estimate.active.is_(True)).first()
+    if not est:
+        raise HTTPException(status_code=404, detail="Estimate not found")
+    return est
+
+
 @router.get("", response_model=list[EstimateSummaryOut])
 def list_estimates(job_id: int | None = None, db: Session = Depends(get_db)):
     q = db.query(Estimate).options(joinedload(Estimate.sections).joinedload(EstimateSection.lines)).filter(Estimate.active.is_(True))
@@ -587,7 +601,7 @@ def upload_plan(estimate_id: int, body: PlanUploadIn, db: Session = Depends(get_
     on demand. Replaces any plan already on this estimate. Does NOT place
     any symbols by itself -- that's a separate, explicit step so the admin
     sees the blank plan first and chooses when to run the AI reading."""
-    estimate = _get_or_404(db, estimate_id)
+    estimate = _get_active_estimate_light(db, estimate_id)
     for page in list(_get_plan_pages(db, estimate_id)):
         db.delete(page)
     db.flush()
@@ -611,7 +625,7 @@ def upload_plan(estimate_id: int, body: PlanUploadIn, db: Session = Depends(get_
 
 @router.get("/{estimate_id}/plan", response_model=PlanOut)
 def get_plan(estimate_id: int, db: Session = Depends(get_db)):
-    _get_or_404(db, estimate_id)
+    _get_active_estimate_light(db, estimate_id)
     return _serialize_plan(_get_plan_pages(db, estimate_id))
 
 
@@ -622,7 +636,7 @@ def auto_layout_plan(estimate_id: int, db: Session = Depends(get_db)):
     reading, since an architectural plan has no electrical symbols to
     actually count) and replaces every current marker on this plan with
     the result, so it's safe to click again for a clean re-read."""
-    estimate = _get_or_404(db, estimate_id)
+    estimate = _get_active_estimate_light(db, estimate_id)
     if not estimate.plan_pdf_data:
         raise HTTPException(status_code=400, detail="Upload a plan first.")
     pages = _get_plan_pages(db, estimate_id)
@@ -662,7 +676,7 @@ def auto_layout_plan(estimate_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{estimate_id}/plan/markers", response_model=PlanMarkerOut, status_code=201)
 def add_plan_marker(estimate_id: int, body: PlanMarkerIn, db: Session = Depends(get_db)):
-    _get_or_404(db, estimate_id)
+    _get_active_estimate_light(db, estimate_id)
     page = db.get(EstimatePlanPage, body.plan_page_id)
     if not page or page.estimate_id != estimate_id:
         raise HTTPException(status_code=404, detail="Plan page not found")
@@ -680,7 +694,7 @@ def add_plan_marker(estimate_id: int, body: PlanMarkerIn, db: Session = Depends(
 
 @router.patch("/{estimate_id}/plan/markers/{marker_id}", response_model=PlanMarkerOut)
 def update_plan_marker(estimate_id: int, marker_id: int, body: PlanMarkerUpdate, db: Session = Depends(get_db)):
-    _get_or_404(db, estimate_id)
+    _get_active_estimate_light(db, estimate_id)
     marker = db.get(EstimatePlanMarker, marker_id)
     if not marker or marker.page.estimate_id != estimate_id:
         raise HTTPException(status_code=404, detail="Marker not found")
@@ -700,7 +714,7 @@ def update_plan_marker(estimate_id: int, marker_id: int, body: PlanMarkerUpdate,
 
 @router.delete("/{estimate_id}/plan/markers/{marker_id}", status_code=204)
 def delete_plan_marker(estimate_id: int, marker_id: int, db: Session = Depends(get_db)):
-    _get_or_404(db, estimate_id)
+    _get_active_estimate_light(db, estimate_id)
     marker = db.get(EstimatePlanMarker, marker_id)
     if marker and marker.page.estimate_id == estimate_id:
         db.delete(marker)
@@ -711,7 +725,7 @@ def delete_plan_marker(estimate_id: int, marker_id: int, db: Session = Depends(g
 def delete_all_plan_markers(estimate_id: int, db: Session = Depends(get_db)):
     """Clears every marker across every page of this plan in one call --
     the "Clear all symbols" button, as opposed to deleting one pin."""
-    _get_or_404(db, estimate_id)
+    _get_active_estimate_light(db, estimate_id)
     for page in _get_plan_pages(db, estimate_id):
         for marker in list(page.markers):
             db.delete(marker)
