@@ -560,6 +560,27 @@ PLAN_SYMBOL_SECTION = {
     "smoke": "Supply and Install", "co_smoke": "Supply and Install", "panel": "Panels and Meters",
 }
 
+# Section names that only exist on a commercial estimate (mirrors
+# EstimateWizard.tsx's COMMERCIAL_STEPS) -- used the same way the frontend's
+# estimateToWizardState does, to tell a commercial estimate from a
+# residential one by what sections it actually has.
+COMMERCIAL_SECTION_NAMES = {
+    "Commercial Rough-In", "Commercial Outlet Installation", "Commercial Switch Installation",
+    "Commercial Lighting Installation", "Commercial Data Installation", "Commercial Disconnects",
+    "Commercial Panels and Meters", "Commercial Circuit Breakers", "Commercial Permits, Inspection & Finalization",
+}
+
+# Every residential symbol type routes into one consolidated section here --
+# matches the wizard's own design decision ("Only Rough-In gets checked
+# off -- Supply and Install already has a copy button") instead of guessing
+# at a specific install step. "panel" still gets its own section, same
+# special-casing as the residential map above.
+COMMERCIAL_PLAN_SYMBOL_SECTION = {
+    "duplex": "Commercial Rough-In", "gfci": "Commercial Rough-In", "light": "Commercial Rough-In",
+    "fan": "Commercial Rough-In", "exfan": "Commercial Rough-In", "switch": "Commercial Rough-In",
+    "smoke": "Commercial Rough-In", "co_smoke": "Commercial Rough-In", "panel": "Commercial Panels and Meters",
+}
+
 
 def _serialize_plan_marker(m: EstimatePlanMarker) -> PlanMarkerOut:
     return PlanMarkerOut(
@@ -773,9 +794,18 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     piling up duplicates. Also rewrites the estimate's Scope of Work from
     its current lines, so clicking "Plan" on an already-created estimate
     and adding something keeps both price and scope of work in sync, not
-    just price."""
+    just price. Picks between the residential and commercial section maps
+    by what sections this estimate actually has (same test the frontend's
+    estimateToWizardState uses) -- without this, a commercial estimate's
+    markers all targeted "Supply and Install"/"Panels and Meters", which
+    don't exist on a commercial estimate, so every marker was silently
+    skipped and Apply always failed with "No plan markers to apply yet"
+    even on a plan full of pins."""
     estimate = _get_or_404(db, estimate_id)
     sections_by_name = {s.name: s for s in estimate.sections}
+    is_commercial = any(name in COMMERCIAL_SECTION_NAMES for name in sections_by_name)
+    symbol_section = COMMERCIAL_PLAN_SYMBOL_SECTION if is_commercial else PLAN_SYMBOL_SECTION
+    default_section = "Commercial Rough-In" if is_commercial else "Supply and Install"
     pages = _get_plan_pages(db, estimate_id)
 
     for section in estimate.sections:
@@ -792,7 +822,7 @@ def apply_plan(estimate_id: int, db: Session = Depends(get_db)):
     grouped: dict[tuple[str, int | None, str], dict] = {}
     for page in pages:
         for marker in page.markers:
-            section_name = PLAN_SYMBOL_SECTION.get(marker.symbol_type, "Supply and Install")
+            section_name = symbol_section.get(marker.symbol_type, default_section)
             if section_name not in sections_by_name:
                 continue
             item = marker.item
