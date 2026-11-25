@@ -204,15 +204,16 @@ const COMMERCIAL_STEPS: WizardStep[] = [
         intro: "Rough-in wiring for the following outlets:",
         items: [
           "Duplex Outlet", "Duplex Outlet w/ Plug-Load Control", "Quad Outlet", "Quad Outlet w/ Plug-Load Control",
-          "GFCI Outlet", "Weatherproof GFCI Outlet", "Specialty Outlet", "Sign Receptacle",
+          "Quad Floor Outlet", "GFCI Outlet", "Weatherproof GFCI Outlet", "Specialty Outlet", "Sign Receptacle",
         ],
       },
       {
         intro: "Rough-in wiring for the following lighting:",
         items: [
           "Recessed Light (4\")", "Recessed Light w/ Battery Backup", "2x2 Light", "2x2 Light w/ Battery Backup",
-          "LED Pendant Light", "LED Pendant Light w/ Battery Backup", "Exterior Wall Sconce w/ Battery Backup",
-          "Exterior Recessed Light", "Exterior Recessed Light w/ Battery Backup", "EXIT Sign (Single-Sided)",
+          "LED Pendant Light", "LED Pendant Light w/ Battery Backup", "Wall Sconce", "Exterior Wall Sconce w/ Battery Backup",
+          "Exterior Recessed Light", "Exterior Recessed Light w/ Battery Backup", "Exterior Light", "Exterior Wall Lamp",
+          "4' Linear Light", "2' Linear Light", "Elevator Machine Room Light", "EXIT Sign (Single-Sided)",
           "EXIT Sign (Double-Sided)", "EXIT Sign w/ Directional Arrow", "Emergency Light",
           "Combo EXIT/Emergency Light", "Combo EXIT/Emergency Light w/ Remote Exterior Head",
           "Ceiling Mounted Occupancy Sensor", "LED Bathroom Vanity Light", "LED Surface-Mounted Utility Light",
@@ -221,8 +222,8 @@ const COMMERCIAL_STEPS: WizardStep[] = [
       {
         intro: "Rough-in wiring for the following equipment:",
         items: [
-          "Air Handler", "Condenser", "Rooftop Unit", "Exhaust Fan", "Water Heater", "Motorized Damper",
-          "Fire Alarm Control Panel", "Circulator Pump",
+          "Air Handler", "Furnace", "Condenser", "Rooftop Unit", "Exhaust Fan", "Water Heater", "Baseboard Heater",
+          "Motorized Damper", "Fire Alarm Control Panel", "Circulator Pump", "Hand Dryer", "Car Charger",
         ],
       },
       {
@@ -240,7 +241,7 @@ const COMMERCIAL_STEPS: WizardStep[] = [
         intro: "Supply and install:",
         items: [
           "Duplex Outlet", "Duplex Outlet w/ Plug-Load Control", "Quad Outlet", "Quad Outlet w/ Plug-Load Control",
-          "GFCI Outlet", "Weatherproof GFCI Outlet", "Specialty Outlet", "Sign Receptacle",
+          "Quad Floor Outlet", "GFCI Outlet", "Weatherproof GFCI Outlet", "Specialty Outlet", "Sign Receptacle",
           "Unbreakable Nylon Cover Plate",
         ],
       },
@@ -268,12 +269,15 @@ const COMMERCIAL_STEPS: WizardStep[] = [
       {
         intro: "Supply and install:",
         items: [
-          "Recessed Light (4\")", "Recessed Light w/ Battery Backup", "2x2 Light", "2x2 Light w/ Battery Backup",
-          "LED Pendant Light", "LED Pendant Light w/ Battery Backup", "Exterior Wall Sconce w/ Battery Backup",
-          "Exterior Recessed Light", "Exterior Recessed Light w/ Battery Backup", "EXIT Sign (Single-Sided)",
+          "Recessed Light (4\")", "Recessed Light (6\")", "Recessed Light w/ Battery Backup", "2x2 Light",
+          "2x2 Light w/ Battery Backup", "LED Pendant Light", "LED Pendant Light w/ Battery Backup",
+          "Wall Sconce", "Exterior Wall Sconce w/ Battery Backup", "Exterior Recessed Light",
+          "Exterior Recessed Light w/ Battery Backup", "Exterior Light", "Exterior Wall Lamp",
+          "4' Linear Light", "2' Linear Light", "Elevator Machine Room Light", "EXIT Sign (Single-Sided)",
           "EXIT Sign (Double-Sided)", "EXIT Sign w/ Directional Arrow", "Exhaust Fan", "Emergency Light",
           "Combo EXIT/Emergency Light", "Combo EXIT/Emergency Light w/ Remote Exterior Head",
           "Ceiling Mounted Occupancy Sensor", "LED Bathroom Vanity Light", "LED Surface-Mounted Utility Light",
+          "Baseboard Heater", "Hand Dryer",
         ],
       },
     ],
@@ -299,6 +303,10 @@ const COMMERCIAL_STEPS: WizardStep[] = [
         intro: "Supply and install non-fused disconnects for:",
         items: ["Equipment Disconnect (Air Handler, Condenser, Water Heater, etc.)"],
       },
+      {
+        intro: "Supply and install fused disconnects for:",
+        items: ["Fused Disconnect (Elevator, RK-1 Fuses)"],
+      },
     ],
   },
   {
@@ -309,16 +317,20 @@ const COMMERCIAL_STEPS: WizardStep[] = [
       {
         intro: "Supply and install:",
         items: [
-          "New Enclosed Circuit Breaker", "New CT Cabinet", "New 800A 3-Phase Panel", "New 200A 3-Phase Panel",
-          "New 125A 3-Phase Panel", "Ground Rods and Clamps", "SER Cable (4/0-4/0-4/0-4)",
+          "New Enclosed Circuit Breaker", "New CT Cabinet", "New 800A 3-Phase Panel", "New 800A Main Disconnect",
+          "New 200A 3-Phase Panel", "New 125A 3-Phase Panel", "New 100A 3-Phase Panel", "4-Gang 200A Meter Stack",
+          "25 KVA Transformer", "80A 3-Pole Contactor", "7-Day Programmable Time Clock",
+          "Ground Rods and Clamps", "SER Cable (4/0-4/0-4/0-4)",
         ],
       },
       {
         intro: "Conduit and wire:",
         items: [
-          "EMT Conduit (3\")", "EMT Conduit (2\")", "EMT Conduit (1-1/2\")", "600 KCM Wire", "600 KCM Neutral Wire",
-          "1/0 AWG Ground Wire", "3/0 AWG Wire", "3/0 AWG Neutral Wire", "#6 AWG Ground Wire", "#4 AWG THHN Wire",
-          "#1 AWG Wire", "#1 AWG Neutral Wire",
+          "EMT Conduit (3\")", "EMT Conduit (2\")", "EMT Conduit (1-1/2\")", "EMT Conduit (1-1/4\")",
+          "PVC Conduit (4\")", "600 KCM Wire", "600 KCM Neutral Wire", "2/0 AWG Ground Wire",
+          "1/0 AWG Ground Wire", "3/0 AWG Wire", "3/0 AWG Neutral Wire", "#6 AWG Ground Wire",
+          "#4 AWG THHN Wire", "#8 AWG THHN Wire", "#1 AWG Wire", "#1 AWG Neutral Wire",
+          "12x12x48 Trough w/ Ends",
         ],
       },
     ],
@@ -331,9 +343,11 @@ const COMMERCIAL_STEPS: WizardStep[] = [
       {
         intro: "Supply and install:",
         items: [
-          "20A Single-Pole Breaker", "20A Single-Pole GFCI Breaker", "20A 2-Pole Breaker", "20A 3-Pole Breaker",
-          "25A 2-Pole Breaker", "30A 2-Pole Breaker", "45A 2-Pole Breaker", "50A 2-Pole Breaker",
-          "60A 2-Pole Breaker", "125A 3-Pole Breaker", "200A 3-Pole Breaker",
+          "15A Single-Pole Breaker", "20A Single-Pole Breaker", "20A Single-Pole GFCI Breaker",
+          "20A 2-Pole Breaker", "20A 3-Pole Breaker", "25A Single-Pole Breaker", "25A 2-Pole Breaker",
+          "30A 2-Pole Breaker", "45A 2-Pole Breaker", "50A Single-Pole Breaker",
+          "50A 2-Pole Breaker", "50A 3-Pole Breaker", "60A 2-Pole Breaker", "60A 3-Pole Breaker",
+          "125A 3-Pole Breaker", "150A 3-Pole Breaker", "200A 3-Pole Breaker",
         ],
       },
     ],
@@ -655,6 +669,7 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
     "Duplex Outlet w/ Plug-Load Control": { material: "10", labor: "40" },
     "Quad Outlet": { material: "10", labor: "50" },
     "Quad Outlet w/ Plug-Load Control": { material: "10", labor: "50" },
+    "Quad Floor Outlet": { material: "10", labor: "50" }, // 7 Church Ln
     "GFCI Outlet": { material: "10", labor: "40" },
     "Weatherproof GFCI Outlet": { material: "10", labor: "40" },
     "Specialty Outlet": { material: "10", labor: "40" },
@@ -665,9 +680,15 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
     "2x2 Light w/ Battery Backup": { material: "10", labor: "40" },
     "LED Pendant Light": { material: "10", labor: "40" },
     "LED Pendant Light w/ Battery Backup": { material: "10", labor: "40" },
+    "Wall Sconce": { material: "10", labor: "40" }, // 7 Church Ln
     "Exterior Wall Sconce w/ Battery Backup": { material: "10", labor: "40" },
     "Exterior Recessed Light": { material: "10", labor: "40" },
     "Exterior Recessed Light w/ Battery Backup": { material: "10", labor: "40" },
+    "Exterior Light": { material: "20", labor: "40" }, // 7 Church Ln
+    "Exterior Wall Lamp": { material: "20", labor: "40" }, // 7 Church Ln
+    "4' Linear Light": { material: "10", labor: "40" }, // 7 Church Ln
+    "2' Linear Light": { material: "10", labor: "40" }, // 7 Church Ln
+    "Elevator Machine Room Light": { material: "20", labor: "40" }, // 7 Church Ln
     "EXIT Sign (Single-Sided)": { material: "10", labor: "40" },
     "EXIT Sign (Double-Sided)": { material: "10", labor: "40" },
     "EXIT Sign w/ Directional Arrow": { material: "10", labor: "40" },
@@ -678,22 +699,27 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
     "LED Bathroom Vanity Light": { material: "10", labor: "40" },
     "LED Surface-Mounted Utility Light": { material: "10", labor: "40" },
     "Air Handler": { material: "100", labor: "40" },
+    "Furnace": { material: "100", labor: "25" }, // 7 Church Ln
     "Condenser": { material: "300", labor: "75" },
     "Rooftop Unit": { material: "300", labor: "75" }, // Eastern Ave only -- Mainspring has no rooftop units
     "Exhaust Fan": { material: "10", labor: "40" },
     "Water Heater": { material: "100", labor: "40" },
+    "Baseboard Heater": { material: "10", labor: "40" }, // 7 Church Ln
     "Motorized Damper": { material: "20", labor: "40" },
     "Fire Alarm Control Panel": { material: "10", labor: "40" },
     // Eastern Ave only, and that row's own qty x unit didn't match its total --
     // using the unit-price cells, same rule as every other inconsistent row.
     "Circulator Pump": { material: "20", labor: "40" },
+    "Hand Dryer": { material: "20", labor: "40" }, // 7 Church Ln
+    "Car Charger": { material: "600", labor: "400" }, // 7 Church Ln
     "Data Outlet": { material: "15", labor: "40" },
   },
   "Commercial Outlet Installation": {
     "Duplex Outlet": { material: "7", labor: "50" },
     "Duplex Outlet w/ Plug-Load Control": { material: "15", labor: "50" },
-    "Quad Outlet": { material: "7", labor: "50" },
+    "Quad Outlet": { material: "15", labor: "50" }, // 7 Church Ln ($15) higher than Eastern/Mainspring ($7)
     "Quad Outlet w/ Plug-Load Control": { material: "15", labor: "50" },
+    "Quad Floor Outlet": { material: "30", labor: "50" }, // 7 Church Ln
     "GFCI Outlet": { material: "30", labor: "50" },
     "Weatherproof GFCI Outlet": { material: "30", labor: "50" },
     "Specialty Outlet": { material: "20", labor: "50" }, // Eastern Ave showed $15 -- Mainspring wins
@@ -709,25 +735,34 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
   },
   "Commercial Lighting Installation": {
     'Recessed Light (4")': { material: "25", labor: "50" },
+    'Recessed Light (6")': { material: "175", labor: "50" }, // 7 Church Ln -- round and square agreed exactly
     "Recessed Light w/ Battery Backup": { material: "35", labor: "50" },
     "2x2 Light": { material: "150", labor: "50" },
     "2x2 Light w/ Battery Backup": { material: "200", labor: "50" },
     "LED Pendant Light": { material: "150", labor: "50" },
     "LED Pendant Light w/ Battery Backup": { material: "200", labor: "50" },
+    "Wall Sconce": { material: "150", labor: "50" }, // 7 Church Ln
     "Exterior Wall Sconce w/ Battery Backup": { material: "250", labor: "50" },
     "Exterior Recessed Light": { material: "25", labor: "50" },
     "Exterior Recessed Light w/ Battery Backup": { material: "35", labor: "50" },
+    "Exterior Light": { material: "350", labor: "50" }, // 7 Church Ln
+    "Exterior Wall Lamp": { material: "75", labor: "80" }, // 7 Church Ln
+    "4' Linear Light": { material: "150", labor: "50" }, // 7 Church Ln
+    "2' Linear Light": { material: "200", labor: "50" }, // 7 Church Ln
+    "Elevator Machine Room Light": { material: "50", labor: "50" }, // 7 Church Ln
     "EXIT Sign (Single-Sided)": { material: "50", labor: "50" },
     "EXIT Sign (Double-Sided)": { material: "50", labor: "50" },
     "EXIT Sign w/ Directional Arrow": { material: "55", labor: "50" },
     // Eastern Ave only -- Mainspring's Lighting Installation doesn't cover these.
     "Exhaust Fan": { material: "120", labor: "50" },
-    "Emergency Light": { material: "120", labor: "50" },
-    "Combo EXIT/Emergency Light": { material: "120", labor: "50" },
+    "Emergency Light": { material: "200", labor: "50" }, // 7 Church Ln ($200) higher than Eastern Ave ($120)
+    "Combo EXIT/Emergency Light": { material: "200", labor: "50" }, // 7 Church Ln ($200) higher than Eastern Ave ($120)
     "Combo EXIT/Emergency Light w/ Remote Exterior Head": { material: "180", labor: "60" },
-    "Ceiling Mounted Occupancy Sensor": { material: "120", labor: "50" },
+    "Ceiling Mounted Occupancy Sensor": { material: "150", labor: "50" }, // 7 Church Ln ($150) higher than Eastern Ave ($120)
     "LED Bathroom Vanity Light": { material: "80", labor: "50" },
     "LED Surface-Mounted Utility Light": { material: "60", labor: "50" },
+    "Baseboard Heater": { material: "150", labor: "50" }, // 7 Church Ln
+    "Hand Dryer": { material: "15", labor: "50" }, // 7 Church Ln
   },
   "Commercial Data Installation": {
     "Tombstone Jack": { material: "7", labor: "50" },
@@ -737,13 +772,20 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
     // Both jobs agree exactly: Eastern Ave ($200/$400 total for qty 4) and
     // Mainspring ($850/$1,700 total for qty 17) both work out to $50/$100 per unit.
     "Equipment Disconnect (Air Handler, Condenser, Water Heater, etc.)": { material: "50", labor: "100" },
+    "Fused Disconnect (Elevator, RK-1 Fuses)": { material: "700", labor: "50" }, // 7 Church Ln
   },
   "Commercial Panels and Meters": {
     "New Enclosed Circuit Breaker": { material: "1000", labor: "1000" }, // Mainspring only
     "New CT Cabinet": { material: "1000", labor: "1000" }, // Mainspring only
     "New 800A 3-Phase Panel": { material: "7500", labor: "2500" }, // Mainspring only
+    "New 800A Main Disconnect": { material: "7500", labor: "2500" }, // 7 Church Ln -- same rate as the 800A panel
     "New 200A 3-Phase Panel": { material: "800", labor: "1000" }, // both jobs agree exactly
     "New 125A 3-Phase Panel": { material: "800", labor: "1000" }, // Mainspring -- same rate as the 200A, worth double-checking
+    "New 100A 3-Phase Panel": { material: "800", labor: "1000" }, // 7 Church Ln -- same rate as the 200A/125A
+    "4-Gang 200A Meter Stack": { material: "3000", labor: "2500" }, // 7 Church Ln
+    "25 KVA Transformer": { material: "3500", labor: "2500" }, // 7 Church Ln
+    "80A 3-Pole Contactor": { material: "400", labor: "10" }, // 7 Church Ln
+    "7-Day Programmable Time Clock": { material: "400", labor: "10" }, // 7 Church Ln
     // Eastern Ave -- that row's own qty x unit labor didn't match its total;
     // using the unit-price cells (material matched fine).
     "Ground Rods and Clamps": { material: "100", labor: "40" },
@@ -751,30 +793,41 @@ const ITEM_COST_OVERRIDES: Record<string, Record<string, { material: string; lab
     'EMT Conduit (3")': { material: "95", labor: "5" }, // Mainspring, per foot
     'EMT Conduit (2")': { material: "50", labor: "5" }, // Mainspring, per foot
     'EMT Conduit (1-1/2")': { material: "60", labor: "5" }, // Mainspring, per foot
+    'EMT Conduit (1-1/4")': { material: "35", labor: "5" }, // 7 Church Ln, per foot
+    'PVC Conduit (4")': { material: "50", labor: "5" }, // 7 Church Ln, per foot
     "600 KCM Wire": { material: "30", labor: "5" }, // Mainspring, per foot
     "600 KCM Neutral Wire": { material: "30", labor: "5" }, // Mainspring, per foot
+    "2/0 AWG Ground Wire": { material: "5", labor: "7" }, // 7 Church Ln, per foot
     "1/0 AWG Ground Wire": { material: "2.5", labor: "5" }, // Mainspring, per foot
     "3/0 AWG Wire": { material: "15", labor: "5" }, // Mainspring, per foot
     "3/0 AWG Neutral Wire": { material: "15", labor: "5" }, // Mainspring, per foot
     "#6 AWG Ground Wire": { material: "3", labor: "5" }, // Mainspring, per foot
-    // Eastern Ave -- that row's labor cell read $20/ft but only $2/ft actually
-    // matches its own total ($400 over 200ft); using $2, per the same
-    // trust-the-math-that-works rule as the rows above.
-    "#4 AWG THHN Wire": { material: "3", labor: "2" },
+    // Eastern Ave's labor cell read $20/ft but only $2/ft actually matched
+    // its own total ($400 over 200ft); 7 Church Ln's own per-ft cell reads
+    // $5/ft (material agrees at $3) -- going with the higher of the two.
+    "#4 AWG THHN Wire": { material: "3", labor: "5" },
+    "#8 AWG THHN Wire": { material: "1.5", labor: "5" }, // 7 Church Ln, per foot
     "#1 AWG Wire": { material: "4", labor: "5" }, // Mainspring, per foot
     "#1 AWG Neutral Wire": { material: "4", labor: "5" }, // Mainspring, per foot
+    "12x12x48 Trough w/ Ends": { material: "400", labor: "50" }, // 7 Church Ln
   },
   "Commercial Circuit Breakers": {
+    "15A Single-Pole Breaker": { material: "20", labor: "15" }, // EST-1009 (Meir Kirshenbaum)
     "20A Single-Pole Breaker": { material: "20", labor: "15" }, // both jobs agree exactly
     "20A Single-Pole GFCI Breaker": { material: "100", labor: "15" }, // Mainspring only
     "20A 2-Pole Breaker": { material: "50", labor: "15" }, // Eastern Ave only
     "20A 3-Pole Breaker": { material: "50", labor: "15" }, // Mainspring only
+    "25A Single-Pole Breaker": { material: "30", labor: "15" }, // EST-1009 (Meir Kirshenbaum)
     "25A 2-Pole Breaker": { material: "50", labor: "15" }, // Mainspring only
     "30A 2-Pole Breaker": { material: "50", labor: "15" }, // both jobs agree exactly
     "45A 2-Pole Breaker": { material: "50", labor: "15" }, // both jobs agree exactly
+    "50A Single-Pole Breaker": { material: "50", labor: "15" }, // 7 Church Ln
     "50A 2-Pole Breaker": { material: "50", labor: "15" }, // Mainspring only
+    "50A 3-Pole Breaker": { material: "95", labor: "15" }, // 7 Church Ln
     "60A 2-Pole Breaker": { material: "50", labor: "15" }, // both jobs agree exactly
+    "60A 3-Pole Breaker": { material: "95", labor: "15" }, // 7 Church Ln
     "125A 3-Pole Breaker": { material: "600", labor: "15" }, // Mainspring only
+    "150A 3-Pole Breaker": { material: "300", labor: "15" }, // EST-1009 (Meir Kirshenbaum)
     "200A 3-Pole Breaker": { material: "600", labor: "15" }, // Mainspring only
   },
   "Commercial Permits, Inspection & Finalization": {

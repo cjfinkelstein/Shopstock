@@ -21,6 +21,17 @@ const SYMBOL_TYPES: { id: PlanSymbolType; label: string; color: string; letter: 
 ];
 const symbolOf = (id: PlanSymbolType) => SYMBOL_TYPES.find((t) => t.id === id) ?? SYMBOL_TYPES[0];
 
+// Distinct, high-contrast colors for the Legend prompt -- several Legend
+// items often share the same generic symbol_type bucket (e.g. half a dozen
+// different light fixtures are all type "light"), which would otherwise all
+// render identically on the plan. Each legend item gets its own color from
+// here instead of the bucket's.
+const LEGEND_PALETTE = [
+  "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#17a2b8",
+  "#f032e6", "#469990", "#9a6324", "#800000", "#808000", "#000075",
+  "#c2185b", "#5d4037", "#0097a7", "#7cb342",
+];
+
 // Every item from the "Rough-In Electrical Work" checklist step (kept in
 // sync with WIZARD_STEPS in EstimateWizard.tsx by hand, same as the
 // Install Customer-Supplied Fixtures list already is), each tagged with the
@@ -64,9 +75,11 @@ const ROUGH_IN_ITEMS: { group: string; type: PlanSymbolType; item: string }[] = 
 // anything in the commercial checklist "Apply to estimate" routes into.
 const COMMERCIAL_ROUGH_IN_ITEMS: { group: string; type: PlanSymbolType; item: string }[] = [
   ...([
-    'Recessed Light (4")', "Recessed Light w/ Battery Backup", "2x2 Light", "2x2 Light w/ Battery Backup",
-    "LED Pendant Light", "LED Pendant Light w/ Battery Backup", "Exterior Wall Sconce w/ Battery Backup",
-    "Exterior Recessed Light", "Exterior Recessed Light w/ Battery Backup", "EXIT Sign (Single-Sided)",
+    'Recessed Light (4")', 'Recessed Light (6")', "Recessed Light w/ Battery Backup", "2x2 Light",
+    "2x2 Light w/ Battery Backup", "LED Pendant Light", "LED Pendant Light w/ Battery Backup",
+    "Wall Sconce", "Exterior Wall Sconce w/ Battery Backup", "Exterior Recessed Light",
+    "Exterior Recessed Light w/ Battery Backup", "Exterior Light", "Exterior Wall Lamp",
+    "4' Linear Light", "2' Linear Light", "Elevator Machine Room Light", "EXIT Sign (Single-Sided)",
     "EXIT Sign (Double-Sided)", "EXIT Sign w/ Directional Arrow", "Emergency Light",
     "Combo EXIT/Emergency Light", "Combo EXIT/Emergency Light w/ Remote Exterior Head",
     "Ceiling Mounted Occupancy Sensor", "LED Bathroom Vanity Light", "LED Surface-Mounted Utility Light",
@@ -78,19 +91,24 @@ const COMMERCIAL_ROUGH_IN_ITEMS: { group: string; type: PlanSymbolType; item: st
   { group: "Switches & Outlets", type: "duplex", item: "Duplex Outlet w/ Plug-Load Control" },
   { group: "Switches & Outlets", type: "duplex", item: "Quad Outlet" },
   { group: "Switches & Outlets", type: "duplex", item: "Quad Outlet w/ Plug-Load Control" },
+  { group: "Switches & Outlets", type: "duplex", item: "Quad Floor Outlet" },
   { group: "Switches & Outlets", type: "gfci", item: "GFCI Outlet" },
   { group: "Switches & Outlets", type: "gfci", item: "Weatherproof GFCI Outlet" },
   { group: "Switches & Outlets", type: "duplex", item: "Specialty Outlet" },
   { group: "Switches & Outlets", type: "duplex", item: "Sign Receptacle" },
   { group: "Switches & Outlets", type: "duplex", item: "Data Outlet" },
   { group: "Equipment", type: "panel", item: "Air Handler" },
+  { group: "Equipment", type: "panel", item: "Furnace" },
   { group: "Equipment", type: "panel", item: "Condenser" },
   { group: "Equipment", type: "panel", item: "Rooftop Unit" },
   { group: "Equipment", type: "exfan", item: "Exhaust Fan" },
   { group: "Equipment", type: "panel", item: "Water Heater" },
+  { group: "Equipment", type: "panel", item: "Baseboard Heater" },
   { group: "Equipment", type: "panel", item: "Motorized Damper" },
   { group: "Equipment", type: "panel", item: "Fire Alarm Control Panel" },
   { group: "Equipment", type: "panel", item: "Circulator Pump" },
+  { group: "Equipment", type: "panel", item: "Hand Dryer" },
+  { group: "Equipment", type: "panel", item: "Car Charger" },
 ];
 
 export default function PlanMarkupSheet({
@@ -131,28 +149,73 @@ export default function PlanMarkupSheet({
   const [autoLayoutRunning, setAutoLayoutRunning] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [zoom, setZoom] = useState(1);
-  // Items starred from the full Rough-in list below, shown as big buttons
-  // up top -- lets a plan be matched to exactly what's on its own
-  // electrical legend instead of scrolling/filtering the full checklist
-  // every time. Persisted per-estimate (not per-page) since the same
-  // legend applies across the whole plan set, and survives reopening this
-  // sheet later.
+  // Items picked (via the legend prompt below, or starred one at a time
+  // from the full Rough-in list) as what's actually on this plan's own
+  // electrical legend -- each gets its own color from LEGEND_PALETTE so
+  // same-bucket items (several different light fixtures are all type
+  // "light") are still visually distinct on the plan, and they take over
+  // the "Quick symbols" slot as the main, fastest things to click.
+  // Persisted per-estimate (not per-page) since the same legend applies
+  // across the whole plan set, and survives reopening this sheet later.
   const legendKey = `shopstock:planLegend:${estimateId}`;
-  const [legend, setLegend] = useState<Set<string>>(() => {
+  const [legendColors, setLegendColors] = useState<Record<string, string>>(() => {
     try {
       const raw = localStorage.getItem(legendKey);
-      return raw ? new Set(JSON.parse(raw)) : new Set();
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      // Older versions of this sheet stored the legend as a plain string
+      // array (no colors) -- fall back to assigning colors fresh instead
+      // of losing an already-built legend on first load after the update.
+      if (Array.isArray(parsed)) {
+        const next: Record<string, string> = {};
+        parsed.forEach((item: string, i: number) => { next[item] = LEGEND_PALETTE[i % LEGEND_PALETTE.length]; });
+        return next;
+      }
+      return parsed;
     } catch {
-      return new Set();
+      return {};
     }
   });
+  const saveLegendColors = (next: Record<string, string>) => {
+    setLegendColors(next);
+    try { localStorage.setItem(legendKey, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  const nextLegendColor = (used: Set<string>, ordinal: number) =>
+    LEGEND_PALETTE.find((c) => !used.has(c)) ?? LEGEND_PALETTE[ordinal % LEGEND_PALETTE.length];
   const toggleLegend = (item: string) => {
-    setLegend((prev) => {
-      const next = new Set(prev);
-      if (next.has(item)) next.delete(item); else next.add(item);
-      try { localStorage.setItem(legendKey, JSON.stringify([...next])); } catch { /* ignore */ }
-      return next;
-    });
+    const next = { ...legendColors };
+    if (item in next) {
+      delete next[item];
+    } else {
+      next[item] = nextLegendColor(new Set(Object.values(next)), Object.keys(next).length);
+    }
+    saveLegendColors(next);
+  };
+  const colorFor = (item: string, type: PlanSymbolType) => legendColors[item] ?? symbolOf(type).color;
+
+  // The "what's on this plan's legend?" prompt -- opens once automatically
+  // the first time a plan with pages has no legend set yet, so it's asked
+  // up front before marking up starts, not discovered one star at a time.
+  const [legendPromptOpen, setLegendPromptOpen] = useState(false);
+  const [legendDraft, setLegendDraft] = useState<Set<string>>(new Set());
+  const autoPromptedRef = useRef(false);
+  const openLegendPrompt = () => {
+    setLegendDraft(new Set(Object.keys(legendColors)));
+    setLegendPromptOpen(true);
+  };
+  const confirmLegendPrompt = () => {
+    const next: Record<string, string> = {};
+    const used = new Set<string>();
+    let ordinal = 0;
+    for (const item of legendDraft) {
+      if (legendColors[item]) { next[item] = legendColors[item]; used.add(legendColors[item]); }
+    }
+    for (const item of legendDraft) {
+      if (!next[item]) { next[item] = nextLegendColor(used, ordinal); used.add(next[item]); }
+      ordinal += 1;
+    }
+    saveLegendColors(next);
+    setLegendPromptOpen(false);
   };
   const fileInput = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -174,6 +237,15 @@ export default function PlanMarkupSheet({
       .finally(() => setLoading(false));
   };
   useEffect(load, [estimateId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (autoPromptedRef.current || loading) return;
+    if (!plan || plan.pages.length === 0) return;
+    if (Object.keys(legendColors).length > 0) return;
+    autoPromptedRef.current = true;
+    openLegendPrompt();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, plan]);
 
   useEffect(() => {
     if (!selected) return;
@@ -361,7 +433,7 @@ export default function PlanMarkupSheet({
     allMarkers.reduce<Record<string, { label: string; color: string; qty: number }>>((acc, m) => {
       const key = m.label;
       const qty = parseFloat(m.qty) || 0;
-      if (!acc[key]) acc[key] = { label: m.label, color: symbolOf(m.symbol_type).color, qty: 0 };
+      if (!acc[key]) acc[key] = { label: m.label, color: colorFor(m.label, m.symbol_type), qty: 0 };
       acc[key].qty += qty;
       return acc;
     }, {}),
@@ -515,12 +587,13 @@ export default function PlanMarkupSheet({
                     <img src={page.image_data} alt={`Plan page ${page.page_number}`} className="block w-full select-none" draggable={false} />
                     {pageMarkers.map((m) => {
                       const s = symbolOf(m.symbol_type);
+                      const color = colorFor(m.label, m.symbol_type);
                       const qty = parseFloat(m.qty) || 0;
                       return (
                         <div
                           key={m.id}
                           className="absolute flex h-[22px] w-[22px] -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow active:cursor-grabbing"
-                          style={{ left: `${m.x}%`, top: `${m.y}%`, background: s.color, outline: selected?.id === m.id ? "2px solid #1c2024" : undefined, outlineOffset: 2 }}
+                          style={{ left: `${m.x}%`, top: `${m.y}%`, background: color, outline: selected?.id === m.id ? "2px solid #1c2024" : undefined, outlineOffset: 2 }}
                           onPointerDown={(e) => onPinPointerDown(m, e)}
                           title={`${m.label} ×${qty}`}
                         >
@@ -559,50 +632,56 @@ export default function PlanMarkupSheet({
 
               {(() => {
                 const paletteItems = jobType === "commercial" ? COMMERCIAL_ROUGH_IN_ITEMS : ROUGH_IN_ITEMS;
-                const legendItems = paletteItems.filter((r) => legend.has(r.item));
-                return legendItems.length > 0 && (
+                const legendItems = paletteItems.filter((r) => r.item in legendColors);
+                const hasLegend = legendItems.length > 0;
+                return (
                   <>
-                    <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      Legend ({legendItems.length})
-                    </p>
-                    <div className="mb-2 grid grid-cols-2 gap-1.5">
-                      {legendItems.map((r) => {
-                        const s = symbolOf(r.type);
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        {hasLegend ? `Legend (${legendItems.length})` : "Quick symbols"}
+                      </p>
+                      <button className="text-[11px] font-semibold text-brand-600 dark:text-brand-400" onClick={openLegendPrompt}>
+                        {hasLegend ? "Edit" : "Set up"}
+                      </button>
+                    </div>
+                    {hasLegend ? (
+                      legendItems.map((r) => {
                         const active = placing?.type === r.type && placing.label === r.item;
                         return (
                           <button
                             key={r.item}
-                            className={`card-interactive flex items-center gap-1.5 p-2 text-left text-[11.5px] font-bold leading-tight ${active ? "ring-2 ring-brand-500" : ""}`}
+                            className={`card-interactive flex items-center gap-2 p-2.5 text-left text-[12.5px] font-semibold ${active ? "ring-2 ring-brand-500" : ""}`}
                             onClick={() => setPlacing(active ? null : { type: r.type, label: r.item })}
                           >
-                            <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
-                            <span className="min-w-0 flex-1">{r.item}</span>
+                            <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: legendColors[r.item] }} />
+                            {r.item}
                           </button>
                         );
-                      })}
-                    </div>
+                      })
+                    ) : (
+                      <>
+                        {jobType === "commercial" && (
+                          <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">
+                            "Panel" here means panels/disconnects only -- for HVAC, water heaters, and other
+                            equipment, use the named items in the Equipment group below instead, so each type
+                            gets counted and priced on its own.
+                          </p>
+                        )}
+                        {SYMBOL_TYPES.map((t) => (
+                          <button
+                            key={t.id}
+                            className={`card-interactive flex items-center gap-2 p-2.5 text-left text-[12.5px] font-semibold ${placing?.type === t.id && placing.label === t.label ? "ring-2 ring-brand-500" : ""}`}
+                            onClick={() => setPlacing(placing?.type === t.id && placing.label === t.label ? null : { type: t.id, label: t.label })}
+                          >
+                            <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: t.color }} />
+                            {jobType === "commercial" && t.id === "panel" ? "Panel" : t.label}
+                          </button>
+                        ))}
+                      </>
+                    )}
                   </>
                 );
               })()}
-
-              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Quick symbols</p>
-              {jobType === "commercial" && (
-                <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">
-                  "Panel" here means panels/disconnects only -- for HVAC, water heaters, and other
-                  equipment, use the named items in the Equipment group below instead, so each type
-                  gets counted and priced on its own.
-                </p>
-              )}
-              {SYMBOL_TYPES.map((t) => (
-                <button
-                  key={t.id}
-                  className={`card-interactive flex items-center gap-2 p-2.5 text-left text-[12.5px] font-semibold ${placing?.type === t.id && placing.label === t.label ? "ring-2 ring-brand-500" : ""}`}
-                  onClick={() => setPlacing(placing?.type === t.id && placing.label === t.label ? null : { type: t.id, label: t.label })}
-                >
-                  <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: t.color }} />
-                  {jobType === "commercial" && t.id === "panel" ? "Panel" : t.label}
-                </button>
-              ))}
 
               <p className="mb-1 mt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Rough-in items</p>
               <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">
@@ -623,16 +702,15 @@ export default function PlanMarkupSheet({
                   <div key={group}>
                     <p className="mb-0.5 mt-1.5 text-[10.5px] font-semibold text-slate-400 dark:text-slate-500">{group}</p>
                     {items.map((r) => {
-                      const s = symbolOf(r.type);
                       const active = placing?.type === r.type && placing.label === r.item;
-                      const pinned = legend.has(r.item);
+                      const pinned = r.item in legendColors;
                       return (
                         <div key={r.item} className="flex items-center gap-1">
                           <button
                             className={`card-interactive flex w-full min-w-0 items-center gap-2 p-2 text-left text-[12px] font-semibold ${active ? "ring-2 ring-brand-500" : ""}`}
                             onClick={() => setPlacing(active ? null : { type: r.type, label: r.item })}
                           >
-                            <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
+                            <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: colorFor(r.item, r.type) }} />
                             <span className="min-w-0 flex-1 truncate">{r.item}</span>
                           </button>
                           <button
@@ -742,6 +820,70 @@ export default function PlanMarkupSheet({
               <button className="btn-secondary flex-1" onClick={() => setSelected(null)}>Close</button>
               <button className="btn-secondary flex-1 !bg-red-500 !text-white" onClick={() => deleteMarker(selected.id)}>
                 Delete pin
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {legendPromptOpen && (
+        <div
+          className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/40 p-4"
+          onClick={() => setLegendPromptOpen(false)}
+        >
+          <div
+            className="flex max-h-[80vh] w-full max-w-sm flex-col rounded-2xl bg-white p-4 shadow-sheet dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-[15px] font-bold">What's on this plan's legend?</p>
+            <p className="mb-2 text-[12.5px] text-slate-400 dark:text-slate-500">
+              Select every symbol on the plan's own electrical legend -- each gets its own color and
+              goes to the top of the symbol list so you can place it with one tap.
+            </p>
+            <input
+              className="input mb-1 !min-h-[30px] text-[12.5px]"
+              placeholder="Filter…"
+              value={paletteFilter}
+              onChange={(e) => setPaletteFilter(e.target.value)}
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {["Fixtures", "Switches & Outlets", "Equipment"].map((group) => {
+                const items = (jobType === "commercial" ? COMMERCIAL_ROUGH_IN_ITEMS : ROUGH_IN_ITEMS).filter(
+                  (r) => r.group === group && r.item.toLowerCase().includes(paletteFilter.trim().toLowerCase()),
+                );
+                if (items.length === 0) return null;
+                return (
+                  <div key={group}>
+                    <p className="mb-0.5 mt-1.5 text-[10.5px] font-semibold text-slate-400 dark:text-slate-500">{group}</p>
+                    {items.map((r) => {
+                      const checked = legendDraft.has(r.item);
+                      return (
+                        <button
+                          key={r.item}
+                          className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-[12.5px] font-semibold hover:bg-slate-50 dark:hover:bg-slate-800"
+                          onClick={() => setLegendDraft((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(r.item)) next.delete(r.item); else next.add(r.item);
+                            return next;
+                          })}
+                        >
+                          <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? "border-brand-500 bg-brand-500" : "border-slate-300 dark:border-slate-600"}`}>
+                            {checked && <Icon name="check" size={12} className="text-white" />}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">{r.item}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button className="btn-secondary flex-1" onClick={() => setLegendPromptOpen(false)}>
+                {Object.keys(legendColors).length > 0 ? "Cancel" : "Skip for now"}
+              </button>
+              <button className="btn-primary flex-1" onClick={confirmLegendPrompt}>
+                Set legend {legendDraft.size > 0 ? `(${legendDraft.size})` : ""}
               </button>
             </div>
           </div>
