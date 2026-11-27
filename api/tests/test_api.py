@@ -1,5 +1,6 @@
 """API-level tests: auth flows, cost stripping, job costing, batches, reports."""
 
+import io
 from decimal import Decimal
 
 
@@ -689,3 +690,52 @@ class TestPlanApply:
         sections = {s["name"]: s for s in r.json()["sections"]}
         assert [l["description"] for l in sections["Commercial Rough-In"]["lines"]] == ["2x2 Light"]
         assert [l["description"] for l in sections["Commercial Panels and Meters"]["lines"]] == ["New 200A 3-Phase Panel"]
+
+
+class TestXlsxExport:
+    """Regression coverage for GET /estimates/{id}/export -- EST-1013
+    showed up with its "Total" columns blank in a non-Excel viewer because
+    those cells were live formulas (e.g. "=C8*D8") with no cached value, and
+    plenty of real viewers (a SharePoint/OneDrive quick preview, mobile
+    Office, email attachment previews) never run a calculation engine on
+    open. Asserting these are plain numbers, not formula strings, is what
+    would have caught that."""
+
+    def test_totals_are_numbers_not_formulas(self, client, seeded):
+        from openpyxl import load_workbook
+
+        admin = login_admin(client)
+        r = client.post("/api/v1/estimates", headers=admin, json={
+            "scope_of_work": "", "profit_pct": "10", "discount_pct": "0",
+        })
+        assert r.status_code == 201, r.text
+        estimate_id = r.json()["id"]
+
+        r = client.patch(f"/api/v1/estimates/{estimate_id}", headers=admin, json={
+            "sections": [{"name": "Rough-In Electrical Work", "lines": [
+                {"description": "Duplex Outlets", "qty": "10", "material_unit_cost": "5", "labor_unit_cost": "40"},
+            ]}],
+        })
+        assert r.status_code == 200, r.text
+
+        r = client.get(f"/api/v1/estimates/{estimate_id}/export", headers=admin)
+        assert r.status_code == 200, r.content
+        wb = load_workbook(io.BytesIO(r.content))
+        ws = wb.active
+
+        # Every dollar cell found must be a real number -- a formula string
+        # (openpyxl hands back the raw "=..." text, not a computed value,
+        # for any cell it didn't itself evaluate) means a viewer with no
+        # calculation engine would show this cell blank.
+        found_dollar_cell = False
+        for row in ws.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, str) and cell.value.startswith("="):
+                    raise AssertionError(f"{cell.coordinate} is a formula, not a computed value: {cell.value!r}")
+                if cell.column_letter in ("E", "G", "H") and isinstance(cell.value, (int, float)):
+                    found_dollar_cell = True
+        assert found_dollar_cell, "expected at least one computed dollar cell in the export"
+
+        # 10 * ($5 + $40) = $450 material+labor, +10% profit = $495.
+        grand_total = ws.cell(row=ws.max_row, column=8).value
+        assert grand_total == 495.0
