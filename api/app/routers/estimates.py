@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
-from openpyxl.workbook.properties import CalcProperties
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import require_admin
@@ -899,11 +898,15 @@ _ACCOUNTING_FMT = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'
 
 def _build_xlsx(estimate: Estimate) -> Workbook:
     """Lays the estimate out exactly like "APEX Estimating Spreadsheet
-    2026" -- same fonts, column widths, accounting number format, and
-    formula style (=SUM(C*D) per line, =SUM(H_first:H_last) for totals),
-    so an exported estimate looks and behaves like a normal APEX estimate
-    file, not a foreign format. Every dollar cell is a live formula, not a
-    baked-in number, so it recalculates if someone edits it in Excel."""
+    2026" -- same fonts, column widths, and accounting number format, so an
+    exported estimate looks like a normal APEX estimate file, not a
+    foreign format. Every dollar total is computed here in Python and
+    written as a plain number (not a formula) -- a formula cell has no
+    cached value until something actually recalculates it, which plenty of
+    real viewers (SharePoint/OneDrive quick previews, mobile Office,
+    email attachment previews) never do, showing blank instead. Hand-
+    editing a quantity/cost cell directly in the downloaded file no longer
+    recalculates the totals -- re-export from the app instead."""
     bold = Font(name=FONT, bold=True)
     normal = Font(name=FONT)
     title_font = Font(name=FONT, size=20)
@@ -936,16 +939,22 @@ def _build_xlsx(estimate: Estimate) -> Workbook:
     for col, h in enumerate(headers, start=1):
         ws.cell(row=4, column=col, value=h).font = header_font
 
-    # Every derived dollar cell is a live formula (=C*D for a line's material
-    # total, =SUM(...) for section/grand totals, etc.), not a baked-in
-    # number, so editing a quantity or cost in Excel recalculates everything
-    # downstream of it. fullCalcOnLoad (set below, after the sheet is built)
-    # forces a recalculation the moment the file is opened in Excel/Google
-    # Sheets/LibreOffice, so the numbers are correct on first open too, not
-    # only after the next manual edit.
+    # Every derived dollar cell is a computed NUMBER, not a formula --
+    # openpyxl never writes a cached value alongside a formula string, so a
+    # formula cell (e.g. "=C8*D8") shows blank in anything that doesn't run
+    # a full calculation engine on open: a SharePoint/OneDrive quick
+    # preview, a mobile Office viewer, an email attachment preview, etc.
+    # fullCalcOnLoad used to paper over this in real desktop Excel, but
+    # real exports kept showing up blank in these other viewers (EST-1013),
+    # so every total here is computed in Python and written as a plain
+    # value instead -- always correct no matter how the file is opened, at
+    # the cost of no longer auto-recalculating if someone hand-edits a
+    # quantity or cost cell directly inside the downloaded file (re-export
+    # from the app instead).
+    cent = Decimal("0.01")
     row = 6
     section_index = 0
-    section_h_ranges: list[str] = []  # every section's H-column line range, for the grand material+labor total
+    section_totals: list[Decimal] = []
     for section in estimate.sections:
         if not section.lines:
             continue
@@ -959,55 +968,51 @@ def _build_xlsx(estimate: Estimate) -> Workbook:
         if intro:
             ws.cell(row=row, column=2, value=intro).font = normal
             row += 1
-        first_line_row = row
+        section_total = Decimal("0")
         for line in section.lines:
+            material_total = (line.qty * line.material_unit_cost).quantize(cent)
+            labor_total = (line.qty * line.labor_unit_cost).quantize(cent)
+            line_total = material_total + labor_total
+            section_total += line_total
             ws.cell(row=row, column=2, value=line.description).font = normal
             ws.cell(row=row, column=3, value=float(line.qty))
             ws.cell(row=row, column=4, value=float(line.material_unit_cost)).number_format = _ACCOUNTING_FMT
-            ws.cell(row=row, column=5, value=f"=C{row}*D{row}").number_format = _ACCOUNTING_FMT
+            ws.cell(row=row, column=5, value=float(material_total)).number_format = _ACCOUNTING_FMT
             ws.cell(row=row, column=6, value=float(line.labor_unit_cost)).number_format = _ACCOUNTING_FMT
-            ws.cell(row=row, column=7, value=f"=C{row}*F{row}").number_format = _ACCOUNTING_FMT
-            ws.cell(row=row, column=8, value=f"=E{row}+G{row}").number_format = _ACCOUNTING_FMT
+            ws.cell(row=row, column=7, value=float(labor_total)).number_format = _ACCOUNTING_FMT
+            ws.cell(row=row, column=8, value=float(line_total)).number_format = _ACCOUNTING_FMT
             row += 1
-        last_line_row = row - 1
-        section_h_ranges.append(f"H{first_line_row}:H{last_line_row}")
-        subtotal_cell = ws.cell(row=section_header_row, column=1, value=f"=SUM(H{first_line_row}:H{last_line_row})")
+        section_totals.append(section_total)
+        subtotal_cell = ws.cell(row=section_header_row, column=1, value=float(section_total))
         subtotal_cell.number_format = _ACCOUNTING_FMT
         subtotal_cell.font = bold
         row += 1  # blank row before the next section
 
     row += 1
-    subtotal_row = row
+    subtotal = sum(section_totals, Decimal("0"))
     ws.cell(row=row, column=2, value="Total cost of material and labor").font = bold
-    subtotal_formula = f"=SUM({','.join(section_h_ranges)})" if section_h_ranges else "=0"
-    ws.cell(row=row, column=8, value=subtotal_formula).number_format = _ACCOUNTING_FMT
+    ws.cell(row=row, column=8, value=float(subtotal)).number_format = _ACCOUNTING_FMT
     ws.cell(row=row, column=8).font = bold
     row += 2
 
-    profit_row = row
+    profit_amount = (subtotal * estimate.profit_pct / 100).quantize(cent)
     ws.cell(row=row, column=2, value="Profit").font = normal
     ws.cell(row=row, column=6, value=float(estimate.profit_pct) / 100).number_format = "0.0%"
-    ws.cell(row=row, column=8, value=f"=ROUND(H{subtotal_row}*F{profit_row},2)").number_format = _ACCOUNTING_FMT
+    ws.cell(row=row, column=8, value=float(profit_amount)).number_format = _ACCOUNTING_FMT
     row += 1
 
-    discount_row = row
+    discount_amount = -((subtotal + profit_amount) * estimate.discount_pct / 100).quantize(cent)
     ws.cell(row=row, column=2, value="Repeat customer discount").font = normal
     ws.cell(row=row, column=6, value=float(estimate.discount_pct) / 100).number_format = "0.0%"
-    ws.cell(
-        row=row, column=8, value=f"=-ROUND((H{subtotal_row}+H{profit_row})*F{discount_row},2)"
-    ).number_format = _ACCOUNTING_FMT
+    ws.cell(row=row, column=8, value=float(discount_amount)).number_format = _ACCOUNTING_FMT
     row += 1
 
     ws.cell(row=row, column=2, value="TOTAL COST OF PROJECT").font = bold
-    grand_cell = ws.cell(row=row, column=8, value=f"=H{subtotal_row}+H{profit_row}+H{discount_row}")
+    grand_total = subtotal + profit_amount + discount_amount
+    grand_cell = ws.cell(row=row, column=8, value=float(grand_total))
     grand_cell.number_format = _ACCOUNTING_FMT
     grand_cell.font = bold
     row += 3
-
-    # Forces Excel/Google Sheets/LibreOffice to recalculate every formula the
-    # instant the file opens, instead of trusting (blank) cached values --
-    # openpyxl never writes a cached value for a formula cell it creates.
-    wb.calculation = CalcProperties(fullCalcOnLoad=True)
 
     if estimate.exclusions and estimate.exclusions.strip():
         ws.cell(row=row, column=2, value="Exclusions / Notes:").font = bold
